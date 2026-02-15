@@ -1,0 +1,280 @@
+openapi: 3.0.3
+info:
+  title: HarborWatch API
+  version: 0.5.0
+servers:
+  - url: /
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/docker/containers:
+    get:
+      operationId: listDockerContainers
+      responses:
+        '200':
+          description: Container inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContainerSummary'
+  /api/docker/images:
+    get:
+      operationId: listDockerImages
+      responses:
+        '200':
+          description: Image inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImageSummary'
+  /api/docker/events:
+    get:
+      operationId: streamDockerEvents
+      responses:
+        '200':
+          description: Docker events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /api/scans/run:
+    post:
+      operationId: runScan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRunRequest'
+      responses:
+        '202':
+          description: Scan started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanStartResponse'
+  /api/scans/jobs/{id}:
+    get:
+      operationId: getScanJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Scan job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanJobStatus'
+  /api/scans/summary:
+    get:
+      operationId: getScanSummary
+      responses:
+        '200':
+          description: Scan summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanSummary'
+  /api/releases/summary:
+    get:
+      operationId: getReleaseRiskSummary
+      parameters:
+        - in: query
+          name: repo
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Release risk summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseRiskSummary'
+  /api/updates/run:
+    post:
+      operationId: runUpdatePipeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStartRequest'
+      responses:
+        '202':
+          description: Update pipeline started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateStartResponse'
+  /api/updates/jobs/{id}:
+    get:
+      operationId: getUpdateJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Update job state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateJobStatus'
+  /api/updates/events/{id}:
+    get:
+      operationId: streamUpdateEvents
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Update step events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, version]
+      properties:
+        status: { type: string }
+        service: { type: string }
+        version: { type: string }
+    ContainerSummary:
+      type: object
+      required: [id, names, image, state, status]
+      properties:
+        id: { type: string }
+        names: { type: array, items: { type: string } }
+        image: { type: string }
+        state: { type: string }
+        status: { type: string }
+    ImageSummary:
+      type: object
+      required: [id, repoTags, size]
+      properties:
+        id: { type: string }
+        repoTags: { type: array, items: { type: string } }
+        size: { type: integer, format: int64 }
+    DockerEvent:
+      type: object
+      required: [type, action, id, from, time]
+      properties:
+        type: { type: string }
+        action: { type: string }
+        id: { type: string }
+        from: { type: string }
+        attributes: { type: object, additionalProperties: { type: string } }
+        time: { type: integer, format: int64 }
+    ScanRunRequest:
+      type: object
+      required: [target]
+      properties:
+        target: { type: string }
+    ScanStartResponse:
+      type: object
+      required: [jobId, status]
+      properties:
+        jobId: { type: string }
+        status: { type: string }
+    ScanJobStatus:
+      type: object
+      required: [jobId, target, status, source, startedAt]
+      properties:
+        jobId: { type: string }
+        target: { type: string }
+        status: { type: string }
+        source: { type: string }
+        error: { type: string }
+        startedAt: { type: integer, format: int64 }
+        completedAt: { type: integer, format: int64 }
+    ScanSummary:
+      type: object
+      required: [target, source, scannedAt, critical, high, medium, low, unknown, total, riskScore]
+      properties:
+        target: { type: string }
+        source: { type: string }
+        scannedAt: { type: integer, format: int64 }
+        critical: { type: integer }
+        high: { type: integer }
+        medium: { type: integer }
+        low: { type: integer }
+        unknown: { type: integer }
+        total: { type: integer }
+        riskScore: { type: integer }
+    ReleaseExcerpt:
+      type: object
+      required: [tag, text, weight]
+      properties:
+        tag: { type: string }
+        text: { type: string }
+        weight: { type: integer }
+    ReleaseRiskSummary:
+      type: object
+      required: [repo, latestTag, latestPublishedAt, releasesAnalyzed, totalRisk, breakingChangeLikely, highlightedExcerpts, generatedAt]
+      properties:
+        repo: { type: string }
+        latestTag: { type: string }
+        latestPublishedAt: { type: integer, format: int64 }
+        releasesAnalyzed: { type: integer }
+        totalRisk: { type: integer }
+        breakingChangeLikely: { type: boolean }
+        highlightedExcerpts:
+          type: array
+          items: { $ref: '#/components/schemas/ReleaseExcerpt' }
+        generatedAt: { type: integer, format: int64 }
+    UpdateStartRequest:
+      type: object
+      required: [targetImage, validateUrl]
+      properties:
+        targetImage: { type: string }
+        validateUrl: { type: string }
+    UpdateStartResponse:
+      type: object
+      required: [jobId, status]
+      properties:
+        jobId: { type: string }
+        status: { type: string }
+    UpdateStepEvent:
+      type: object
+      required: [jobId, step, status, message, timestamp]
+      properties:
+        jobId: { type: string }
+        step: { type: string }
+        status: { type: string }
+        message: { type: string }
+        timestamp: { type: integer, format: int64 }
+    UpdateJobStatus:
+      type: object
+      required: [jobId, targetImage, validateUrl, status, createdAt, updatedAt, error, steps]
+      properties:
+        jobId: { type: string }
+        targetImage: { type: string }
+        validateUrl: { type: string }
+        status: { type: string }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+        error: { type: string }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/UpdateStepEvent' }

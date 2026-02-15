@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export GOCACHE="${GOCACHE:-/tmp/go-build-cache}"
+
+cd "$ROOT_DIR/backend"
+go test ./...
+
+if [ -d "$ROOT_DIR/web/node_modules" ]; then
+  cd "$ROOT_DIR/web"
+  npm run build
+else
+  echo "Skipping frontend build test (web/node_modules missing)"
+fi

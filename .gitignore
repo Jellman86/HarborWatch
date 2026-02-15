@@ -27,6 +27,14 @@ go.work.sum
 # env file
 .env
 
+# agent workspace docs (keep innit.md versioned as project spec/status)
+agents/*
+!agents/innit.md
+
+# frontend
+web/node_modules/
+web/dist/
+
 # Editor/IDE
 # .idea/
 # .vscode/

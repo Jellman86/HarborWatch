@@ -1,0 +1,22 @@
+name: HarborWatch-Dev
+
+services:
+  harborwatch:
+    image: ghcr.io/jellman86/harborwatch:dev
+    container_name: harborwatch-dev
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ../../data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "${HARBORWATCH_PORT:-18080}:8000"
+    environment:
+      - TZ=${TZ:-UTC}
+      - HARBORWATCH_DB_PATH=/data/harborwatch.db
+      - PORT=8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

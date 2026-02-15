@@ -1,0 +1,33 @@
+name: HarborWatch
+#-----------------------------------------------
+# HarborWatch - Single-Container Runtime
+#
+# Uses GHCR 'latest' image for production use.
+#-----------------------------------------------
+services:
+  harborwatch:
+    image: ghcr.io/jellman86/harborwatch:latest
+    container_name: harborwatch
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    networks:
+      - harborwatch_network
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "${HARBORWATCH_PORT:-18080}:8000"
+    environment:
+      - TZ=${TZ:-UTC}
+      - HARBORWATCH_DB_PATH=/data/harborwatch.db
+      - PORT=8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  harborwatch_network:
+    name: ${DOCKER_NETWORK:-harborwatch_default}
+    external: true

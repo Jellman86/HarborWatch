@@ -1,0 +1,100 @@
+// Code generated from api/openapi.yaml; DO NOT EDIT.
+
+package gen
+
+type HealthResponse struct {
+	Status  string `json:"status"`
+	Service string `json:"service"`
+	Version string `json:"version"`
+}
+type ContainerSummary struct {
+	ID     string   `json:"id"`
+	Names  []string `json:"names"`
+	Image  string   `json:"image"`
+	State  string   `json:"state"`
+	Status string   `json:"status"`
+}
+type ImageSummary struct {
+	ID       string   `json:"id"`
+	RepoTags []string `json:"repoTags"`
+	Size     int64    `json:"size"`
+}
+type DockerEvent struct {
+	Type       string            `json:"type"`
+	Action     string            `json:"action"`
+	ID         string            `json:"id"`
+	From       string            `json:"from"`
+	Attributes map[string]string `json:"attributes,omitempty"`
+	Time       int64             `json:"time"`
+}
+
+type ScanRunRequest struct {
+	Target string `json:"target"`
+}
+type ScanStartResponse struct {
+	JobID  string `json:"jobId"`
+	Status string `json:"status"`
+}
+type ScanJobStatus struct {
+	JobID       string `json:"jobId"`
+	Target      string `json:"target"`
+	Status      string `json:"status"`
+	Source      string `json:"source"`
+	Error       string `json:"error,omitempty"`
+	StartedAt   int64  `json:"startedAt"`
+	CompletedAt int64  `json:"completedAt,omitempty"`
+}
+type ScanSummary struct {
+	Target    string `json:"target"`
+	Source    string `json:"source"`
+	ScannedAt int64  `json:"scannedAt"`
+	Critical  int    `json:"critical"`
+	High      int    `json:"high"`
+	Medium    int    `json:"medium"`
+	Low       int    `json:"low"`
+	Unknown   int    `json:"unknown"`
+	Total     int    `json:"total"`
+	RiskScore int    `json:"riskScore"`
+}
+
+type ReleaseExcerpt struct {
+	Tag    string `json:"tag"`
+	Text   string `json:"text"`
+	Weight int    `json:"weight"`
+}
+type ReleaseRiskSummary struct {
+	Repo                 string           `json:"repo"`
+	LatestTag            string           `json:"latestTag"`
+	LatestPublishedAt    int64            `json:"latestPublishedAt"`
+	ReleasesAnalyzed     int              `json:"releasesAnalyzed"`
+	TotalRisk            int              `json:"totalRisk"`
+	BreakingChangeLikely bool             `json:"breakingChangeLikely"`
+	HighlightedExcerpts  []ReleaseExcerpt `json:"highlightedExcerpts"`
+	GeneratedAt          int64            `json:"generatedAt"`
+}
+
+type UpdateStartRequest struct {
+	TargetImage string `json:"targetImage"`
+	ValidateURL string `json:"validateUrl"`
+}
+type UpdateStartResponse struct {
+	JobID  string `json:"jobId"`
+	Status string `json:"status"`
+}
+type UpdateStepEvent struct {
+	JobID     string `json:"jobId"`
+	Step      string `json:"step"`
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+	Timestamp int64  `json:"timestamp"`
+}
+type UpdateJobStatus struct {
+	JobID       string            `json:"jobId"`
+	TargetImage string            `json:"targetImage"`
+	ValidateURL string            `json:"validateUrl"`
+	Status      string            `json:"status"`
+	CreatedAt   int64             `json:"createdAt"`
+	UpdatedAt   int64             `json:"updatedAt"`
+	Error       string            `json:"error"`
+	Steps       []UpdateStepEvent `json:"steps"`
+}

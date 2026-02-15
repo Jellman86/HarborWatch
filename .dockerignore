@@ -1,0 +1,12 @@
+.git
+.gitignore
+agents
+node_modules
+web/node_modules
+web/dist
+backend/.cache
+*.log
+/tmp
+playwright-results
+__pycache__
+.pytest_cache
