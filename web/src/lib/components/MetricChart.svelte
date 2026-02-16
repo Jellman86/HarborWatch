@@ -104,6 +104,12 @@
     });
 </script>
 
-{#key metrics.length}
-    <div class="w-full h-[250px]" use:chart={options}></div>
-{/key}
+{#if metrics.length > 0}
+    {#key metrics.length}
+        <div class="w-full h-[250px]" use:chart={options}></div>
+    {/key}
+{:else}
+    <div class="w-full h-[250px] flex items-center justify-center text-slate-500 italic text-xs bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+        No telemetry data available for this window.
+    </div>
+{/if}
