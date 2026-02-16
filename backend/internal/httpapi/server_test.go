@@ -71,6 +71,16 @@ func (f fakeAuditService) ListAuditJobs(ctx context.Context) ([]gen.AuditJobSumm
 	return f.jobs, nil
 }
 
+type fakeAIService struct{ enabled bool }
+
+func (f fakeAIService) HasProvider() bool { return f.enabled }
+func (f fakeAIService) AnalyzeReleaseNotes(ctx context.Context, notes string) (ai.AnalysisResult, error) {
+	return ai.AnalysisResult{}, nil
+}
+func (f fakeAIService) AuditCompose(ctx context.Context, yaml string) (string, error) {
+	return "ok", nil
+}
+
 type fakeUpdateService struct {
 	startResp gen.UpdateStartResponse
 	job       *gen.UpdateJobStatus
@@ -90,7 +100,7 @@ func (f fakeUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, 
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	ts := httptest.NewServer(NewMuxWithDeps(nil, nil, nil, nil, nil))
+	ts := httptest.NewServer(NewMuxWithDeps(nil, nil, nil, nil, nil, nil))
 	defer ts.Close()
 	resp, err := http.Get(ts.URL + "/health")
 	if err != nil || resp.StatusCode != http.StatusOK {
@@ -99,7 +109,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestDockerContainersEndpoint(t *testing.T) {
-	mux := NewMuxWithDeps(fakeDockerClient{containers: []gen.ContainerSummary{{ID: "abc", Image: "nginx:latest", State: "running"}}}, nil, nil, nil, nil)
+	mux := NewMuxWithDeps(fakeDockerClient{containers: []gen.ContainerSummary{{ID: "abc", Image: "nginx:latest", State: "running"}}}, nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers", nil))
 	if rec.Code != http.StatusOK {
@@ -113,7 +123,7 @@ func TestDockerContainersEndpoint(t *testing.T) {
 
 func TestReleaseSummaryEndpoint(t *testing.T) {
 	fake := fakeReleaseService{summary: gen.ReleaseRiskSummary{Repo: "Jellman86/HarborWatch", TotalRisk: 42}}
-	mux := NewMuxWithDeps(nil, nil, fake, nil, nil)
+	mux := NewMuxWithDeps(nil, nil, fake, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/releases/summary?repo=Jellman86/HarborWatch", nil))
 	if rec.Code != http.StatusOK {
@@ -123,7 +133,7 @@ func TestReleaseSummaryEndpoint(t *testing.T) {
 
 func TestUpdateEndpoints(t *testing.T) {
 	up := fakeUpdateService{startResp: gen.UpdateStartResponse{JobID: "u1", Status: "running"}, job: &gen.UpdateJobStatus{JobID: "u1", Status: "running"}}
-	mux := NewMuxWithDeps(nil, nil, nil, up, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, up, nil, nil)
 
 	recRun := httptest.NewRecorder()
 	mux.ServeHTTP(recRun, httptest.NewRequest(http.MethodPost, "/api/updates/run", strings.NewReader(`{"containerId":"c1","targetImage":"img","validateUrl":"http://x"}`)))

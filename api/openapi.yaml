@@ -196,6 +196,38 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/AuditJobSummary'
+  /api/ai/status:
+    get:
+      operationId: getAIStatus
+      responses:
+        '200':
+          description: AI provider status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+  /api/ai/audit-compose:
+    post:
+      operationId: auditComposeFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                yaml: { type: string }
+      responses:
+        '200':
+          description: AI analysis of the compose file
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analysis: { type: string }
 components:
   schemas:
     HealthResponse:

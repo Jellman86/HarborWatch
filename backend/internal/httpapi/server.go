@@ -14,6 +14,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/audit"
+	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
 	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
@@ -35,6 +36,12 @@ type ScanService interface {
 
 type ReleaseService interface {
 	Analyze(ctx context.Context, repo string) (gen.ReleaseRiskSummary, error)
+}
+
+type AIService interface {
+	HasProvider() bool
+	AnalyzeReleaseNotes(ctx context.Context, notes string) (ai.AnalysisResult, error)
+	AuditCompose(ctx context.Context, yaml string) (string, error)
 }
 
 type AuditService interface {
@@ -65,10 +72,11 @@ func NewMux() http.Handler {
 	if err != nil {
 		auditService = nil
 	}
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService)
+	aiService := ai.NewService(ai.NewProviderFromEnv())
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService)
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -288,6 +296,34 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		writeJSON(w, http.StatusOK, jobs)
+	})
+
+	mux.HandleFunc("GET /api/ai/status", func(w http.ResponseWriter, r *http.Request) {
+		enabled := false
+		if aiService != nil {
+			enabled = aiService.HasProvider()
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+	})
+
+	mux.HandleFunc("POST /api/ai/audit-compose", func(w http.ResponseWriter, r *http.Request) {
+		if aiService == nil || !aiService.HasProvider() {
+			writeError(w, http.StatusServiceUnavailable, "ai_unavailable", "AI provider not configured")
+			return
+		}
+		var req struct {
+			YAML string `json:"yaml"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+			return
+		}
+		analysis, err := aiService.AuditCompose(r.Context(), req.YAML)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ai_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"analysis": analysis})
 	})
 
 	mux.HandleFunc("GET /api/updates/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
