@@ -77,6 +77,9 @@ func (c *Collector) collectOne(ctx context.Context, id string) error {
 	
 	if systemDelta > 0.0 && cpuDelta > 0.0 {
 		m.CPUPercent = (cpuDelta / systemDelta) * float64(len(stats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
+	} else if stats.CPUStats.SystemUsage > 0 && stats.CPUStats.CPUUsage.TotalUsage > 0 {
+		// Fallback for single-shot without pre-stats: lifetime average
+		m.CPUPercent = (float64(stats.CPUStats.CPUUsage.TotalUsage) / float64(stats.CPUStats.SystemUsage)) * float64(len(stats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
 	}
 
 	return c.store.SaveMetric(ctx, m)

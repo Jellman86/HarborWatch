@@ -47,12 +47,16 @@ CREATE TABLE IF NOT EXISTS schedules (
 }
 
 func (s *Store) SaveSchedule(ctx context.Context, entry ScheduleEntry) error {
+	val := 0
+	if entry.Enabled {
+		val = 1
+	}
 	// We use INSERT OR IGNORE to ensure we don't overwrite user-toggled states 
 	// during the boot-time task registration.
 	_, err := s.db.ExecContext(ctx, `
 INSERT OR IGNORE INTO schedules(id, cron_spec, enabled)
-VALUES(?, ?, 0)
-`, entry.ID, entry.CronSpec)
+VALUES(?, ?, ?)
+`, entry.ID, entry.CronSpec, val)
 	return err
 }
 

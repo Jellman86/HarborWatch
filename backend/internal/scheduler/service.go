@@ -61,12 +61,12 @@ func (s *Service) AddTask(spec string, task Task) error {
 	}
 	s.mu.Unlock()
 
-	// 2. Persist to database if not present (Off by default)
+	// 2. Persist to database if not present (On by default for system tasks)
 	if s.store != nil {
 		_ = s.store.SaveSchedule(context.Background(), ScheduleEntry{
 			ID:       taskName,
 			CronSpec: spec,
-			Enabled:  false,
+			Enabled:  true,
 		})
 	}
 
