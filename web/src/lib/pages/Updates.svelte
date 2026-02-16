@@ -1,28 +1,77 @@
 <script lang="ts">
-    import type { UpdateJobStatus, UpdateStepEvent } from "../api-types";
+    import { onMount, onDestroy } from "svelte";
+    import type { UpdateJobStatus, UpdateStepEvent, UpdateStartResponse } from "../api-types";
 
-    let { 
-        updateJob, 
-        updateLive, 
-        updateError, 
-        updateContainerId = $bindable(), 
-        updateTargetImage = $bindable(), 
-        validateURL = $bindable(), 
-        onStartUpdate 
-    } = $props<{
-        updateJob: UpdateJobStatus | null;
-        updateLive: UpdateStepEvent[];
-        updateError: string;
-        updateContainerId: string;
-        updateTargetImage: string;
-        validateURL: string;
-        onStartUpdate: () => void;
-    }>();
+    // Component State
+    let updateJob = $state<UpdateJobStatus | null>(null);
+    let updateLive = $state<UpdateStepEvent[]>([]);
+    let updateError = $state("");
+    let updateContainerId = $state("");
+    let updateTargetImage = $state("");
+    let validateURL = $state("http://localhost:18080/health");
 
-    const getStepStatus = (stepName: string) => {
-        const liveStep = updateLive.find(s => s.step === stepName);
+    let updateEventSource: EventSource | null = null;
+    let updatePollTimer: number | null = null;
+
+    async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+        const response = await fetch(url, init);
+        if (!response.ok) throw new Error(`${url} failed (${response.status})`);
+        return (await response.json()) as T;
+    }
+
+    function connectUpdateEvents(jobId: string) {
+        updateEventSource?.close();
+        updateEventSource = new EventSource(`/api/updates/events/${jobId}`);
+        updateEventSource.addEventListener("update", (evt) => {
+            try {
+                const parsed = JSON.parse((evt as MessageEvent).data) as UpdateStepEvent;
+                updateLive = [...updateLive, parsed].slice(-100);
+            } catch (e) {
+                console.error("Failed to parse update event", e);
+            }
+        });
+    }
+
+    async function pollUpdate(jobId: string) {
+        if (updatePollTimer) window.clearInterval(updatePollTimer);
+        updatePollTimer = window.setInterval(async () => {
+            try {
+                const job = await fetchJSON<UpdateJobStatus>(`/api/updates/jobs/${jobId}`);
+                updateJob = job;
+                if (job.status === "completed" || job.status === "failed" || job.status === "rolled_back") {
+                    if (updatePollTimer) window.clearInterval(updatePollTimer);
+                    updatePollTimer = null;
+                }
+            } catch (e) {
+                updateError = "Failed to poll update status";
+            }
+        }, 1500);
+    }
+
+    async function startUpdate() {
+        updateError = "";
+        updateLive = [];
+        try {
+            const response = await fetchJSON<UpdateStartResponse>("/api/updates/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    containerId: updateContainerId, 
+                    targetImage: updateTargetImage, 
+                    validateUrl: validateURL 
+                })
+            });
+            connectUpdateEvents(response.jobId);
+            await pollUpdate(response.jobId);
+        } catch (e) {
+            updateError = e instanceof Error ? e.message : "Update pipeline failed to start";
+        }
+    }
+
+    const getStepStatus = (stepId: string) => {
+        const liveStep = updateLive.find(s => s.step === stepId);
         if (liveStep) return liveStep.status;
-        const persistedStep = updateJob?.steps.find(s => s.step === stepName);
+        const persistedStep = updateJob?.steps.find(s => s.step === stepId);
         return persistedStep?.status ?? 'pending';
     };
 
@@ -33,6 +82,11 @@
         { id: 'recreate', label: 'Recreate' },
         { id: 'validate', label: 'Validate' },
     ];
+
+    onDestroy(() => {
+        updateEventSource?.close();
+        if (updatePollTimer) window.clearInterval(updatePollTimer);
+    });
 </script>
 
 <div class="space-y-8">
@@ -58,7 +112,7 @@
 
         <div class="flex justify-end pt-2">
             <button 
-                onclick={onStartUpdate}
+                onclick={startUpdate}
                 disabled={!!updateJob && (updateJob.status === 'running')}
                 class="px-10 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-brand-500/30"
             >

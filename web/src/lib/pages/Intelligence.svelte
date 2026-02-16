@@ -1,14 +1,32 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import type { ReleaseRiskSummary } from "../api-types";
 
-    let { releaseSummary, releaseError, repo = $bindable(), onAnalyze } = $props<{
-        releaseSummary: ReleaseRiskSummary | null;
-        releaseError: string;
-        repo: string;
-        onAnalyze: () => void;
-    }>();
+    // Component State
+    let releaseSummary = $state<ReleaseRiskSummary | null>(null);
+    let releaseError = $state("");
+    let repo = $state("Jellman86/HarborWatch");
+    let loading = $state(false);
 
     const riskBand = (score: number) => score >= 80 ? "Critical" : score >= 60 ? "High" : score >= 30 ? "Medium" : score > 0 ? "Low" : "None";
+
+    async function loadReleaseSummary() {
+        loading = true;
+        releaseError = "";
+        try {
+            const response = await fetch(`/api/releases/summary?repo=${encodeURIComponent(repo)}`);
+            if (!response.ok) throw new Error("Release summary failed");
+            releaseSummary = await response.json();
+        } catch (e) {
+            releaseError = e instanceof Error ? e.message : "Failed to analyze releases";
+        } finally {
+            loading = false;
+        }
+    }
+
+    onMount(() => {
+        loadReleaseSummary();
+    });
 </script>
 
 <div class="space-y-6">
@@ -24,10 +42,11 @@
                 class="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-all"
             />
             <button 
-                onclick={onAnalyze}
-                class="px-6 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-brand-500/20"
+                onclick={loadReleaseSummary}
+                disabled={loading}
+                class="px-6 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-brand-500/20"
             >
-                Analyze
+                {loading ? 'Analyzing...' : 'Analyze'}
             </button>
         </div>
         {#if releaseError}<p class="mt-2 text-xs text-rose-600 font-medium">{releaseError}</p>{/if}

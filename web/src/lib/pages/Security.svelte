@@ -1,27 +1,90 @@
 <script lang="ts">
-    import type { ScanSummary, MalwareScanSummary, ScanJobStatus } from "../api-types";
+    import { onMount } from "svelte";
+    import type { ScanSummary, MalwareScanSummary, ScanJobStatus, ScanStartResponse } from "../api-types";
 
-    let { 
-        summary, 
-        malwareSummaries, 
-        activeJob, 
-        scanError, 
-        target = $bindable(), 
-        malwareTarget = $bindable(),
-        onStartScan, 
-        onStartMalwareScan 
-    } = $props<{
-        summary: ScanSummary | null;
-        malwareSummaries: MalwareScanSummary[];
-        activeJob: ScanJobStatus | null;
-        scanError: string;
-        target: string;
-        malwareTarget: string;
-        onStartScan: () => void;
-        onStartMalwareScan: () => void;
-    }>();
+    // Component State
+    let summary = $state<ScanSummary | null>(null);
+    let malwareSummaries = $state<MalwareScanSummary[]>([]);
+    let activeJob = $state<ScanJobStatus | null>(null);
+    let scanError = $state("");
+    let target = $state("nginx:latest");
+    let malwareTarget = $state("/var/lib/docker");
+    let pollTimer: number | null = null;
 
     const riskBand = (score: number) => score >= 80 ? "Critical" : score >= 60 ? "High" : score >= 30 ? "Medium" : score > 0 ? "Low" : "None";
+
+    async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+        const response = await fetch(url, init);
+        if (!response.ok) throw new Error(`${url} failed (${response.status})`);
+        return (await response.json()) as T;
+    }
+
+    async function loadData() {
+        try {
+            const [vuln, mal] = await Promise.all([
+                fetch("/api/scans/summary").then(r => r.ok ? r.json() : null),
+                fetch("/api/scans/malware/summary").then(r => r.ok ? r.json() : [])
+            ]);
+            summary = vuln;
+            malwareSummaries = mal;
+        } catch (e) {
+            console.error("Failed to load security data", e);
+        }
+    }
+
+    async function pollJob(jobId: string) {
+        if (pollTimer) window.clearInterval(pollTimer);
+        pollTimer = window.setInterval(async () => {
+            try {
+                const job = await fetchJSON<ScanJobStatus>(`/api/scans/jobs/${jobId}`);
+                activeJob = job;
+                if (job.status === "completed" || job.status === "failed") {
+                    if (pollTimer) window.clearInterval(pollTimer);
+                    pollTimer = null;
+                    await loadData();
+                }
+            } catch (e) {
+                scanError = "Failed to poll scan status";
+            }
+        }, 2000);
+    }
+
+    async function startScan() {
+        scanError = "";
+        try {
+            const response = await fetchJSON<ScanStartResponse>("/api/scans/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ target })
+            });
+            activeJob = { jobId: response.jobId, target, status: response.status, source: "trivy", startedAt: Math.floor(Date.now() / 1000) };
+            await pollJob(response.jobId);
+        } catch (e) {
+            scanError = "Vulnerability scan failed to start";
+        }
+    }
+
+    async function startMalwareScan() {
+        scanError = "";
+        try {
+            const response = await fetchJSON<ScanStartResponse>("/api/scans/malware/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ target: malwareTarget })
+            });
+            activeJob = { jobId: response.jobId, target: malwareTarget, status: response.status, source: "clamav", startedAt: Math.floor(Date.now() / 1000) };
+            await pollJob(response.jobId);
+        } catch (e) {
+            scanError = "Malware scan failed to start";
+        }
+    }
+
+    onMount(() => {
+        loadData();
+        return () => {
+            if (pollTimer) window.clearInterval(pollTimer);
+        };
+    });
 </script>
 
 <div class="space-y-8">
@@ -71,7 +134,7 @@
                         class="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-all"
                     />
                     <button 
-                        onclick={onStartScan}
+                        onclick={startScan}
                         disabled={!!activeJob}
                         class="px-6 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-brand-500/20"
                     >
@@ -131,7 +194,7 @@
                         class="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-all"
                     />
                     <button 
-                        onclick={onStartMalwareScan}
+                        onclick={startMalwareScan}
                         disabled={!!activeJob}
                         class="px-6 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-brand-500/20"
                     >

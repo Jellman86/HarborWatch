@@ -16,54 +16,24 @@
     ContainerSummary,
     DockerEvent,
     HealthResponse,
-    ImageSummary,
-    ReleaseRiskSummary,
-    ScanJobStatus,
-    ScanStartResponse,
-    ScanSummary,
-    MalwareScanSummary,
-    UpdateJobStatus,
-    UpdateStartResponse,
-    UpdateStepEvent
+    ImageSummary
   } from "./lib/api-types";
 
   // Navigation State
   let currentRoute = $state("dashboard");
 
-  // Global Data State
+  // Global Shared State
   let health = $state<HealthResponse | null>(null);
   let containers = $state<ContainerSummary[]>([]);
   let images = $state<ImageSummary[]>([]);
   let events = $state<DockerEvent[]>([]);
-  let summary = $state<ScanSummary | null>(null);
-  let malwareSummaries = $state<MalwareScanSummary[]>([]);
-  let releaseSummary = $state<ReleaseRiskSummary | null>(null);
-  let activeJob = $state<ScanJobStatus | null>(null);
-  let updateJob = $state<UpdateJobStatus | null>(null);
-  let updateLive = $state<UpdateStepEvent[]>([]);
-
-  // Form State (Default Values)
-  let target = $state("nginx:latest");
-  let malwareTarget = $state("/var/lib/docker");
-  let repo = $state("Jellman86/HarborWatch");
-  let updateContainerId = $state("");
-  let updateTargetImage = $state("ghcr.io/jellman86/harborwatch:latest");
-  let validateURL = $state("http://localhost:18080/health");
-
-  // Error State
   let error = $state("");
-  let scanError = $state("");
-  let releaseError = $state("");
-  let updateError = $state("");
 
   let eventSource: EventSource | null = null;
-  let updateEventSource: EventSource | null = null;
-  let pollTimer: number | null = null;
-  let updatePollTimer: number | null = null;
 
   async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, init);
-    if (!response.ok) throw new Error(`${url} failed (${response.status}): ${await response.text()}`);
+    if (!response.ok) throw new Error(`${url} failed (${response.status})`);
     return (await response.json()) as T;
   }
 
@@ -74,48 +44,13 @@
       try {
         const parsed = JSON.parse((evt as MessageEvent).data) as DockerEvent;
         events = [parsed, ...events].slice(0, 50);
-      } catch {}
+      } catch (e) {
+        console.error("Failed to parse docker event", e);
+      }
     });
   }
 
-  function connectUpdateEvents(jobId: string) {
-    updateEventSource?.close();
-    updateEventSource = new EventSource(`/api/updates/events/${jobId}`);
-    updateEventSource.addEventListener("update", (evt) => {
-      try {
-        const parsed = JSON.parse((evt as MessageEvent).data) as UpdateStepEvent;
-        updateLive = [...updateLive, parsed].slice(-100);
-      } catch {}
-    });
-  }
-
-  async function loadSummary() {
-    try { 
-      summary = await fetchJSON<ScanSummary>("/api/scans/summary"); 
-      scanError = ""; 
-    } catch (e) { 
-      if (!(e instanceof Error && e.message.includes("(404)"))) scanError = e instanceof Error ? e.message : "Unknown error"; 
-    }
-  }
-
-  async function loadMalwareSummaries() {
-    try {
-      malwareSummaries = await fetchJSON<MalwareScanSummary[]>("/api/scans/malware/summary");
-    } catch (e) {
-      console.error("Failed to load malware summaries", e);
-    }
-  }
-
-  async function loadReleaseSummary() {
-    try { 
-      releaseSummary = await fetchJSON<ReleaseRiskSummary>(`/api/releases/summary?repo=${encodeURIComponent(repo)}`); 
-      releaseError = ""; 
-    } catch (e) { 
-      releaseError = e instanceof Error ? e.message : "Release summary failed"; 
-    }
-  }
-
-  async function load() {
+  async function loadGlobalData() {
     error = "";
     try {
       const [h, c, i] = await Promise.all([
@@ -123,86 +58,19 @@
         fetchJSON<ContainerSummary[]>("/api/docker/containers"),
         fetchJSON<ImageSummary[]>("/api/docker/images")
       ]);
-      health = h; containers = c; images = i; 
-      if (containers.length > 0 && !updateContainerId) updateContainerId = containers[0].id;
-      connectEvents(); 
-      await loadSummary(); 
-      await loadMalwareSummaries();
-      await loadReleaseSummary();
-    } catch (e) { error = e instanceof Error ? e.message : "Unknown error"; }
-  }
-
-  async function pollJob(jobId: string) {
-    if (pollTimer) window.clearInterval(pollTimer);
-    pollTimer = window.setInterval(async () => {
-      try {
-        const job = await fetchJSON<ScanJobStatus>(`/api/scans/jobs/${jobId}`);
-        activeJob = job;
-        if (job.status === "completed" || job.status === "failed") { 
-          if (pollTimer) window.clearInterval(pollTimer); 
-          pollTimer = null; 
-          await loadSummary(); 
-          await loadMalwareSummaries();
-        }
-      } catch (e) { scanError = e instanceof Error ? e.message : "Failed to poll scan job"; }
-    }, 2000);
-  }
-
-  async function startScan() {
-    scanError = "";
-    try {
-      const response = await fetchJSON<ScanStartResponse>("/api/scans/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target }) });
-      activeJob = { jobId: response.jobId, target, status: response.status, source: "trivy", startedAt: Math.floor(Date.now() / 1000) };
-      await pollJob(response.jobId);
-    } catch (e) { scanError = e instanceof Error ? e.message : "Scan request failed"; }
-  }
-
-  async function startMalwareScan() {
-    scanError = "";
-    try {
-      const response = await fetchJSON<ScanStartResponse>("/api/scans/malware/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target: malwareTarget }) });
-      activeJob = { jobId: response.jobId, target: malwareTarget, status: response.status, source: "clamav", startedAt: Math.floor(Date.now() / 1000) };
-      await pollJob(response.jobId);
-    } catch (e) { scanError = e instanceof Error ? e.message : "Malware scan failed"; }
-  }
-
-  async function pollUpdate(jobId: string) {
-    if (updatePollTimer) window.clearInterval(updatePollTimer);
-    updatePollTimer = window.setInterval(async () => {
-      try {
-        const job = await fetchJSON<UpdateJobStatus>(`/api/updates/jobs/${jobId}`);
-        updateJob = job;
-        if (job.status === "completed" || job.status === "failed" || job.status === "rolled_back") {
-          if (updatePollTimer) window.clearInterval(updatePollTimer);
-          updatePollTimer = null;
-        }
-      } catch (e) { updateError = e instanceof Error ? e.message : "Failed to poll update job"; }
-    }, 1500);
-  }
-
-  async function startUpdate() {
-    updateError = "";
-    updateLive = [];
-    try {
-      const response = await fetchJSON<UpdateStartResponse>("/api/updates/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ containerId: updateContainerId, targetImage: updateTargetImage, validateUrl: validateURL })
-      });
-      connectUpdateEvents(response.jobId);
-      await pollUpdate(response.jobId);
-    } catch (e) { updateError = e instanceof Error ? e.message : "Update start failed"; }
+      health = h; containers = c; images = i;
+      connectEvents();
+    } catch (e) { 
+      error = e instanceof Error ? e.message : "Connection to backend failed"; 
+    }
   }
 
   onMount(() => {
-    load();
+    loadGlobalData();
   });
 
   onDestroy(() => {
     eventSource?.close();
-    updateEventSource?.close();
-    if (pollTimer) window.clearInterval(pollTimer);
-    if (updatePollTimer) window.clearInterval(updatePollTimer);
   });
 </script>
 
@@ -211,26 +79,27 @@
 
   <main class="transition-all duration-300 {layoutStore.sidebarCollapsed ? 'pl-20' : 'pl-64'} min-h-screen">
     <div class="max-w-7xl mx-auto p-8">
+      {#if error}
+        <div class="mb-6 p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-sm font-bold flex items-center gap-3 animate-pulse">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+          {error}
+        </div>
+      {/if}
+
       {#if currentRoute === 'dashboard'}
-        <Dashboard {health} {summary} {malwareSummaries} {releaseSummary} {containers} {images} {events} onRefresh={load} />
+        <Dashboard {health} {containers} {images} {events} onRefresh={loadGlobalData} />
       {:else if currentRoute === 'containers'}
         <Containers {containers} />
       {:else if currentRoute === 'images'}
         <Images {images} />
       {:else if currentRoute === 'security'}
-        <Security 
-          {summary} {malwareSummaries} {activeJob} {scanError} 
-          bind:target bind:malwareTarget 
-          onStartScan={startScan} onStartMalwareScan={startMalwareScan} 
-        />
+        <Security />
       {:else if currentRoute === 'intelligence'}
-        <Intelligence {releaseSummary} {releaseError} bind:repo onAnalyze={loadReleaseSummary} />
+        <Intelligence />
       {:else if currentRoute === 'updates'}
-        <Updates 
-          {updateJob} {updateLive} {updateError} 
-          bind:updateContainerId bind:updateTargetImage bind:validateURL 
-          onStartUpdate={startUpdate} 
-        />
+        <Updates />
       {:else if currentRoute === 'audit'}
         <AuditLog />
       {:else if currentRoute === 'settings'}
