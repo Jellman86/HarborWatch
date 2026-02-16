@@ -355,6 +355,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 				id := chi.URLParam(r, "id")
+				fmt.Printf("DEBUG: GetContainer ID: %s\n", id)
 				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 				defer cancel()
 
