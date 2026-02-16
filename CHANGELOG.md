@@ -2,39 +2,23 @@
 
 All notable changes to HarborWatch are documented in this file.
 
-## [Unreleased]
+## [0.6.1] - 2026-02-16
 
 ### Added
-- **Container-Driven Architecture (v0.6.0):**
-  - Shifted from "Action-First" to **"Asset-First"** navigation.
-  - New **"Container Command Center"**: A dedicated full-page view for every container asset.
-  - Contextual Tabs: **Insights** (Metrics), **Security** (Scans), **Lifecycle** (Updates/Rules), and **Configuration** (Doctor).
-  - Automated **"Compose Doctor"**: Automatically retrieves or reconstructs `docker-compose.yml` via Portainer API, host mounts, or container metadata.
-- **Per-Container Intelligence:**
-  - Dedicated SQLite rule store for container-specific configuration.
-  - Customizable **Update Policies**: "Auto" (automatic), "Manual" (notify), or "Locked" (ignore).
-  - Configurable health check validation URLs and auto-rollback toggles per asset.
-  - Integrated execution history for every specific container.
-- **Universal Configuration System:**
-  - Unified tabbed **Settings View** for Notifications, API Keys, and System parameters.
-  - Smart configuration merging: Environment variables (Compose) now take priority over database settings.
-  - UI indicators for "Locked (ENV)" fields to prevent configuration confusion.
-- **Modernized Backend Infrastructure:**
-  - Migrated to **`go-chi/chi`** router for advanced routing and middleware support.
-  - Unified Docker interactions using the official **Moby SDK**.
-  - Enhanced API robustness with defensive defaulting (preventing null arrays in JSON).
-  - Implemented detailed technical failure logging to the **System Health** diagnostics.
-- **UI/UX Refinement ("Tech Innovation" Aesthetic):**
-  - Professional branding with **Montserrat** and **IBM Plex Sans** typography.
-  - Modern **Card View** toggle for the Fleet inventory.
-  - **High-end Animations**: Staggered reveals, smooth transitions, and pulse indicators for updates.
-  - Integrated **Live Sparklines** in the container inventory for real-time CPU monitoring.
-  - Industrial-style glassmorphism and subtle grain overlay for a "Security Appliance" feel.
-- **Docker Image Repository Enhancements:**
-  - Professional list-based view for the image repository.
-  - New **"Cleanup Repository"** button to trigger automated pruning of unused artifacts.
+- **UI Stability & Performance:**
+  - Resolved main-thread hangs by enforcing clean ApexCharts re-renders using Svelte `{#key}` blocks.
+  - Implemented 1-year immutable `Cache-Control` headers for static assets in the Go backend.
+- **Global Toast System:**
+  - Added a non-blocking notification system for success/error feedback, replacing browser `alert()`.
+  - Integrated toasts into the Settings and Security workflows.
+- **Full Aesthetic Standardization:**
+  - Refactored **Audit**, **Diagnostics**, **Stacks**, and **Images** pages to match the "Industrial Utilitarian" theme.
+  - Added staggered reveal animations to all list-based views for a high-end feel.
+- **SEO & Accessibility:**
+  - Added meta descriptions and a valid `robots.txt`.
+  - Audited and improved touch targets and ARIA labels for mobile responsiveness.
 
-## [0.5.0] - 2026-02-15
+## [0.6.0] - 2026-02-16
 
 ### Added
 - Milestone 0 bootstrap:
