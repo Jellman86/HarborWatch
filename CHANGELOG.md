@@ -41,6 +41,8 @@ All notable changes to HarborWatch are documented in this file.
 - AI Intelligence Core (v2 Milestone 6):
   - Integrated OpenAI provider for semantic analysis of release notes
   - Automated "Risk Gatekeeper" in the update pipeline to pause updates on high-risk changes
+  - New "Compose Doctor" view for AI-powered security auditing of Docker Compose files
+  - Refactored AI integration to use industry-standard `go-openai` SDK and `yaml.v3` parser
   - New UI components for AI Analysis reports and status monitoring
   - Persistent AI analysis history in SQLite
 - UI Expansion (YA-WAMF Inspired):

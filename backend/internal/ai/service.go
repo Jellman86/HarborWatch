@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"gopkg.in/yaml.v3"
 )
 
 // RiskLevel represents the AI's assessment of an update.
@@ -52,9 +54,16 @@ func (s *Service) AnalyzeReleaseNotes(ctx context.Context, notes string) (Analys
 	return s.provider.AnalyzeReleaseNotes(ctx, notes)
 }
 
-func (s *Service) AuditCompose(ctx context.Context, yaml string) (string, error) {
+func (s *Service) AuditCompose(ctx context.Context, yamlStr string) (string, error) {
 	if s.provider == nil {
 		return "", errors.New("no AI provider configured")
 	}
-	return s.provider.AuditCompose(ctx, yaml)
+
+	// Pre-validate YAML structure using established Go module
+	var body any
+	if err := yaml.Unmarshal([]byte(yamlStr), &body); err != nil {
+		return "", fmt.Errorf("invalid YAML syntax: %w", err)
+	}
+
+	return s.provider.AuditCompose(ctx, yamlStr)
 }
