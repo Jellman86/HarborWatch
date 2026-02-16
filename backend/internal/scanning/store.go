@@ -25,6 +25,7 @@ func OpenStore(dbPath string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Init(ctx context.Context) error {
+	// 1. Scan Results table
 	_, err := s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS scan_results (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +39,13 @@ CREATE TABLE IF NOT EXISTS scan_results (
   unknown INTEGER NOT NULL,
   raw_json TEXT NOT NULL
 );
+`)
+	if err != nil {
+		return fmt.Errorf("create scan_results table: %w", err)
+	}
+
+	// 2. Malware results table (v0.5.0)
+	_, err = s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS malware_scan_results (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   target TEXT NOT NULL,
@@ -47,6 +55,13 @@ CREATE TABLE IF NOT EXISTS malware_scan_results (
   threats_found TEXT NOT NULL,
   raw_output TEXT NOT NULL
 );
+`)
+	if err != nil {
+		return fmt.Errorf("create malware_scan_results table: %w", err)
+	}
+
+	// 3. Scan jobs table (v0.5.0)
+	_, err = s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS scan_jobs (
   job_id TEXT PRIMARY KEY,
   target TEXT NOT NULL,
@@ -59,8 +74,9 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
 );
 `)
 	if err != nil {
-		return fmt.Errorf("init scanning tables: %w", err)
+		return fmt.Errorf("create scan_jobs table: %w", err)
 	}
+
 	return nil
 }
 

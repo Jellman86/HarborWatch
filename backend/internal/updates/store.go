@@ -26,10 +26,10 @@ func OpenStore(dbPath string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Init(ctx context.Context) error {
+	// 1. Initial table creation
 	_, err := s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS update_runs (
   id TEXT PRIMARY KEY,
-  container_id TEXT NOT NULL DEFAULT '',
   target_image TEXT NOT NULL,
   validate_url TEXT NOT NULL,
   status TEXT NOT NULL,
@@ -49,6 +49,14 @@ CREATE TABLE IF NOT EXISTS update_steps (
 	if err != nil {
 		return fmt.Errorf("init update tables: %w", err)
 	}
+
+	// 2. Migration: Add container_id if it doesn't exist (v0.5.0)
+	var hasContainerID bool
+	err = s.db.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('update_runs') WHERE name='container_id'").Scan(&hasContainerID)
+	if err == nil && !hasContainerID {
+		_, _ = s.db.ExecContext(ctx, "ALTER TABLE update_runs ADD COLUMN container_id TEXT NOT NULL DEFAULT ''")
+	}
+
 	return nil
 }
 

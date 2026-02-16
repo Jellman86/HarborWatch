@@ -34,6 +34,10 @@ All notable changes to HarborWatch are documented in this file.
   - ClamAV adapter for recursive filesystem scanning
   - Persistent malware scan job history and result summaries
   - `POST /api/scans/malware/run`, `GET /api/scans/malware/summary`
+- System-wide quality improvements:
+  - Idempotent database migration system for seamless schema updates
+  - Frontend refactored to Svelte 5 runes for performance and clarity
+  - Hardened update validation with retry loops and safe rollback cleanup
 - CI/CD and deployment artifacts:
   - GitHub Actions workflows for build/push and PR validation
   - Single-container `Dockerfile`
