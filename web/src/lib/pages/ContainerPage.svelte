@@ -20,7 +20,7 @@
     async function loadDetail() {
         loading = true;
         try {
-            const res = await fetch(`/api/docker/containers/${id}`);
+            const res = await fetch(`/api/docker/${id}`);
             if (res.ok) {
                 const data = await res.json();
                 // Defensive defaulting: ensure arrays exist before assignment

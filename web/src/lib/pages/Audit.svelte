@@ -10,7 +10,7 @@
         loading = true;
         error = "";
         try {
-            const res = await fetch("/api/audit");
+            const res = await fetch("/api/audit/jobs");
             if (res.ok) {
                 const data = await res.json();
                 jobs = data || [];
