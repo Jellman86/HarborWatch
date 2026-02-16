@@ -25,6 +25,8 @@ ENV PORT=8000
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    clamav \
+    clamav-daemon \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -u 1000 appuser && \

@@ -12,6 +12,8 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     networks:
       - harborwatch_network
+    depends_on:
+      - clamav
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -26,6 +28,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  clamav:
+    image: clamav/clamav:latest
+    container_name: harborwatch-clamav-dev
+    restart: unless-stopped
+    networks:
+      - harborwatch_network
+    volumes:
+      - ./clamav-db:/var/lib/clamav
 
 networks:
   harborwatch_network:
