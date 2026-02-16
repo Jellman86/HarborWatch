@@ -11,7 +11,8 @@
         try {
             const res = await fetch(`/api/metrics/${containerId}?duration=1h`);
             if (res.ok) {
-                metrics = await res.json();
+                const data = await res.json();
+                metrics = data || [];
             }
         } catch {} finally {
             loading = false;

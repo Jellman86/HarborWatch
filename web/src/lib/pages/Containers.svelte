@@ -89,6 +89,8 @@
     function handleTriggerScan(image: string) {
         onNavigate('security', { target: image });
     }
+
+    let safeContainers = $derived(containers || []);
 </script>
 
 <div class="space-y-6">
@@ -119,7 +121,7 @@
                 </button>
             </div>
             <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
-                {containers.length} Total
+                {safeContainers.length} Total
             </span>
         </div>
     </div>
@@ -141,7 +143,7 @@
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-                {#each containers as c, i}
+                {#each safeContainers as c, i}
                     <tr 
                         class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group {expandedContainer === c.id ? 'bg-slate-50/50 dark:bg-slate-900/30' : ''} opacity-0 animate-reveal"
                         style="animation-delay: {0.1 + (i * 0.05)}s"
@@ -283,7 +285,7 @@
     </div>
     {:else}
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {#each containers as c, i}
+        {#each safeContainers as c, i}
             <div 
                 class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col group hover:border-brand-500 transition-all opacity-0 animate-reveal"
                 style="animation-delay: {0.1 + (i * 0.05)}s"

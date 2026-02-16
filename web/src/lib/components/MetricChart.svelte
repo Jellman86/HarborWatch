@@ -16,10 +16,12 @@
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
+    let safeMetrics = $derived(metrics || []);
+
     let series = $derived([
         {
             name: type === 'cpu' ? 'CPU %' : 'Memory Usage',
-            data: metrics.map(m => ({
+            data: safeMetrics.map((m: Metric) => ({
                 x: m.timestamp * 1000,
                 y: type === 'cpu' ? m.cpuPercent : m.memoryUsage
             }))
@@ -104,8 +106,8 @@
     });
 </script>
 
-{#if metrics.length > 0}
-    {#key metrics.length}
+{#if safeMetrics.length > 0}
+    {#key safeMetrics.length}
         <div class="w-full h-[250px]" use:chart={options}></div>
     {/key}
 {:else}

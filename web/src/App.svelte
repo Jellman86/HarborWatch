@@ -60,6 +60,12 @@
         console.error("Failed to parse docker event", e);
       }
     });
+
+    eventSource.onerror = () => {
+      console.warn("Docker events connection interrupted. Attempting to reconnect...");
+      eventSource?.close();
+      setTimeout(connectEvents, 5000);
+    };
   }
 
   async function loadGlobalData() {
@@ -133,7 +139,7 @@
       {/if}
 
       {#if currentRoute === 'dashboard'}
-        <Dashboard {health} {containers} {images} {events} onRefresh={loadGlobalData} />
+        <Dashboard {containers} {images} {events} onRefresh={loadGlobalData} />
       {:else if currentRoute === 'containers'}
         <Containers {containers} onNavigate={navigate} />
       {:else if currentRoute === 'container-detail'}

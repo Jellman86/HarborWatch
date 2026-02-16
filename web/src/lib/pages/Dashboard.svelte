@@ -1,8 +1,13 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ContainerSummary, ScanSummary } from "../api-types";
+    import type { ContainerSummary, ScanSummary, ImageSummary, DockerEvent } from "../api-types";
 
-    let { containers } = $props<{ containers: ContainerSummary[] }>();
+    let { containers, images, events, onRefresh } = $props<{ 
+        containers: ContainerSummary[], 
+        images?: ImageSummary[], 
+        events?: DockerEvent[],
+        onRefresh?: () => void
+    }>();
     let scanSummary = $state<ScanSummary | null>(null);
     let fleetAdvice = $state("");
     let analyzingFleet = $state(false);
@@ -40,8 +45,9 @@
         loadData();
     });
 
-    let runningCount = $derived(containers.filter(c => c.state === 'running').length);
-    let updateCount = $derived(containers.filter(c => c.updateAvailable).length);
+    let safeContainers = $derived(containers || []);
+    let runningCount = $derived(safeContainers.filter((c: ContainerSummary) => c.state === 'running').length);
+    let updateCount = $derived(safeContainers.filter((c: ContainerSummary) => c.updateAvailable).length);
 </script>
 
 <div class="space-y-10">
@@ -65,7 +71,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Active Assets</p>
-            <p class="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{runningCount}<span class="text-lg text-slate-400 ml-2 font-medium">/ {containers.length}</span></p>
+            <p class="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{runningCount}<span class="text-lg text-slate-400 ml-2 font-medium">/ {safeContainers.length}</span></p>
         </div>
 
         <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group">
@@ -81,7 +87,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vulnerabilities</p>
-            <p class="text-4xl font-black {scanSummary?.critical > 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'} tracking-tighter">{scanSummary?.critical || 0}</p>
+            <p class="text-4xl font-black {(scanSummary?.critical || 0) > 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'} tracking-tighter">{scanSummary?.critical || 0}</p>
         </div>
 
         <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group">
@@ -89,7 +95,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Security Scans</p>
-            <p class="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{scanSummary?.totalScans || 0}</p>
+            <p class="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{scanSummary?.total || 0}</p>
         </div>
     </div>
 

@@ -50,6 +50,9 @@
         updatePollTimer = window.setInterval(async () => {
             try {
                 const job = await fetchJSON<UpdateJobStatus>(`/api/updates/jobs/${jobId}`);
+                if (job.aiAnalysis) {
+                    job.aiAnalysis.breakingChanges = job.aiAnalysis.breakingChanges || [];
+                }
                 updateJob = job;
                 if (job.status === "completed" || job.status === "failed" || job.status === "rolled_back") {
                     if (updatePollTimer) window.clearInterval(updatePollTimer);

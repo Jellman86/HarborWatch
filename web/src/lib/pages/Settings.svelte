@@ -229,10 +229,9 @@
                             </div>
                             <div class="space-y-2">
                                 <label for="validate-pattern" class="text-[10px] font-black uppercase text-slate-400 ml-1">Default Validation URL Pattern</label>
-                                <div class="relative flex items-center">
-                                    <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked('validateUrlPattern')} placeholder="http://localhost:{{PORT}}/health" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all disabled:opacity-60 font-mono" />
-                                    {#if isLocked('validateUrlPattern')}
-                                        <div class="absolute right-4 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">ENV</div>
+                                                                <div class="relative flex items-center">
+                                                                    <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked('validateUrlPattern')} placeholder="http://localhost:&#123;&#123;PORT&#125;&#125;/health" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all disabled:opacity-60 font-mono" />
+                                                                    {#if isLocked('validateUrlPattern')}                                        <div class="absolute right-4 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">ENV</div>
                                     {/if}
                                 </div>
                                 <p class="text-[9px] text-slate-500 italic ml-1">Pattern to auto-generate health check URLs for updates.</p>

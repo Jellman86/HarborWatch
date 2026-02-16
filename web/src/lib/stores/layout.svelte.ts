@@ -27,6 +27,10 @@ class LayoutStore {
         this.mobileSidebarOpen = !this.mobileSidebarOpen;
     }
 
+    openMobileSidebar() {
+        this.mobileSidebarOpen = true;
+    }
+
     closeMobileSidebar() {
         this.mobileSidebarOpen = false;
     }

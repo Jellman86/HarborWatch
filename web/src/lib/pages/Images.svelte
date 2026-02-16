@@ -2,8 +2,8 @@
     import { onMount } from "svelte";
     import type { ImageSummary } from "../api-types";
 
-    let images = $state<ImageSummary[]>([]);
-    let loading = $state(true);
+    let { images = $bindable([]) } = $props<{ images: ImageSummary[] }>();
+    let loading = $state(false);
     let error = $state("");
     let pruning = $state(false);
 
@@ -42,7 +42,9 @@
     }
 
     onMount(() => {
-        loadImages();
+        if (images.length === 0) {
+            loadImages();
+        }
     });
 
     const formatSize = (bytes: number) => {
@@ -102,9 +104,7 @@
                     <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">
                         <th class="px-8 py-4">Artifact ID</th>
                         <th class="px-8 py-4">Repository / Tag</th>
-                        <th class="px-8 py-4">Storage Size</th>
-                        <th class="px-8 py-4">Created</th>
-                        <th class="px-8 py-4">Usage</th>
+                        <th class="px-8 py-4 text-right">Storage Size</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
@@ -124,13 +124,7 @@
                                     </span>
                                 </div>
                             </td>
-                            <td class="px-8 py-4 font-mono text-[10px] text-slate-500">{formatSize(img.size)}</td>
-                            <td class="px-8 py-4 text-[11px] text-slate-400">{new Date(img.created * 1000).toLocaleDateString()}</td>
-                            <td class="px-8 py-4">
-                                <span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md text-[9px] font-black uppercase text-slate-500 dark:text-slate-400">
-                                    {img.containers > 0 ? `${img.containers} Instances` : 'Dangling'}
-                                </span>
-                            </td>
+                            <td class="px-8 py-4 font-mono text-[10px] text-slate-500 text-right">{formatSize(img.size)}</td>
                         </tr>
                     {/each}
                 </tbody>
