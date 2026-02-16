@@ -42,7 +42,7 @@ func newTestStore(t *testing.T) *Store {
 
 func TestServiceStartScanSuccess(t *testing.T) {
 	store := newTestStore(t)
-	svc := NewService(fakeScanner{result: Result{Source: "fake", High: 2, Medium: 1}}, nil, store)
+	svc := NewService(fakeScanner{result: Result{Source: "fake", High: 2, Medium: 1}}, nil, store, nil)
 
 	started, err := svc.StartScan("nginx:latest")
 	if err != nil {
@@ -83,7 +83,7 @@ func TestServiceStartScanSuccess(t *testing.T) {
 
 func TestServiceStartScanFailure(t *testing.T) {
 	store := newTestStore(t)
-	svc := NewService(fakeScanner{err: errors.New("boom")}, nil, store)
+	svc := NewService(fakeScanner{err: errors.New("boom")}, nil, store, nil)
 
 	started, err := svc.StartScan("nginx:latest")
 	if err != nil {

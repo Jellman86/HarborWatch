@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
-	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/container"
 	"github.com/moby/moby/client"
 )
 

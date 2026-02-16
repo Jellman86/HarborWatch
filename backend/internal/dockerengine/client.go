@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	"github.com/moby/moby/client"
 	"gopkg.in/yaml.v3"
 )
