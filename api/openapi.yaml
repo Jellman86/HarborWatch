@@ -243,6 +243,24 @@ paths:
                 type: object
                 properties:
                   analysis: { type: string }
+  /api/ai/audit-compose/{id}:
+    get:
+      operationId: auditContainerCompose
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: AI analysis of the container's compose
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analysis: { type: string }
+                  config: { type: string }
   /api/ai/analyze-metrics:
     post:
       operationId: analyzeContainerMetrics
@@ -315,6 +333,18 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Metric'
+  /api/portainer/stacks:
+    get:
+      operationId: listPortainerStacks
+      responses:
+        '200':
+          description: Portainer stacks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
 components:
   schemas:
     ContainerDetail:
@@ -512,3 +542,10 @@ components:
         gotifyToken: { type: string }
         portainerUrl: { type: string }
         portainerApiKey: { type: string }
+        openaiKey: { type: string }
+        openaiModel: { type: string }
+        instanceUrl: { type: string }
+        validateUrlPattern: { type: string }
+        environmentOverrides:
+          type: object
+          additionalProperties: { type: boolean }
