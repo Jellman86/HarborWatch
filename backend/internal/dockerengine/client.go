@@ -15,6 +15,7 @@ import (
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/moby/moby/client"
+	"gopkg.in/yaml.v3"
 )
 
 const defaultDockerSocket = "/var/run/docker.sock"
@@ -133,36 +134,127 @@ func (c *Client) OpenEventStream(ctx context.Context) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func (c *Client) GetContainerComposeConfig(ctx context.Context, id string) (string, error) {
+type PortainerService interface {
+	ListStacks(ctx context.Context) ([]portainer.Stack, error)
+	GetStackFile(ctx context.Context, stackID int) (string, error)
+}
+
+func (c *Client) GetContainerComposeConfig(ctx context.Context, id string, ps PortainerService) (string, error) {
 	// 1. Get full inspect data
 	inspect, err := c.getJSONRaw(ctx, "/containers/"+id+"/json")
 	if err != nil {
 		return "", err
 	}
 
-	var data struct {
-		Config struct {
-			Labels map[string]string `json:"Labels"`
-		} `json:"Config"`
-	}
-	if err := json.Unmarshal(inspect, &data); err != nil {
+	var raw map[string]any
+	if err := json.Unmarshal(inspect, &raw); err != nil {
 		return "", err
 	}
 
-	// 2. Try to find the original compose file path from labels
-	// com.docker.compose.project.config_files is standard for modern Compose
-	if path, ok := data.Config.Labels["com.docker.compose.project.config_files"]; ok {
-		// Note: This path is relative to the HOST. 
-		// If the user has mounted the relevant host directory into HarborWatch, we can read it.
-		// For now, we return the path info or attempt a reconstruction.
-		if content, err := os.ReadFile(path); err == nil {
-			return string(content), nil
+	config, ok := raw["Config"].(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("invalid container config data")
+	}
+	labels, _ := config["Labels"].(map[string]any)
+
+	// 2. Try Portainer Integration (Highest fidelity for managed stacks)
+	if ps != nil && labels != nil {
+		projectName, _ := labels["com.docker.compose.project"].(string)
+		if projectName != "" {
+			stacks, err := ps.ListStacks(ctx)
+			if err == nil {
+				for _, s := range stacks {
+					if strings.EqualFold(s.Name, projectName) {
+						yaml, err := ps.GetStackFile(ctx, s.ID)
+						if err == nil && yaml != "" {
+							return yaml, nil
+						}
+					}
+				}
+			}
 		}
 	}
 
-	// 3. Fallback: Reconstruct "Effective Compose" from inspect data
-	// This ensures the "Doctor" always has something to audit.
-	return fmt.Sprintf("# Reconstructed Effective Configuration\n%s", string(inspect)), nil
+	// 3. Try to find the original compose file path from labels (Host-local path)
+	if labels != nil {
+		if path, ok := labels["com.docker.compose.project.config_files"].(string); ok {
+			if content, err := os.ReadFile(path); err == nil {
+				return string(content), nil
+			}
+		}
+	}
+
+	// 4. Fallback: Reconstruct "Effective Compose" from inspect data
+	return c.reconstructYAML(raw), nil
+}
+
+func (c *Client) reconstructYAML(raw map[string]any) string {
+	name, _ := raw["Name"].(string)
+	name = strings.TrimPrefix(name, "/")
+
+	config, _ := raw["Config"].(map[string]any)
+	hostConfig, _ := raw["HostConfig"].(map[string]any)
+
+	service := make(map[string]any)
+	service["container_name"] = name
+
+	if config != nil {
+		service["image"] = config["Image"]
+		if env, ok := config["Env"].([]any); ok {
+			service["environment"] = env
+		}
+		if labels, ok := config["Labels"].(map[string]any); ok {
+			cleanLabels := make(map[string]string)
+			for k, v := range labels {
+				if !strings.HasPrefix(k, "com.docker.compose") && !strings.HasPrefix(k, "io.portainer") {
+					cleanLabels[k], _ = v.(string)
+				}
+			}
+			if len(cleanLabels) > 0 {
+				service["labels"] = cleanLabels
+			}
+		}
+	}
+
+	if hostConfig != nil {
+		if restart, ok := hostConfig["RestartPolicy"].(map[string]any); ok {
+			if rName, ok := restart["Name"].(string); ok && rName != "" {
+				service["restart"] = rName
+			}
+		}
+		if binds, ok := hostConfig["Binds"].([]any); ok && len(binds) > 0 {
+			service["volumes"] = binds
+		}
+	}
+
+	// Networks
+	if netSettings, ok := raw["NetworkSettings"].(map[string]any); ok {
+		if networks, ok := netSettings["Networks"].(map[string]any); ok {
+			var netList []string
+			for n := range networks {
+				if n != "bridge" && n != "host" && n != "none" {
+					netList = append(netList, n)
+				}
+			}
+			if len(netList) > 0 {
+				service["networks"] = netList
+			}
+		}
+	}
+
+	compose := map[string]any{
+		"version": "3.8",
+		"services": map[string]any{
+			name: service,
+		},
+	}
+
+	out, err := yaml.Marshal(compose)
+	if err != nil {
+		return "# Error reconstructing YAML: " + err.Error()
+	}
+
+	return "# Reconstructed Effective Configuration (Inspect Data)\n" + string(out)
 }
 
 func (c *Client) getJSONRaw(ctx context.Context, path string) ([]byte, error) {

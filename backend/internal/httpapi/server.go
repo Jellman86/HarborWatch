@@ -31,13 +31,14 @@ import (
 type DockerClient interface {
 	ListContainers(ctx context.Context) ([]gen.ContainerSummary, error)
 	GetContainer(ctx context.Context, id string) (gen.ContainerSummary, error)
-	GetContainerComposeConfig(ctx context.Context, id string) (string, error)
+	GetContainerComposeConfig(ctx context.Context, id string, portainer PortainerService) (string, error)
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 	OpenEventStream(ctx context.Context) (io.ReadCloser, error)
 }
 
 type PortainerService interface {
 	ListStacks(ctx context.Context) ([]portainer.Stack, error)
+	GetStackFile(ctx context.Context, stackID int) (string, error)
 }
 
 type ScanService interface {
@@ -330,6 +331,10 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 						detail.ActionHistory = ah
 					}
 				}
+
+				// Fetch Compose Config if requested or for enrichment
+				// For now we don't return full YAML in the Detail object to keep it light,
+				// but the backend is ready for the Doctor.
 
 				writeJSON(w, http.StatusOK, detail)
 			})
@@ -641,7 +646,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 				defer cancel()
 
-				config, err := dockerClient.GetContainerComposeConfig(ctx, id)
+				config, err := dockerClient.GetContainerComposeConfig(ctx, id, portainerService)
 				if err != nil {
 					writeError(w, http.StatusNotFound, "config_not_found", err.Error())
 					return

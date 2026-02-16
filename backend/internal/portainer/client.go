@@ -60,3 +60,31 @@ func (c *Client) ListStacks(ctx context.Context) ([]Stack, error) {
 
 	return stacks, nil
 }
+
+func (c *Client) GetStackFile(ctx context.Context, stackID int) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/stacks/%d/file", c.baseURL, stackID), nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("portainer api error: status %d", resp.StatusCode)
+	}
+
+	var data struct {
+		StackFileContent string `json:"StackFileContent"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", err
+	}
+
+	return data.StackFileContent, nil
+}
