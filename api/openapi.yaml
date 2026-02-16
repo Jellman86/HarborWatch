@@ -245,8 +245,9 @@ components:
         generatedAt: { type: integer, format: int64 }
     UpdateStartRequest:
       type: object
-      required: [targetImage, validateUrl]
+      required: [containerId, targetImage, validateUrl]
       properties:
+        containerId: { type: string }
         targetImage: { type: string }
         validateUrl: { type: string }
     UpdateStartResponse:
@@ -266,9 +267,10 @@ components:
         timestamp: { type: integer, format: int64 }
     UpdateJobStatus:
       type: object
-      required: [jobId, targetImage, validateUrl, status, createdAt, updatedAt, error, steps]
+      required: [jobId, containerId, targetImage, validateUrl, status, createdAt, updatedAt, error, steps]
       properties:
         jobId: { type: string }
+        containerId: { type: string }
         targetImage: { type: string }
         validateUrl: { type: string }
         status: { type: string }

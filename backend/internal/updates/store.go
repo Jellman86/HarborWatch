@@ -29,6 +29,7 @@ func (s *Store) Init(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS update_runs (
   id TEXT PRIMARY KEY,
+  container_id TEXT NOT NULL DEFAULT '',
   target_image TEXT NOT NULL,
   validate_url TEXT NOT NULL,
   status TEXT NOT NULL,
@@ -53,9 +54,9 @@ CREATE TABLE IF NOT EXISTS update_steps (
 
 func (s *Store) CreateRun(ctx context.Context, run gen.UpdateJobStatus) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO update_runs(id, target_image, validate_url, status, created_at, updated_at, error)
-VALUES(?, ?, ?, ?, ?, ?, ?)
-`, run.JobID, run.TargetImage, run.ValidateURL, run.Status, run.CreatedAt, run.UpdatedAt, run.Error)
+INSERT INTO update_runs(id, container_id, target_image, validate_url, status, created_at, updated_at, error)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+`, run.JobID, run.ContainerID, run.TargetImage, run.ValidateURL, run.Status, run.CreatedAt, run.UpdatedAt, run.Error)
 	if err != nil {
 		return fmt.Errorf("create update run: %w", err)
 	}
@@ -85,12 +86,12 @@ VALUES(?, ?, ?, ?, ?)
 
 func (s *Store) GetRun(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, target_image, validate_url, status, created_at, updated_at, error
+SELECT id, container_id, target_image, validate_url, status, created_at, updated_at, error
 FROM update_runs WHERE id=?
 `, jobID)
 
 	var run gen.UpdateJobStatus
-	if err := row.Scan(&run.JobID, &run.TargetImage, &run.ValidateURL, &run.Status, &run.CreatedAt, &run.UpdatedAt, &run.Error); err != nil {
+	if err := row.Scan(&run.JobID, &run.ContainerID, &run.TargetImage, &run.ValidateURL, &run.Status, &run.CreatedAt, &run.UpdatedAt, &run.Error); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}

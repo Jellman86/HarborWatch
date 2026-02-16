@@ -13,6 +13,7 @@ import (
 )
 
 type Request struct {
+	ContainerID string
 	TargetImage string
 	ValidateURL string
 }
@@ -45,15 +46,24 @@ func NewServiceFromEnv() (*Service, error) {
 }
 
 func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
-	if req.TargetImage == "" || req.ValidateURL == "" {
-		return gen.UpdateStartResponse{}, errors.New("targetImage and validateUrl are required")
+	if req.ContainerID == "" || req.TargetImage == "" || req.ValidateURL == "" {
+		return gen.UpdateStartResponse{}, errors.New("containerId, targetImage and validateUrl are required")
 	}
 	jobID, err := newID()
 	if err != nil {
 		return gen.UpdateStartResponse{}, err
 	}
 	now := time.Now().UTC().Unix()
-	run := gen.UpdateJobStatus{JobID: jobID, TargetImage: req.TargetImage, ValidateURL: req.ValidateURL, Status: "running", CreatedAt: now, UpdatedAt: now, Steps: []gen.UpdateStepEvent{}}
+	run := gen.UpdateJobStatus{
+		JobID:       jobID,
+		ContainerID: req.ContainerID,
+		TargetImage: req.TargetImage,
+		ValidateURL: req.ValidateURL,
+		Status:      "running",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Steps:       []gen.UpdateStepEvent{},
+	}
 	if err := s.store.CreateRun(context.Background(), run); err != nil {
 		return gen.UpdateStartResponse{}, err
 	}

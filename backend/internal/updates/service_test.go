@@ -62,7 +62,7 @@ func newTestService(t *testing.T, failStep string) *Service {
 
 func TestUpdatePipelineSuccess(t *testing.T) {
 	svc := newTestService(t, "")
-	res, err := svc.StartUpdate(Request{TargetImage: "img", ValidateURL: "http://x"})
+	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestUpdatePipelineSuccess(t *testing.T) {
 
 func TestUpdatePipelineRollback(t *testing.T) {
 	svc := newTestService(t, "validate")
-	res, err := svc.StartUpdate(Request{TargetImage: "img", ValidateURL: "http://x"})
+	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
 	if err != nil {
 		t.Fatal(err)
 	}
