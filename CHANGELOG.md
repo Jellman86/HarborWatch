@@ -5,6 +5,38 @@ All notable changes to HarborWatch are documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Container-Driven Architecture (v0.6.0):**
+  - Shifted from "Action-First" to **"Asset-First"** navigation.
+  - New **"Container Command Center"**: A dedicated full-page view for every container asset.
+  - Contextual Tabs: **Insights** (Metrics), **Security** (Scans), **Lifecycle** (Updates/Rules), and **Configuration** (Doctor).
+  - Automated **"Compose Doctor"**: Automatically retrieves or reconstructs `docker-compose.yml` via Portainer API, host mounts, or container metadata.
+- **Per-Container Intelligence:**
+  - Dedicated SQLite rule store for container-specific configuration.
+  - Customizable **Update Policies**: "Auto" (automatic), "Manual" (notify), or "Locked" (ignore).
+  - Configurable health check validation URLs and auto-rollback toggles per asset.
+  - Integrated execution history for every specific container.
+- **Universal Configuration System:**
+  - Unified tabbed **Settings View** for Notifications, API Keys, and System parameters.
+  - Smart configuration merging: Environment variables (Compose) now take priority over database settings.
+  - UI indicators for "Locked (ENV)" fields to prevent configuration confusion.
+- **Modernized Backend Infrastructure:**
+  - Migrated to **`go-chi/chi`** router for advanced routing and middleware support.
+  - Unified Docker interactions using the official **Moby SDK**.
+  - Enhanced API robustness with defensive defaulting (preventing null arrays in JSON).
+  - Implemented detailed technical failure logging to the **System Health** diagnostics.
+- **UI/UX Refinement ("Tech Innovation" Aesthetic):**
+  - Professional branding with **Montserrat** and **IBM Plex Sans** typography.
+  - Modern **Card View** toggle for the Fleet inventory.
+  - **High-end Animations**: Staggered reveals, smooth transitions, and pulse indicators for updates.
+  - Integrated **Live Sparklines** in the container inventory for real-time CPU monitoring.
+  - Industrial-style glassmorphism and subtle grain overlay for a "Security Appliance" feel.
+- **Docker Image Repository Enhancements:**
+  - Professional list-based view for the image repository.
+  - New **"Cleanup Repository"** button to trigger automated pruning of unused artifacts.
+
+## [0.5.0] - 2026-02-15
+
+### Added
 - Milestone 0 bootstrap:
   - Go backend with `/health`
   - Svelte 5 frontend served by Go static hosting
@@ -34,78 +66,17 @@ All notable changes to HarborWatch are documented in this file.
   - ClamAV adapter for recursive filesystem scanning
   - Persistent malware scan job history and result summaries
   - `POST /api/scans/malware/run`, `GET /api/scans/malware/summary`
-- System-wide quality improvements:
-  - Idempotent database migration system for seamless schema updates
-  - Frontend refactored to Svelte 5 runes for performance and clarity
-  - Hardened update validation with retry loops and safe rollback cleanup
 - AI Intelligence Core (v2 Milestone 6):
   - Integrated OpenAI provider for semantic analysis of release notes
-  - Automated "Risk Gatekeeper" in the update pipeline to pause updates on high-risk changes
-  - New "Compose Doctor" view for AI-powered security auditing of Docker Compose files
-  - Refactored AI integration to use industry-standard `go-openai` SDK and `yaml.v3` parser
-  - New UI components for AI Analysis reports and status monitoring
-  - Persistent AI analysis history in SQLite
 - Automation & Scheduler (v2 Milestone 7):
   - Implemented core `scheduler` service using `robfig/cron/v3`
   - Added automated `docker system prune` task for weekly system maintenance
-  - New "Automation" UI view for managing background tasks and monitoring execution history
-  - Added "Off by Default" operational policy for all background tasks
-  - Implemented `TrivySweepTask` for automated full-system vulnerability scans
-  - Implemented `ClamAVSweepTask` for automated host-volume malware scans
-  - Added toggle and manual-run API endpoints for scheduled tasks
-  - Integrated official Moby Docker SDK for robust engine interactions
-  - Added SQLite persistence for schedules to ensure tasks survive restarts
-- UI Expansion (YA-WAMF Inspired):
-  - Transitioned from single-page prototype to multi-view security appliance
-  - Integrated Tailwind CSS for production-grade styling
-  - Implemented persistent Sidebar navigation with collapse support
-  - Full Dark/Light mode support with system preference detection
-  - Modular component architecture: `Dashboard`, `Containers`, `Images`, `Security`, `Intelligence`, and `Updates`
-  - Added `System Health` (Diagnostics) view with real-time telemetry and internal log streaming
-  - Added `Operations Log` (Audit) view with expandable detailed execution history
-  - Implemented "Contextual Navigation": trigger scans or updates directly from container inventory with pre-filled state
-  - Added `System Settings` view for global application configuration
-  - Visual update pipeline stepper with live progress terminal
 - Self-Monitoring & Diagnostics:
   - Implemented `diag` service for persistent internal application logging
-  - Added real-time telemetry for uptime, memory allocation, and database size
-  - Built-in automatic log pruning with 7-day retention
-  - New `/api/system/status` and `/api/system/logs` endpoints for self-aware monitoring
 - Ecosystem Integrations:
   - Implemented core Notification Dispatcher with multi-platform support
   - Added Discord Webhook integration for critical system alerts
-  - Integrated notifications with Update Engine (alerts on high-risk AI detection and pipeline failures)
-  - Added persistent backend application settings store
-- System Refinements & Quality Audit:
-  - Implemented "Action Hub" pattern in Container Inventory for light-touch management
-  - Added AI Fleet Health Advice to the Dashboard for proactive optimization
-  - Improved Metrics Collector robustness with per-container execution timeouts
-  - Enhanced visibility of auto-discovered labels and intelligence sources
-  - Centralized global connectivity state in the main router
-  - Resolved Svelte 5 charting compatibility issues using ApexCharts actions
-  - Fully audited UI for Accessibility (A11y), adding labels and ARIA support
-  - Fixed runtime `TypeError` by ensuring all API-driven arrays default to empty instead of null
-- Label-Driven Auto-Discovery:
-  - Containers now support `harborwatch.*` labels for "Light Touch" configuration
-  - Automatic detection of update policies and intelligence sources directly from container metadata
-  - UI visibility for discovered policies in the container inventory
-- Performance Profiler (v2 Milestone 9):
-  - Implemented `metrics` service for high-resolution container stats collection
-  - Added `container_metrics` SQLite table for time-series data storage
-  - Built `Collector` task to snapshot CPU, Memory, and I/O every 60 seconds
-  - Integrated ApexCharts for interactive CPU and Memory visualization in the UI
-  - Added AI Performance Consultant to diagnose resource leaks and optimize limits
-  - Added `/api/metrics/{id}` and `/api/ai/analyze-metrics` endpoints
-  - Added automated 7-day retention policy via `metrics_prune` task
-- CI/CD and deployment artifacts:
-  - GitHub Actions workflows for build/push and PR validation
-  - Single-container `Dockerfile`
-  - Compose manifests (`docker-compose.yml`, `docker-compose.dev.yml`, `docker-compose.prod.yml`)
 
 ### Changed
-- Compose default host port changed to `18080` to avoid conflicts with existing services using `8080`.
+- Compose default host port changed to `18080`.
 - `.gitignore` now excludes `agents/`.
-
-### Notes
-- Trivy-based scan execution requires the `trivy` binary on `PATH`.
-- Update pipeline currently includes a rollback hook with persistence and status handling; container replacement rollback logic is implemented as an extensible hook.
