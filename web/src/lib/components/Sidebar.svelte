@@ -27,18 +27,30 @@
 
 <aside class="fixed left-0 top-0 h-full bg-white dark:bg-slate-900 shadow-xl border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col z-50 {collapsed ? 'w-20' : 'w-64'} {layoutStore.mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}">
     <!-- Logo -->
-    <div class="flex items-center gap-3 p-4 h-16 border-b border-slate-100 dark:border-slate-800">
-        <div class="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-500/20 text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-        </div>
-        {#if !collapsed}
-            <div class="flex flex-col overflow-hidden">
-                <h1 class="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate uppercase tracking-wider">HarborWatch</h1>
-                <span class="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-tighter">Container Sentry</span>
+    <div class="flex items-center justify-between p-4 h-16 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-500/20 text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
             </div>
-        {/if}
+            {#if !collapsed}
+                <div class="flex flex-col overflow-hidden">
+                    <h1 class="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate uppercase tracking-wider">HarborWatch</h1>
+                    <span class="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-tighter">Container Sentry</span>
+                </div>
+            {/if}
+        </div>
+        
+        <button 
+            onclick={() => layoutStore.closeMobileSidebar()}
+            class="md:hidden p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            aria-label="Close Navigation"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
     </div>
 
     <!-- Nav Items -->
@@ -81,7 +93,7 @@
         </button>
 
         <button
-            class="w-full flex items-center justify-center p-3 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all duration-200"
+            class="w-full hidden md:flex items-center justify-center p-3 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all duration-200"
             onclick={() => layoutStore.toggleSidebar()}
             aria-label={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
             title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
