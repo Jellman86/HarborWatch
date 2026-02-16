@@ -151,6 +151,39 @@ paths:
             text/event-stream:
               schema:
                 type: string
+  /api/scans/malware/run:
+    post:
+      operationId: runMalwareScan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MalwareScanRequest'
+      responses:
+        '202':
+          description: Malware scan started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanStartResponse'
+  /api/scans/malware/summary:
+    get:
+      operationId: getMalwareScanSummary
+      parameters:
+        - in: query
+          name: target
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Malware scan summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MalwareScanSummary'
 components:
   schemas:
     HealthResponse:
@@ -191,6 +224,11 @@ components:
       required: [target]
       properties:
         target: { type: string }
+    MalwareScanRequest:
+      type: object
+      required: [target]
+      properties:
+        target: { type: string }
     ScanStartResponse:
       type: object
       required: [jobId, status]
@@ -222,6 +260,15 @@ components:
         unknown: { type: integer }
         total: { type: integer }
         riskScore: { type: integer }
+    MalwareScanSummary:
+      type: object
+      required: [target, source, scannedAt, infected, threatsFound]
+      properties:
+        target: { type: string }
+        source: { type: string }
+        scannedAt: { type: integer, format: int64 }
+        infected: { type: boolean }
+        threatsFound: { type: array, items: { type: string } }
     ReleaseExcerpt:
       type: object
       required: [tag, text, weight]

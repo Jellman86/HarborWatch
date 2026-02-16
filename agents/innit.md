@@ -23,15 +23,18 @@ Completed milestones:
   - GitHub Releases API ingestion
   - Heuristic risk scoring with highlighted excerpts
   - API + UI integration
-- Milestone 4 (Safe Update Pipeline): implemented
+- Milestone 4 (Safe Update Pipeline): complete
   - Async state machine:
     `preflight -> backup -> pull -> recreate -> validate -> success/rollback`
+  - Robust container replacement (stop-rename-start) and rollback logic implemented
   - SQLite persistence for update runs and step logs
   - API endpoints for run/status/events and live UI progress
 
 Current focus for next iteration:
-- Harden Milestone 4 execution semantics for real container replacement/rollback policies
-- Optional Milestone 5: ClamAV filesystem scans
+- Milestone 5 (optional) — ClamAV filesystem scans: complete
+  - MalwareScanner interface and ClamAV adapter implemented
+  - Persistent job tracking and summary store for malware scans
+  - API endpoints for triggering and viewing malware scan results
 
 You are a senior staff software engineer and security-focused SRE. Your task is to build HarborWatch: a local-first container maintenance and security platform for self-hosted Docker environments.
 

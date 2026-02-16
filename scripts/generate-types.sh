@@ -11,9 +11,11 @@ type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"name
 type ImageSummary struct { ID string `json:"id"`; RepoTags []string `json:"repoTags"`; Size int64 `json:"size"` }
 type DockerEvent struct { Type string `json:"type"`; Action string `json:"action"`; ID string `json:"id"`; From string `json:"from"`; Attributes map[string]string `json:"attributes,omitempty"`; Time int64 `json:"time"` }
 type ScanRunRequest struct { Target string `json:"target"` }
+type MalwareScanRequest struct { Target string `json:"target"` }
 type ScanStartResponse struct { JobID string `json:"jobId"`; Status string `json:"status"` }
 type ScanJobStatus struct { JobID string `json:"jobId"`; Target string `json:"target"`; Status string `json:"status"`; Source string `json:"source"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
 type ScanSummary struct { Target string `json:"target"`; Source string `json:"source"`; ScannedAt int64 `json:"scannedAt"`; Critical int `json:"critical"`; High int `json:"high"`; Medium int `json:"medium"`; Low int `json:"low"`; Unknown int `json:"unknown"`; Total int `json:"total"`; RiskScore int `json:"riskScore"` }
+type MalwareScanSummary struct { Target string `json:"target"`; Source string `json:"source"`; ScannedAt int64 `json:"scannedAt"`; Infected bool `json:"infected"`; ThreatsFound []string `json:"threatsFound"` }
 type ReleaseExcerpt struct { Tag string `json:"tag"`; Text string `json:"text"`; Weight int `json:"weight"` }
 type ReleaseRiskSummary struct { Repo string `json:"repo"`; LatestTag string `json:"latestTag"`; LatestPublishedAt int64 `json:"latestPublishedAt"`; ReleasesAnalyzed int `json:"releasesAnalyzed"`; TotalRisk int `json:"totalRisk"`; BreakingChangeLikely bool `json:"breakingChangeLikely"`; HighlightedExcerpts []ReleaseExcerpt `json:"highlightedExcerpts"`; GeneratedAt int64 `json:"generatedAt"` }
 type UpdateStartRequest struct { ContainerID string `json:"containerId"`; TargetImage string `json:"targetImage"`; ValidateURL string `json:"validateUrl"` }
@@ -30,9 +32,11 @@ export type ContainerSummary = { id: string; names: string[]; image: string; sta
 export type ImageSummary = { id: string; repoTags: string[]; size: number };
 export type DockerEvent = { type: string; action: string; id: string; from: string; attributes?: Record<string, string>; time: number };
 export type ScanRunRequest = { target: string };
+export type MalwareScanRequest = { target: string };
 export type ScanStartResponse = { jobId: string; status: string };
 export type ScanJobStatus = { jobId: string; target: string; status: string; source: string; error?: string; startedAt: number; completedAt?: number };
 export type ScanSummary = { target: string; source: string; scannedAt: number; critical: number; high: number; medium: number; low: number; unknown: number; total: number; riskScore: number };
+export type MalwareScanSummary = { target: string; source: string; scannedAt: number; infected: boolean; threatsFound: string[] };
 export type ReleaseExcerpt = { tag: string; text: string; weight: number };
 export type ReleaseRiskSummary = { repo: string; latestTag: string; latestPublishedAt: number; releasesAnalyzed: number; totalRisk: number; breakingChangeLikely: boolean; highlightedExcerpts: ReleaseExcerpt[]; generatedAt: number };
 export type UpdateStartRequest = { containerId: string; targetImage: string; validateUrl: string };

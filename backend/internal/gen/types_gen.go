@@ -7,9 +7,11 @@ type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"name
 type ImageSummary struct { ID string `json:"id"`; RepoTags []string `json:"repoTags"`; Size int64 `json:"size"` }
 type DockerEvent struct { Type string `json:"type"`; Action string `json:"action"`; ID string `json:"id"`; From string `json:"from"`; Attributes map[string]string `json:"attributes,omitempty"`; Time int64 `json:"time"` }
 type ScanRunRequest struct { Target string `json:"target"` }
+type MalwareScanRequest struct { Target string `json:"target"` }
 type ScanStartResponse struct { JobID string `json:"jobId"`; Status string `json:"status"` }
 type ScanJobStatus struct { JobID string `json:"jobId"`; Target string `json:"target"`; Status string `json:"status"`; Source string `json:"source"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
 type ScanSummary struct { Target string `json:"target"`; Source string `json:"source"`; ScannedAt int64 `json:"scannedAt"`; Critical int `json:"critical"`; High int `json:"high"`; Medium int `json:"medium"`; Low int `json:"low"`; Unknown int `json:"unknown"`; Total int `json:"total"`; RiskScore int `json:"riskScore"` }
+type MalwareScanSummary struct { Target string `json:"target"`; Source string `json:"source"`; ScannedAt int64 `json:"scannedAt"`; Infected bool `json:"infected"`; ThreatsFound []string `json:"threatsFound"` }
 type ReleaseExcerpt struct { Tag string `json:"tag"`; Text string `json:"text"`; Weight int `json:"weight"` }
 type ReleaseRiskSummary struct { Repo string `json:"repo"`; LatestTag string `json:"latestTag"`; LatestPublishedAt int64 `json:"latestPublishedAt"`; ReleasesAnalyzed int `json:"releasesAnalyzed"`; TotalRisk int `json:"totalRisk"`; BreakingChangeLikely bool `json:"breakingChangeLikely"`; HighlightedExcerpts []ReleaseExcerpt `json:"highlightedExcerpts"`; GeneratedAt int64 `json:"generatedAt"` }
 type UpdateStartRequest struct { ContainerID string `json:"containerId"`; TargetImage string `json:"targetImage"`; ValidateURL string `json:"validateUrl"` }

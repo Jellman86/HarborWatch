@@ -24,9 +24,16 @@ All notable changes to HarborWatch are documented in this file.
   - `GET /api/releases/summary?repo=owner/name`
 - Milestone 4 safe update pipeline:
   - Async update state machine (`preflight -> backup -> pull -> recreate -> validate -> success/rollback`)
+  - Robust container replacement logic (stop-rename-start)
+  - Automated rollback to last backup on failure
   - SQLite persistence for update runs and step logs
   - Live progress streaming via SSE
   - `POST /api/updates/run`, `GET /api/updates/jobs/{id}`, `GET /api/updates/events/{id}`
+- Milestone 5 ClamAV filesystem scans:
+  - Scanner abstraction for malware detection
+  - ClamAV adapter for recursive filesystem scanning
+  - Persistent malware scan job history and result summaries
+  - `POST /api/scans/malware/run`, `GET /api/scans/malware/summary`
 - CI/CD and deployment artifacts:
   - GitHub Actions workflows for build/push and PR validation
   - Single-container `Dockerfile`

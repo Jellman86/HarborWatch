@@ -26,8 +26,10 @@ type DockerClient interface {
 
 type ScanService interface {
 	StartScan(target string) (gen.ScanStartResponse, error)
-	Job(jobID string) (gen.ScanJobStatus, bool)
+	StartMalwareScan(target string) (gen.ScanStartResponse, error)
+	Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
 	LatestSummary(ctx context.Context) (*gen.ScanSummary, error)
+	MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error)
 }
 
 type ReleaseService interface {
@@ -161,15 +163,33 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 		writeJSON(w, http.StatusAccepted, resp)
 	})
 
+	mux.HandleFunc("POST /api/scans/malware/run", func(w http.ResponseWriter, r *http.Request) {
+		if scanService == nil {
+			writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+			return
+		}
+		var req gen.MalwareScanRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON payload")
+			return
+		}
+		resp, err := scanService.StartMalwareScan(req.Target)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "malware_scan_start_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusAccepted, resp)
+	})
+
 	mux.HandleFunc("GET /api/scans/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if scanService == nil {
 			writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
 			return
 		}
 		id := r.PathValue("id")
-		job, ok := scanService.Job(id)
-		if !ok {
-			writeError(w, http.StatusNotFound, "job_not_found", "Scan job not found")
+		job, err := scanService.Job(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "job_not_found", err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, job)
@@ -192,6 +212,22 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		writeJSON(w, http.StatusOK, summary)
+	})
+
+	mux.HandleFunc("GET /api/scans/malware/summary", func(w http.ResponseWriter, r *http.Request) {
+		if scanService == nil {
+			writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+			return
+		}
+		target := r.URL.Query().Get("target")
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		summaries, err := scanService.MalwareSummaries(ctx, target)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "malware_scan_read_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, summaries)
 	})
 
 	mux.HandleFunc("GET /api/releases/summary", func(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +256,11 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON payload")
 			return
 		}
-		resp, err := updateService.StartUpdate(updates.Request{TargetImage: req.TargetImage, ValidateURL: req.ValidateURL})
+		resp, err := updateService.StartUpdate(updates.Request{
+			ContainerID: req.ContainerID,
+			TargetImage: req.TargetImage,
+			ValidateURL: req.ValidateURL,
+		})
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "update_start_failed", err.Error())
 			return
