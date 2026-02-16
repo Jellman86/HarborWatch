@@ -87,7 +87,7 @@
   });
 </script>
 
-<div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+<div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 bg-grain">
   <Sidebar {currentRoute} onNavigate={navigate} />
 
   <main class="transition-all duration-300 {layoutStore.sidebarCollapsed ? 'pl-20' : 'pl-64'} min-h-screen">
