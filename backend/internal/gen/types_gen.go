@@ -4,7 +4,7 @@ package gen
 
 type HealthResponse struct { Status string `json:"status"`; Service string `json:"service"`; Version string `json:"version"` }
 type AuditJobSummary struct { ID string `json:"id"`; Type string `json:"type"`; Target string `json:"target"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
-type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"names"`; Image string `json:"image"`; State string `json:"state"`; Status string `json:"status"` }
+type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"names"`; Image string `json:"image"`; State string `json:"state"`; Status string `json:"status"`; Labels map[string]string `json:"labels"` }
 type ImageSummary struct { ID string `json:"id"`; RepoTags []string `json:"repoTags"`; Size int64 `json:"size"` }
 type DockerEvent struct { Type string `json:"type"`; Action string `json:"action"`; ID string `json:"id"`; From string `json:"from"`; Attributes map[string]string `json:"attributes,omitempty"`; Time int64 `json:"time"` }
 type ScanRunRequest struct { Target string `json:"target"` }

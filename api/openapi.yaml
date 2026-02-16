@@ -225,6 +225,7 @@ components:
         image: { type: string }
         state: { type: string }
         status: { type: string }
+        labels: { type: object, additionalProperties: { type: string } }
     ImageSummary:
       type: object
       required: [id, repoTags, size]

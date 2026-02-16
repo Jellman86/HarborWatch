@@ -47,6 +47,10 @@ All notable changes to HarborWatch are documented in this file.
   - Added `Operations Log` (Audit) view to track historical scan and update jobs
   - Added `System Settings` view for global application configuration
   - Visual update pipeline stepper with live progress terminal
+- Label-Driven Auto-Discovery:
+  - Containers now support `harborwatch.*` labels for "Light Touch" configuration
+  - Automatic detection of update policies and intelligence sources directly from container metadata
+  - UI visibility for discovered policies in the container inventory
 - CI/CD and deployment artifacts:
   - GitHub Actions workflows for build/push and PR validation
   - Single-container `Dockerfile`

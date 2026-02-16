@@ -67,6 +67,7 @@ func (c *Client) ListContainers(ctx context.Context) ([]gen.ContainerSummary, er
 			Image:  item.Image,
 			State:  item.State,
 			Status: item.Status,
+			Labels: item.Labels,
 		})
 	}
 	return out, nil
@@ -133,11 +134,12 @@ func (c *Client) getJSON(ctx context.Context, path string, into any) error {
 }
 
 type containerJSON struct {
-	ID     string   `json:"Id"`
-	Names  []string `json:"Names"`
-	Image  string   `json:"Image"`
-	State  string   `json:"State"`
-	Status string   `json:"Status"`
+	ID     string            `json:"Id"`
+	Names  []string          `json:"Names"`
+	Image  string            `json:"Image"`
+	State  string            `json:"State"`
+	Status string            `json:"Status"`
+	Labels map[string]string `json:"Labels"`
 }
 
 type imageJSON struct {

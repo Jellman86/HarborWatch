@@ -14,6 +14,11 @@
             default: return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400';
         }
     };
+
+    const getPolicy = (labels: Record<string, string>) => {
+        if (!labels) return null;
+        return labels['harborwatch.update.policy'] || (labels['harborwatch.enable'] === 'true' ? 'auto' : null);
+    };
 </script>
 
 <div class="space-y-6">
@@ -35,6 +40,7 @@
                     <th class="px-6 py-4">Image</th>
                     <th class="px-6 py-4">State</th>
                     <th class="px-6 py-4">Status</th>
+                    <th class="px-6 py-4">Policy</th>
                     <th class="px-6 py-4 text-right">Actions</th>
                 </tr>
             </thead>
@@ -55,6 +61,15 @@
                         </td>
                         <td class="px-6 py-4 text-xs text-slate-500 dark:text-slate-500">
                             {c.status}
+                        </td>
+                        <td class="px-6 py-4">
+                            {#if getPolicy(c.labels)}
+                                <span class="px-2 py-1 bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 rounded-md text-[9px] font-black uppercase tracking-tighter">
+                                    {getPolicy(c.labels)}
+                                </span>
+                            {:else}
+                                <span class="text-[10px] text-slate-400 italic">None</span>
+                            {/if}
                         </td>
                         <td class="px-6 py-4 text-right">
                             <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
