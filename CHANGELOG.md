@@ -48,6 +48,7 @@ All notable changes to HarborWatch are documented in this file.
 - Automation & Scheduler (v2 Milestone 7):
   - Implemented core `scheduler` service using `robfig/cron/v3`
   - Added automated `docker system prune` task for weekly system maintenance
+  - New "Automation" UI view for managing background tasks and monitoring execution history
   - Integrated official Moby Docker SDK for robust engine interactions
   - Added SQLite persistence for schedules to ensure tasks survive restarts
   - Added `/api/scheduler/status` and `/api/scheduler/schedules` endpoints

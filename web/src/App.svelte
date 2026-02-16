@@ -7,6 +7,7 @@
   import Security from "./lib/pages/Security.svelte";
   import Intelligence from "./lib/pages/Intelligence.svelte";
   import Updates from "./lib/pages/Updates.svelte";
+  import Automation from "./lib/pages/Automation.svelte";
   import Doctor from "./lib/pages/Doctor.svelte";
   import AuditLog from "./lib/pages/AuditLog.svelte";
   import Settings from "./lib/pages/Settings.svelte";
@@ -97,6 +98,8 @@
         <Images {images} />
       {:else if currentRoute === 'security'}
         <Security />
+      {:else if currentRoute === 'automation'}
+        <Automation />
       {:else if currentRoute === 'doctor'}
         <Doctor />
       {:else if currentRoute === 'intelligence'}
