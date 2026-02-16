@@ -10,7 +10,6 @@
   import Updates from "./lib/pages/Updates.svelte";
   import Automation from "./lib/pages/Automation.svelte";
   import Doctor from "./lib/pages/Doctor.svelte";
-  import AuditLog from "./lib/pages/AuditLog.svelte";
   import Diagnostics from "./lib/pages/Diagnostics.svelte";
   import Stacks from "./lib/pages/Stacks.svelte";
   import Settings from "./lib/pages/Settings.svelte";
