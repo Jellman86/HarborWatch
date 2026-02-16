@@ -85,3 +85,28 @@ To ensure robustness, AI will never directly execute privileged commands. Instea
 *   **Database:** Add `schedules`, `ai_analysis_cache`, and `app_settings` tables.
 *   **UI:** New "Automation" and "Integrations" pages.
 *   **Network:** Outbound access to LLM APIs (OpenAI/etc) required.
+
+---
+
+## Data Acquisition & Fallback Strategy
+
+### 1. How we find Release Intelligence
+The system follows a tiered discovery process for each container:
+1.  **Label Inspection:** Read `org.opencontainers.image.source` from image metadata.
+2.  **Registry API:** Query the registry (GHCR/DockerHub) for linked repository metadata.
+3.  **Manual Input (Primary Fallback):** Users can define a `HW_INTEL_URL` label on their containers or set it via the UI.
+4.  **Heuristic Guessing:** Match `author/image` patterns against known repository formats.
+5.  **Hard Fallback:** If no URL is found, AI features are disabled for that container, and the system defaults to "Manual Review Required" for updates.
+
+### 2. How we handle AI Failures
+- **Timeout/API Error:** If the LLM provider is down, HarborWatch defaults to the most restrictive policy: "Pause Update."
+- **Ambiguous Notes:** If the AI cannot determine risk, it flags the update as "Needs Human Eye."
+
+### 3. How we Discover Scan Targets
+- **Vulnerabilities:** Iterates through `docker ps` and passes the image ID to Trivy.
+- **Malware:** Parses `docker inspect` for `Mounts[].Source`. It then runs ClamAV recursively on those host paths.
+- **Compose Audits:** Users can specify a `COMPOSE_PATH` directory in Settings. HarborWatch will walk this directory to find `.yml` files for AI auditing.
+
+### 4. Portainer Sync Logic
+- **Discovery:** System matches container names/labels against the Portainer `/api/stacks` endpoint.
+- **Update Hook:** When HarborWatch updates a container, it will optionally trigger the Portainer Stack Webhook (if defined) to ensure Portainer's internal DB stays in sync with the live container state.
