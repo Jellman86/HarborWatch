@@ -15,6 +15,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/audit"
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
 	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
@@ -57,6 +58,10 @@ type SchedulerService interface {
 	ListSchedules(ctx context.Context) ([]scheduler.ScheduleEntry, error)
 }
 
+type MetricsService interface {
+	GetMetrics(ctx context.Context, containerID string, duration string) ([]metrics.Metric, error)
+}
+
 type UpdateService interface {
 	StartUpdate(req updates.Request) (gen.UpdateStartResponse, error)
 	GetJob(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error)
@@ -93,6 +98,18 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	}
 	aiService := ai.NewService(ai.NewProviderFromEnv())
 	
+	// Metrics Setup
+	var metricService *metrics.Service
+	if dockerClient != nil {
+		rawDocker, _ := dockerengine.NewRawClient()
+		if rawDocker != nil {
+			ms, err := metrics.NewServiceFromEnv(rawDocker)
+			if err == nil {
+				metricService = ms
+			}
+		}
+	}
+
 	// Scheduler Setup
 	schedStore, _ := scheduler.OpenStore(dbPath)
 	if schedStore != nil {
@@ -110,7 +127,21 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 			})
 			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker))
 
-			// 2. Trivy Sweep (Daily Midnight)
+			// 2. Metrics Collector (Every minute) & Pruner (Daily)
+			if metricService != nil {
+				schedSvc.RegisterTask("metrics_collector", func() scheduler.Task {
+					return metricService.GetCollectorTask()
+				})
+				// Enable by default for "Light Touch" observability
+				_ = schedSvc.AddTask("* * * * *", metricService.GetCollectorTask())
+
+				schedSvc.RegisterTask("metrics_prune", func() scheduler.Task {
+					return metricService.GetPruneTask()
+				})
+				_ = schedSvc.AddTask("0 0 0 * * *", metricService.GetPruneTask())
+			}
+
+			// 3. Trivy Sweep (Daily Midnight)
 			if scanService != nil {
 				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
 					return scheduler.NewTrivySweepTask(rawDocker, scanService)
@@ -129,10 +160,10 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	// Load all enabled schedules from DB
 	_ = schedSvc.LoadSchedules(context.Background())
 
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc), schedSvc
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService), schedSvc
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -385,6 +416,23 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 	mux.HandleFunc("GET /api/scheduler/status", func(w http.ResponseWriter, r *http.Request) {
 		enabled := schedSvc != nil
 		writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+	})
+
+	mux.HandleFunc("GET /api/metrics/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if metricService == nil {
+			writeError(w, http.StatusServiceUnavailable, "metrics_unavailable", "Metrics service not initialized")
+			return
+		}
+		duration := r.URL.Query().Get("duration")
+		if duration == "" {
+			duration = "24h"
+		}
+		data, err := metricService.GetMetrics(r.Context(), r.PathValue("id"), duration)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "metrics_query_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, data)
 	})
 
 	mux.HandleFunc("GET /api/scheduler/schedules", func(w http.ResponseWriter, r *http.Request) {
