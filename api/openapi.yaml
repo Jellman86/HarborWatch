@@ -252,6 +252,33 @@ paths:
                 type: object
                 properties:
                   analysis: { type: string }
+  /api/settings:
+    get:
+      operationId: getSettings
+      responses:
+        '200':
+          description: Application settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+    post:
+      operationId: saveSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settings'
+      responses:
+        '200':
+          description: Settings saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
   /api/metrics/{id}:
     get:
       operationId: getContainerMetrics
@@ -445,3 +472,11 @@ components:
         steps:
           type: array
           items: { $ref: '#/components/schemas/UpdateStepEvent' }
+    Settings:
+      type: object
+      properties:
+        discordWebhookUrl: { type: string }
+        gotifyUrl: { type: string }
+        gotifyToken: { type: string }
+        portainerUrl: { type: string }
+        portainerApiKey: { type: string }

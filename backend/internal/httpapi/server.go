@@ -20,6 +20,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
+	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
 	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
@@ -29,6 +30,10 @@ type DockerClient interface {
 	ListContainers(ctx context.Context) ([]gen.ContainerSummary, error)
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 	OpenEventStream(ctx context.Context) (io.ReadCloser, error)
+}
+
+type PortainerService interface {
+	ListStacks(ctx context.Context) ([]portainer.Stack, error)
 }
 
 type ScanService interface {
@@ -131,10 +136,14 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	aiService := ai.NewService(ai.NewProviderFromEnv())
 	notificationService := notifications.NewService()
 	
+	var portainerService PortainerService
 	if settingsStore != nil {
 		st, _ := settingsStore.Get(context.Background())
 		if st.DiscordWebhookURL != "" {
 			notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
+		}
+		if st.PortainerURL != "" {
+			portainerService = portainer.NewClient(st.PortainerURL, st.PortainerApiKey)
 		}
 	}
 
@@ -218,10 +227,10 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	// Bootstrap schedules from DB
 	_ = schedSvc.LoadSchedules(context.Background())
 
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore), schedSvc
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService), schedSvc
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerService) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -595,6 +604,19 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 		}
 
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	mux.HandleFunc("GET /api/portainer/stacks", func(w http.ResponseWriter, r *http.Request) {
+		if portainerService == nil {
+			writeError(w, http.StatusServiceUnavailable, "portainer_unavailable", "Portainer integration not configured")
+			return
+		}
+		stacks, err := portainerService.ListStacks(r.Context())
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "portainer_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, stacks)
 	})
 
 	mux.HandleFunc("POST /api/scheduler/toggle", func(w http.ResponseWriter, r *http.Request) {

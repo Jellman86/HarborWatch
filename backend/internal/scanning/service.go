@@ -13,20 +13,26 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 )
 
+type DiagService interface {
+	Log(level, source, message string)
+}
+
 type Service struct {
 	scanner        Scanner
 	malwareScanner MalwareScanner
 	store          *Store
+	diag           DiagService
 
 	mu   sync.RWMutex
 	jobs map[string]gen.ScanJobStatus
 }
 
-func NewService(scanner Scanner, malwareScanner MalwareScanner, store *Store) *Service {
+func NewService(scanner Scanner, malwareScanner MalwareScanner, store *Store, diag DiagService) *Service {
 	return &Service{
 		scanner:        scanner,
 		malwareScanner: malwareScanner,
 		store:          store,
+		diag:           diag,
 		jobs:           map[string]gen.ScanJobStatus{},
 	}
 }
@@ -45,7 +51,7 @@ func NewServiceFromEnv() (*Service, error) {
 		return nil, err
 	}
 
-	return NewService(NewTrivyScanner(), NewClamAVScanner(), store), nil
+	return NewService(NewTrivyScanner(), NewClamAVScanner(), store, nil), nil
 }
 
 func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
@@ -167,6 +173,10 @@ func (s *Service) setJobFailed(jobID string, err error) {
 	job.CompletedAt = now
 	s.jobs[jobID] = job
 	s.mu.Unlock()
+
+	if s.diag != nil {
+		s.diag.Log("ERROR", "Scanner", fmt.Sprintf("Job %s failed: %v", jobID, err))
+	}
 
 	_ = s.store.UpdateJob(context.Background(), jobID, "failed", err.Error(), now)
 }

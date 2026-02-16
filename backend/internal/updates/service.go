@@ -21,22 +21,28 @@ type Request struct {
 	ValidateURL string
 }
 
+type DiagService interface {
+	Log(level, source, message string)
+}
+
 type Service struct {
 	store    *Store
 	executor Executor
 	ai       *ai.Service
 	notif    *notifications.Service
+	diag     DiagService
 
 	mu          sync.RWMutex
 	subscribers map[string][]chan gen.UpdateStepEvent
 }
 
-func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notifications.Service) *Service {
+func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notifications.Service, diag DiagService) *Service {
 	return &Service{
 		store:       store,
 		executor:    executor,
 		ai:          aiSvc,
 		notif:       notif,
+		diag:        diag,
 		subscribers: map[string][]chan gen.UpdateStepEvent{},
 	}
 }
@@ -57,7 +63,7 @@ func NewServiceFromEnv() (*Service, error) {
 	notifSvc := notifications.NewService()
 	// Discovery logic for dispatchers from settings store would go here if we had access to it directly, 
 	// but usually it's handled by the main orchestrator injecting the configured service.
-	return NewService(store, NewCommandExecutor(), aiSvc, notifSvc), nil
+	return NewService(store, NewCommandExecutor(), aiSvc, notifSvc, nil), nil
 }
 
 func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
@@ -195,6 +201,9 @@ func (s *Service) finish(jobID, status string, err error) {
 	msg := ""
 	if err != nil {
 		msg = err.Error()
+		if s.diag != nil {
+			s.diag.Log("ERROR", "UpdateEngine", fmt.Sprintf("Job %s %s: %s", jobID, status, msg))
+		}
 		// Send notification for failures
 		if (status == "failed" || status == "rolled_back") && s.notif != nil {
 			s.notif.Dispatch(context.Background(), notifications.Message{

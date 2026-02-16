@@ -11,6 +11,7 @@
   import Doctor from "./lib/pages/Doctor.svelte";
   import AuditLog from "./lib/pages/AuditLog.svelte";
   import Diagnostics from "./lib/pages/Diagnostics.svelte";
+  import Stacks from "./lib/pages/Stacks.svelte";
   import Settings from "./lib/pages/Settings.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
   import { themeStore } from "./lib/stores/theme.svelte";
@@ -103,6 +104,8 @@
         <Dashboard {health} {containers} {images} {events} onRefresh={loadGlobalData} />
       {:else if currentRoute === 'containers'}
         <Containers {containers} onNavigate={navigate} />
+      {:else if currentRoute === 'stacks'}
+        <Stacks />
       {:else if currentRoute === 'images'}
         <Images {images} />
       {:else if currentRoute === 'security'}

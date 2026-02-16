@@ -12,6 +12,8 @@ type Settings struct {
 	DiscordWebhookURL string `json:"discordWebhookUrl"`
 	GotifyURL          string `json:"gotifyUrl"`
 	GotifyToken        string `json:"gotifyToken"`
+	PortainerURL       string `json:"portainerUrl"`
+	PortainerApiKey    string `json:"portainerApiKey"`
 }
 
 type Store struct {
@@ -61,6 +63,10 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.GotifyURL = value
 		case "gotify_token":
 			st.GotifyToken = value
+		case "portainer_url":
+			st.PortainerURL = value
+		case "portainer_api_key":
+			st.PortainerApiKey = value
 		}
 	}
 	return st, nil
@@ -77,6 +83,8 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"discord_webhook_url": st.DiscordWebhookURL,
 		"gotify_url":          st.GotifyURL,
 		"gotify_token":        st.GotifyToken,
+		"portainer_url":       st.PortainerURL,
+		"portainer_api_key":    st.PortainerApiKey,
 	}
 
 	for k, v := range keys {

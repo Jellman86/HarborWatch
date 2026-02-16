@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { ContainerSummary, Metric } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
+    import Sparkline from "../components/Sparkline.svelte";
 
     let { containers, onNavigate } = $props<{
         containers: ContainerSummary[];
@@ -110,6 +111,7 @@
                     <th class="px-6 py-4">Image</th>
                     <th class="px-6 py-4">Source</th>
                     <th class="px-6 py-4">State</th>
+                    <th class="px-6 py-4">Activity</th>
                     <th class="px-6 py-4">Policy</th>
                     <th class="px-6 py-4 text-right">Actions</th>
                 </tr>
@@ -152,6 +154,9 @@
                             <span class="px-2 py-1 rounded-md text-[10px] font-black uppercase {stateColor(c.state)}">
                                 {c.state}
                             </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <Sparkline containerId={c.id} />
                         </td>
                         <td class="px-6 py-4">
                             {#if getPolicy(c.labels)}

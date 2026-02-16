@@ -5,7 +5,10 @@
     let harborwatchUrl = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('hw_url') ?? window.location.origin) : "");
     let validateUrlPattern = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('hw_validate_pattern') ?? "http://localhost:18080/health") : "");
     let discordWebhookUrl = $state("");
+    let portainerUrl = $state("");
+    let portainerApiKey = $state("");
     let aiEnabled = $state(false);
+    let autoScan = $state(true);
     let saving = $state(false);
     let error = $state("");
 
@@ -24,6 +27,8 @@
             if (setRes.ok) {
                 const data = await setRes.json();
                 discordWebhookUrl = data.discordWebhookUrl || "";
+                portainerUrl = data.portainerUrl || "";
+                portainerApiKey = data.portainerApiKey || "";
             }
         } catch (e) {
             console.error("Failed to load settings", e);
@@ -49,7 +54,9 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
-                    discordWebhookUrl
+                    discordWebhookUrl,
+                    portainerUrl,
+                    portainerApiKey
                 })
             });
 
@@ -126,6 +133,27 @@
                     </div>
                     <p class="text-[9px] text-slate-500 ml-1 italic">Notifications are sent for high-risk updates and security alerts.</p>
                 </div>
+            </div>
+        </section>
+
+        <section class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+            <h3 class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                Portainer Integration
+            </h3>
+            
+            <div class="space-y-4">
+                <div class="space-y-1">
+                    <label for="portainer-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer URL</label>
+                    <input id="portainer-url" bind:value={portainerUrl} placeholder="https://portainer.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                </div>
+                <div class="space-y-1">
+                    <label for="portainer-api-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">API Key</label>
+                    <input id="portainer-api-key" type="password" bind:value={portainerApiKey} placeholder="ptr_..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                </div>
+                <p class="text-[9px] text-slate-500 ml-1 italic">Used for stack discovery and syncing updates with Portainer.</p>
             </div>
         </section>
 

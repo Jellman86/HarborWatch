@@ -25,6 +25,7 @@ type UpdateStartResponse struct { JobID string `json:"jobId"`; Status string `js
 type UpdateStepEvent struct { JobID string `json:"jobId"`; Step string `json:"step"`; Status string `json:"status"`; Message string `json:"message"`; Timestamp int64 `json:"timestamp"` }
 type AIAnalysisSummary struct { RiskScore int `json:"riskScore"`; RiskLevel string `json:"riskLevel"`; Summary string `json:"summary"`; BreakingChanges []string `json:"breakingChanges"` }
 type UpdateJobStatus struct { JobID string `json:"jobId"`; ContainerID string `json:"containerId"`; TargetImage string `json:"targetImage"`; ValidateURL string `json:"validateUrl"`; Status string `json:"status"`; CreatedAt int64 `json:"createdAt"`; UpdatedAt int64 `json:"updatedAt"`; Error string `json:"error"`; AIAnalysis *AIAnalysisSummary `json:"aiAnalysis,omitempty"`; Steps []UpdateStepEvent `json:"steps"` }
+type Settings struct { DiscordWebhookURL string `json:"discordWebhookUrl"`; GotifyURL string `json:"gotifyUrl"`; GotifyToken string `json:"gotifyToken"`; PortainerURL string `json:"portainerUrl"`; PortainerApiKey string `json:"portainerApiKey"` }
 GEN_GO
 
 cat > web/src/lib/api-types.ts <<'GEN_TS'
@@ -48,6 +49,7 @@ export type UpdateStartRequest = { containerId: string; targetImage: string; val
 export type UpdateStartResponse = { jobId: string; status: string };
 export type UpdateStepEvent = { jobId: string; step: string; status: string; message: string; timestamp: number };
 export type UpdateJobStatus = { jobId: string; containerId: string; targetImage: string; validateUrl: string; status: string; createdAt: number; updatedAt: number; error: string; aiAnalysis?: { riskScore: number; riskLevel: string; summary: string; breakingChanges: string[] }; steps: UpdateStepEvent[] };
+export type Settings = { discordWebhookUrl?: string; gotifyUrl?: string; gotifyToken?: string; portainerUrl?: string; portainerApiKey?: string };
 GEN_TS
 
 echo "Generated Go + TypeScript API types from api/openapi.yaml"

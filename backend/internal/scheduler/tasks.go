@@ -68,7 +68,9 @@ func (t *TrivySweepTask) Run(ctx context.Context) error {
 
 	for _, c := range containers {
 		log.Printf("Automated Security Sweep: Triggering Trivy scan for %s", c.Image)
-		_, _ = t.scanner.StartScan(c.Image)
+		if _, err := t.scanner.StartScan(c.Image); err != nil {
+			log.Printf("ERROR: Failed to start automated Trivy scan for %s: %v", c.Image, err)
+		}
 	}
 	return nil
 }
@@ -103,7 +105,9 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 		for _, m := range inspect.Mounts {
 			if m.Source != "" && !seenPaths[m.Source] {
 				log.Printf("Automated Security Sweep: Triggering ClamAV scan for path %s", m.Source)
-				_, _ = t.scanner.StartMalwareScan(m.Source)
+				if _, err := t.scanner.StartMalwareScan(m.Source); err != nil {
+					log.Printf("ERROR: Failed to start automated ClamAV scan for %s: %v", m.Source, err)
+				}
 				seenPaths[m.Source] = true
 			}
 		}
