@@ -33,13 +33,12 @@ type Service struct {
 	startTime time.Time
 }
 
-func NewService(dbPath string) (*Service, error) {
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return nil, err
-	}
-	
-	_, err = db.Exec(`
+func NewService(db *sql.DB) *Service {
+	return &Service{db: db, startTime: time.Now()}
+}
+
+func (s *Service) Init(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS internal_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp INTEGER NOT NULL,
@@ -49,11 +48,7 @@ CREATE TABLE IF NOT EXISTS internal_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_logs_ts ON internal_logs(timestamp);
 `)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Service{db: db, startTime: time.Now()}, nil
+	return err
 }
 
 func (s *Service) GetSystemStatus() SystemStatus {

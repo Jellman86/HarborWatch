@@ -37,23 +37,6 @@ func NewService(scanner Scanner, malwareScanner MalwareScanner, store *Store, di
 	}
 }
 
-func NewServiceFromEnv() (*Service, error) {
-	dbPath := os.Getenv("HARBORWATCH_DB_PATH")
-	if dbPath == "" {
-		dbPath = "/tmp/harborwatch.db"
-	}
-
-	store, err := OpenStore(dbPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.Init(context.Background()); err != nil {
-		return nil, err
-	}
-
-	return NewService(NewTrivyScanner(), NewClamAVScanner(), store, nil), nil
-}
-
 func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 	if target == "" {
 		return gen.ScanStartResponse{}, errors.New("target is required")

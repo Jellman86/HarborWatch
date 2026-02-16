@@ -20,21 +20,6 @@ func NewService(store *Store, docker *client.Client) *Service {
 	}
 }
 
-func NewServiceFromEnv(docker *client.Client) (*Service, error) {
-	dbPath := os.Getenv("HARBORWATCH_DB_PATH")
-	if dbPath == "" {
-		dbPath = "/tmp/harborwatch.db"
-	}
-	store, err := OpenStore(dbPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.Init(context.Background()); err != nil {
-		return nil, err
-	}
-	return NewService(store, docker), nil
-}
-
 func (s *Service) GetCollectorTask() *Collector {
 	return s.collector
 }

@@ -47,25 +47,6 @@ func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notif
 	}
 }
 
-func NewServiceFromEnv() (*Service, error) {
-	dbPath := os.Getenv("HARBORWATCH_DB_PATH")
-	if dbPath == "" {
-		dbPath = "/tmp/harborwatch.db"
-	}
-	store, err := OpenStore(dbPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.Init(context.Background()); err != nil {
-		return nil, err
-	}
-	aiSvc := ai.NewService(ai.NewProviderFromEnv())
-	notifSvc := notifications.NewService()
-	// Discovery logic for dispatchers from settings store would go here if we had access to it directly, 
-	// but usually it's handled by the main orchestrator injecting the configured service.
-	return NewService(store, NewCommandExecutor(), aiSvc, notifSvc, nil), nil
-}
-
 func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
 	if req.ContainerID == "" || req.TargetImage == "" || req.ValidateURL == "" {
 		return gen.UpdateStartResponse{}, errors.New("containerId, targetImage and validateUrl are required")

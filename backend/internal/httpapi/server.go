@@ -3,9 +3,11 @@ package httpapi
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -117,9 +119,20 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 		dbPath = "/tmp/harborwatch.db"
 	}
 
+	// Unified Database Connection
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		log.Fatalf("failed to open database: %v", err)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;`); err != nil {
+		log.Printf("Warning: failed to set db pragmas: %v", err)
+	}
+
 	// 1. Diagnostics Setup
-	diagService, _ := diag.NewService(dbPath)
+	diagService := diag.NewService(db)
 	if diagService != nil {
+		_ = diagService.Init(context.Background())
 		diagService.Log("INFO", "System", "HarborWatch initializing...")
 	}
 
@@ -129,23 +142,27 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	}
 	
 	// 2. Open Stores
-	updatesStore, _ := updates.OpenStore(dbPath)
+	updatesStore := updates.NewStore(db)
 	if updatesStore != nil {
 		_ = updatesStore.Init(context.Background())
 	}
 	
-	settingsStore, _ := settings.OpenStore(dbPath)
+	settingsStore := settings.NewStore(db)
 	if settingsStore != nil {
 		_ = settingsStore.Init(context.Background())
 	}
 
-	rulesStore, _ := rules.OpenStore(dbPath)
+	rulesStore := rules.NewStore(db)
 	if rulesStore != nil {
 		_ = rulesStore.Init(context.Background())
 	}
 
 	// 3. Initialize Domain Services
-	scanService, _ := scanning.NewServiceFromEnv()
+	// Use shared store for scanning
+	scanStore := scanning.NewStore(db)
+	_ = scanStore.Init(context.Background())
+	scanService := scanning.NewService(scanning.NewTrivyScanner(), scanning.NewClamAVScanner(), scanStore, diagService)
+	
 	releaseService := releases.NewService()
 	aiService := ai.NewService(ai.NewProviderFromEnv())
 	notificationService := notifications.NewService()
@@ -163,22 +180,21 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 
 	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService)
 	
-	var auditService *audit.Service
-	if settingsStore != nil {
-		auditService = audit.NewService(settingsStore.GetDB())
-	}
+	auditService := audit.NewService(db)
 
 	// 4. Metrics Setup
 	var metricService *metrics.Service
 	if dockerClient != nil {
 		rawDocker, _ := dockerengine.NewRawClient()
 		if rawDocker != nil {
-			metricService, _ = metrics.NewServiceFromEnv(rawDocker)
+			metricStore := metrics.NewStore(db)
+			_ = metricStore.Init(context.Background())
+			metricService = metrics.NewService(metricStore, rawDocker)
 		}
 	}
 
 	// 5. Scheduler Setup
-	schedStore, _ := scheduler.OpenStore(dbPath)
+	schedStore := scheduler.NewStore(db)
 	if schedStore != nil {
 		_ = schedStore.Init(context.Background())
 	}
@@ -319,7 +335,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				w.Header().Set("Content-Type", "text/event-stream")
 				w.Header().Set("Cache-Control", "no-cache")
 				w.Header().Set("Connection", "keep-alive")
-				heartbeat := time.NewTicker(15 * time.Second)
+				heartbeat := time.NewTicker(10 * time.Second)
 				defer heartbeat.Stop()
 				scanner := bufio.NewScanner(stream)
 				scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)

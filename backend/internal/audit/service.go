@@ -18,18 +18,6 @@ func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
 }
 
-func NewServiceFromEnv() (*Service, error) {
-	dbPath := os.Getenv("HARBORWATCH_DB_PATH")
-	if dbPath == "" {
-		dbPath = "/tmp/harborwatch.db"
-	}
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
-	}
-	return NewService(db), nil
-}
-
 func (s *Service) ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error) {
 	query := `
 SELECT id, 'Update' as type, target_image as target, status, error, created_at as started_at, updated_at as completed_at

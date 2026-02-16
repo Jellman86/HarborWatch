@@ -19,13 +19,8 @@ type Store struct {
 	db *sql.DB
 }
 
-func OpenStore(dbPath string) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
-	}
-	db.SetMaxOpenConns(1)
-	return &Store{db: db}, nil
+func NewStore(db *sql.DB) *Store {
+	return &Store{db: db}
 }
 
 func (s *Store) Close() error { return s.db.Close() }

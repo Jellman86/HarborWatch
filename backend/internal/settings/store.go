@@ -33,13 +33,8 @@ type Store struct {
 	db *sql.DB
 }
 
-func OpenStore(dbPath string) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
-	}
-	db.SetMaxOpenConns(1)
-	return &Store{db: db}, nil
+func NewStore(db *sql.DB) *Store {
+	return &Store{db: db}
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -122,15 +117,15 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 }
 
 func (s *Store) Save(ctx context.Context, st Settings) error {
+	// Only save values that are NOT currently overridden by environment variables
+	// Load current state to check overrides
+	current, _ := s.Get(ctx)
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-
-	// Only save values that are NOT currently overridden by environment variables
-	// Load current state to check overrides
-	current, _ := s.Get(ctx)
 
 	keys := map[string]string{
 		"discord_webhook_url":  st.DiscordWebhookURL,
