@@ -3,6 +3,7 @@
 package gen
 
 type HealthResponse struct { Status string `json:"status"`; Service string `json:"service"`; Version string `json:"version"` }
+type Metric struct { ContainerID string `json:"containerId"`; Timestamp int64 `json:"timestamp"`; CPUPercent float64 `json:"cpuPercent"`; MemoryUsage int64 `json:"memoryUsage"`; MemoryLimit int64 `json:"memoryLimit"`; Pids int `json:"pids"` }
 type AuditJobSummary struct { ID string `json:"id"`; Type string `json:"type"`; Target string `json:"target"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
 type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"names"`; Image string `json:"image"`; State string `json:"state"`; Status string `json:"status"`; Labels map[string]string `json:"labels"` }
 type ImageSummary struct { ID string `json:"id"`; RepoTags []string `json:"repoTags"`; Size int64 `json:"size"` }

@@ -68,11 +68,13 @@ All notable changes to HarborWatch are documented in this file.
   - Containers now support `harborwatch.*` labels for "Light Touch" configuration
   - Automatic detection of update policies and intelligence sources directly from container metadata
   - UI visibility for discovered policies in the container inventory
-- Performance Profiler (v2 Milestone 9 Stage 1):
+- Performance Profiler (v2 Milestone 9):
   - Implemented `metrics` service for high-resolution container stats collection
   - Added `container_metrics` SQLite table for time-series data storage
   - Built `Collector` task to snapshot CPU, Memory, and I/O every 60 seconds
-  - Added `/api/metrics/{id}` endpoint for historical data retrieval
+  - Integrated ApexCharts for interactive CPU and Memory visualization in the UI
+  - Added AI Performance Consultant to diagnose resource leaks and optimize limits
+  - Added `/api/metrics/{id}` and `/api/ai/analyze-metrics` endpoints
   - Added automated 7-day retention policy via `metrics_prune` task
 - CI/CD and deployment artifacts:
   - GitHub Actions workflows for build/push and PR validation

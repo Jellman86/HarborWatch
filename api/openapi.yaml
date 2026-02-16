@@ -228,8 +228,63 @@ paths:
                 type: object
                 properties:
                   analysis: { type: string }
+  /api/ai/analyze-metrics:
+    post:
+      operationId: analyzeContainerMetrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                containerId: { type: string }
+                metrics:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Metric'
+      responses:
+        '200':
+          description: AI performance analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analysis: { type: string }
+  /api/metrics/{id}:
+    get:
+      operationId: getContainerMetrics
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: duration
+          required: false
+          schema: { type: string, default: "24h" }
+      responses:
+        '200':
+          description: Historical metrics for the container
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Metric'
 components:
   schemas:
+    Metric:
+      type: object
+      required: [containerId, timestamp, cpuPercent, memoryUsage, memoryLimit, pids]
+      properties:
+        containerId: { type: string }
+        timestamp: { type: integer, format: int64 }
+        cpuPercent: { type: number, format: double }
+        memoryUsage: { type: integer, format: int64 }
+        memoryLimit: { type: integer, format: int64 }
+        pids: { type: integer }
     HealthResponse:
       type: object
       required: [status, service, version]

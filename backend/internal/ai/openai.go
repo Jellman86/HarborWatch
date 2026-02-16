@@ -80,3 +80,25 @@ Compose File:
 
 	return resp.Choices[0].Message.Content, nil
 }
+
+func (p *openAIProvider) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
+	metricsJSON, _ := json.Marshal(metrics)
+	prompt := fmt.Sprintf(`Analyze the following performance metrics for Docker container "%s".
+Identify potential issues such as memory leaks (steady linear growth), inefficient CPU usage, or inappropriate resource limits.
+Provide a concise, technical summary and optimization recommendations in Markdown format.
+
+Metrics Data (JSON):
+%s`, id, string(metricsJSON))
+
+	resp, err := p.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: p.model,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleUser, Content: prompt},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("openai completion failed: %w", err)
+	}
+
+	return resp.Choices[0].Message.Content, nil
+}

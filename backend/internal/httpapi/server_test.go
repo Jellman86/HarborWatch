@@ -83,6 +83,9 @@ func (f fakeAIService) AnalyzeReleaseNotes(ctx context.Context, notes string) (a
 func (f fakeAIService) AuditCompose(ctx context.Context, yaml string) (string, error) {
 	return "ok", nil
 }
+func (f fakeAIService) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
+	return "ok", nil
+}
 
 type fakeSchedulerService struct{}
 

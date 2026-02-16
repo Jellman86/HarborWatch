@@ -32,6 +32,7 @@ type Provider interface {
 	Name() string
 	AnalyzeReleaseNotes(ctx context.Context, notes string) (AnalysisResult, error)
 	AuditCompose(ctx context.Context, yaml string) (string, error)
+	AnalyzeMetrics(ctx context.Context, containerID string, metrics []any) (string, error)
 }
 
 // Service coordinates AI operations.
@@ -66,4 +67,11 @@ func (s *Service) AuditCompose(ctx context.Context, yamlStr string) (string, err
 	}
 
 	return s.provider.AuditCompose(ctx, yamlStr)
+}
+
+func (s *Service) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
+	if s.provider == nil {
+		return "", errors.New("no AI provider configured")
+	}
+	return s.provider.AnalyzeMetrics(ctx, id, metrics)
 }

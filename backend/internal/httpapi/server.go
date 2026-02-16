@@ -44,6 +44,7 @@ type AIService interface {
 	HasProvider() bool
 	AnalyzeReleaseNotes(ctx context.Context, notes string) (ai.AnalysisResult, error)
 	AuditCompose(ctx context.Context, yaml string) (string, error)
+	AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error)
 }
 
 type AuditService interface {
@@ -406,6 +407,27 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		analysis, err := aiService.AuditCompose(r.Context(), req.YAML)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ai_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"analysis": analysis})
+	})
+
+	mux.HandleFunc("POST /api/ai/analyze-metrics", func(w http.ResponseWriter, r *http.Request) {
+		if aiService == nil || !aiService.HasProvider() {
+			writeError(w, http.StatusServiceUnavailable, "ai_unavailable", "AI provider not configured")
+			return
+		}
+		var req struct {
+			ContainerID string `json:"containerId"`
+			Metrics     []any  `json:"metrics"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+			return
+		}
+		analysis, err := aiService.AnalyzeMetrics(r.Context(), req.ContainerID, req.Metrics)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "ai_error", err.Error())
 			return
