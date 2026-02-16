@@ -18,7 +18,7 @@
 
 <div class="space-y-6">
     <div class="space-y-3">
-        <label class="text-[10px] font-black uppercase text-slate-400 ml-1">Appearance Mode</label>
+        <span class="block text-[10px] font-black uppercase text-slate-400 ml-1">Appearance Mode</span>
         <div class="flex gap-2 p-1 bg-slate-100 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
             {#each modes as mode}
                 <button 
@@ -35,7 +35,7 @@
     </div>
 
     <div class="space-y-3">
-        <label class="text-[10px] font-black uppercase text-slate-400 ml-1">Color Theme</label>
+        <span class="block text-[10px] font-black uppercase text-slate-400 ml-1">Color Theme</span>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {#each brands as brand}
                 <button 
