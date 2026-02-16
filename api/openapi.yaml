@@ -42,6 +42,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContainerDetail'
+  /api/docker/containers/{id}/rules:
+    get:
+      operationId: getContainerRules
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Container specific rules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerRules'
+    post:
+      operationId: saveContainerRules
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContainerRules'
+      responses:
+        '200':
+          description: Rules saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
   /api/docker/images:
     get:
       operationId: listDockerImages
@@ -362,6 +399,15 @@ components:
         actionHistory:
           type: array
           items: { $ref: '#/components/schemas/AuditJobSummary' }
+        rules: { $ref: '#/components/schemas/ContainerRules' }
+    ContainerRules:
+      type: object
+      required: [containerId, updatePolicy]
+      properties:
+        containerId: { type: string }
+        updatePolicy: { type: string, enum: [auto, manual, locked] }
+        validateUrl: { type: string }
+        autoRollback: { type: boolean }
     Metric:
       type: object
       required: [containerId, timestamp, cpuPercent, memoryUsage, memoryLimit, pids]

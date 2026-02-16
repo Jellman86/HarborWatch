@@ -21,6 +21,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
+	"github.com/Jellman86/HarborWatch/backend/internal/rules"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
 	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
@@ -71,6 +72,11 @@ type NotificationService interface {
 type SettingsService interface {
 	Get(ctx context.Context) (settings.Settings, error)
 	Save(ctx context.Context, s settings.Settings) error
+}
+
+type RulesService interface {
+	Get(ctx context.Context, id string) (rules.ContainerRules, error)
+	Save(ctx context.Context, r rules.ContainerRules) error
 }
 
 type AuditService interface {
@@ -130,6 +136,11 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	settingsStore, _ := settings.OpenStore(dbPath)
 	if settingsStore != nil {
 		_ = settingsStore.Init(context.Background())
+	}
+
+	rulesStore, _ := rules.OpenStore(dbPath)
+	if rulesStore != nil {
+		_ = rulesStore.Init(context.Background())
 	}
 
 	// 3. Initialize Domain Services
@@ -240,10 +251,10 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	// Bootstrap schedules from DB
 	_ = schedSvc.LoadSchedules(context.Background())
 
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService), schedSvc
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService, rulesStore), schedSvc
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -327,11 +338,57 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					}
 				}
 
+				// Enrich with Rules
+				if rulesService != nil {
+					if r, err := rulesService.Get(ctx, id); err == nil {
+						detail.Rules = &gen.ContainerRules{
+							ContainerID:  r.ContainerID,
+							UpdatePolicy: r.UpdatePolicy,
+							ValidateURL:  r.ValidateURL,
+							AutoRollback: r.AutoRollback,
+						}
+					}
+				}
+
 				// Fetch Compose Config if requested or for enrichment
 				// For now we don't return full YAML in the Detail object to keep it light,
 				// but the backend is ready for the Doctor.
 
 				writeJSON(w, http.StatusOK, detail)
+			})
+
+			r.Route("/{id}/rules", func(r chi.Router) {
+				r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+					if rulesService == nil {
+						writeError(w, http.StatusServiceUnavailable, "rules_unavailable", "Rules service not initialized")
+						return
+					}
+					id := chi.URLParam(r, "id")
+					res, err := rulesService.Get(r.Context(), id)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "rules_get_failed", err.Error())
+						return
+					}
+					writeJSON(w, http.StatusOK, res)
+				})
+
+				r.Post("/", func(w http.ResponseWriter, r *http.Request) {
+					if rulesService == nil {
+						writeError(w, http.StatusServiceUnavailable, "rules_unavailable", "Rules service not initialized")
+						return
+					}
+					var req rules.ContainerRules
+					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+						writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+						return
+					}
+					req.ContainerID = chi.URLParam(r, "id")
+					if err := rulesService.Save(r.Context(), req); err != nil {
+						writeError(w, http.StatusInternalServerError, "rules_save_failed", err.Error())
+						return
+					}
+					writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+				})
 			})
 
 			r.Get("/images", func(w http.ResponseWriter, r *http.Request) {

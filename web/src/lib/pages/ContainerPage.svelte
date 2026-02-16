@@ -13,6 +13,7 @@
     let aiAudit = $state("");
     let loading = $state(true);
     let auditing = $state(false);
+    let savingRules = $state(false);
     let activeTab = $state("insights");
     let error = $state("");
 
@@ -29,6 +30,25 @@
             error = "Failed to load container data";
         } finally {
             loading = false;
+        }
+    }
+
+    async function saveRules() {
+        if (!detail?.rules) return;
+        savingRules = true;
+        try {
+            const res = await fetch(`/api/docker/containers/${id}/rules`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(detail.rules)
+            });
+            if (res.ok) {
+                alert("Lifecycle rules updated.");
+            }
+        } catch (e) {
+            alert("Failed to save rules.");
+        } finally {
+            savingRules = false;
         }
     }
 
@@ -135,7 +155,7 @@
         <!-- Tab Content -->
         <div class="min-h-[400px]">
             {#if activeTab === 'insights'}
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
                         <MetricChart metrics={detail.recentMetrics || []} title="CPU Utilization" type="cpu" />
                     </div>
@@ -144,7 +164,7 @@
                     </div>
                 </div>
             {:else if activeTab === 'security'}
-                <div class="space-y-6">
+                <div class="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/30 p-6 rounded-3xl">
                             <span class="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400">Critical Risks</span>
@@ -196,32 +216,83 @@
                     </div>
                 </div>
             {:else if activeTab === 'lifecycle'}
-                <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm max-w-2xl">
-                    <h3 class="text-lg font-black text-slate-900 dark:text-white mb-6 uppercase tracking-tight">Update Policy</h3>
-                    
-                    <div class="space-y-6">
-                        <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                            <div>
-                                <span class="text-sm font-bold text-slate-700 dark:text-slate-300">Automated Updates</span>
-                                <p class="text-[10px] text-slate-500 mt-0.5">Allow HarborWatch to apply updates automatically when safe.</p>
-                            </div>
-                            <div class="w-12 h-6 bg-slate-200 dark:bg-slate-700 rounded-full relative">
-                                <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                            </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-8">
+                        <div>
+                            <h3 class="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Asset Lifecycle Policy</h3>
+                            <p class="text-xs text-slate-500 mt-1">Define how HarborWatch manages updates for this specific container.</p>
                         </div>
+                        
+                        {#if detail.rules}
+                            <div class="space-y-6">
+                                <div class="space-y-2">
+                                    <label for="policy" class="text-[10px] font-black uppercase text-slate-400 ml-1">Update Strategy</label>
+                                    <select 
+                                        id="policy"
+                                        bind:value={detail.rules.updatePolicy}
+                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-bold appearance-none cursor-pointer"
+                                    >
+                                        <option value="auto">Automatic (Apply when available)</option>
+                                        <option value="manual">Manual (Notify only)</option>
+                                        <option value="locked">Locked (Ignore updates)</option>
+                                    </select>
+                                </div>
 
-                        <div class="pt-6 border-t border-slate-100 dark:border-slate-700">
-                            <button class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-3">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                <div class="space-y-2">
+                                    <label for="val-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation URL</label>
+                                    <input 
+                                        id="val-url"
+                                        bind:value={detail.rules.validateUrl}
+                                        placeholder="http://localhost:8080/health"
+                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-mono"
+                                    />
+                                </div>
+
+                                <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                    <div>
+                                        <span class="text-sm font-bold text-slate-700 dark:text-slate-300">Auto-Rollback</span>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Revert to last stable image if validation fails.</p>
+                                    </div>
+                                    <button 
+                                        onclick={() => detail!.rules!.autoRollback = !detail!.rules!.autoRollback}
+                                        class="w-10 h-5 rounded-full relative transition-colors {detail.rules.autoRollback ? 'bg-emerald-500' : 'bg-slate-300'}"
+                                    >
+                                        <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {detail.rules.autoRollback ? 'right-1' : 'left-1'}"></div>
+                                    </button>
+                                </div>
+
+                                <button 
+                                    onclick={saveRules}
+                                    disabled={savingRules}
+                                    class="w-full py-4 bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-500/20 hover:bg-brand-700 transition-all disabled:opacity-50"
+                                >
+                                    {savingRules ? 'Saving...' : 'Apply Policy Overrides'}
+                                </button>
+                            </div>
+                        {/if}
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-6 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 </svg>
-                                Execute Manual Update
-                            </button>
+                                Ad-hoc Actions
+                            </h3>
+                            <div class="space-y-3">
+                                <button class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Execute Manual Update
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             {:else if activeTab === 'configuration'}
-                <div class="space-y-8">
+                <div class="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div class="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
                         <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
                             <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Effective Compose Config</span>
@@ -254,7 +325,7 @@
         </div>
 
         <!-- Action History -->
-        <div class="mt-12">
+        <div class="mt-12 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
             <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 ml-2">Execution History</h3>
             <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                 <table class="w-full text-left text-sm">
