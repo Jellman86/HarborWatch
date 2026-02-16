@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import type { Settings } from "../api-types";
     import { toasts } from "../stores/ToastStore";
+    import ThemeSwitcher from "../components/ThemeSwitcher.svelte";
 
     // Component State
     let settings = $state<Settings>({
@@ -17,7 +18,7 @@
         environmentOverrides: {}
     });
 
-    let activeTab = $state("notifications");
+    let activeTab = $state("appearance");
     let saving = $state(false);
 
     async function loadSettings() {
@@ -72,6 +73,7 @@
     <!-- Tab Navigation -->
     <div class="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-200 dark:border-slate-800 shadow-inner opacity-0 animate-reveal stagger-1">
         {#each [
+            { id: 'appearance', label: 'Appearance', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.357a4 4 0 016.635 4.974l-1.343 1.643' },
             { id: 'notifications', label: 'Notifications', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
             { id: 'keys', label: 'API Keys', icon: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z' },
             { id: 'system', label: 'System', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' }
@@ -91,7 +93,17 @@
     <!-- Settings Content -->
     <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden min-h-[500px] flex flex-col opacity-0 animate-reveal stagger-2">
         <div class="p-8 flex-1 space-y-8">
-            {#if activeTab === 'notifications'}
+            {#if activeTab === 'appearance'}
+                <div class="space-y-6">
+                    <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+                        <div class="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.357a4 4 0 016.635 4.974l-1.343 1.643" /></svg>
+                        </div>
+                        <h3 class="font-black text-slate-900 dark:text-white uppercase tracking-wider text-sm">Theme & Interface</h3>
+                    </div>
+                    <ThemeSwitcher />
+                </div>
+            {:else if activeTab === 'notifications'}
                 <div class="space-y-8">
                     <div class="space-y-6">
                         <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">

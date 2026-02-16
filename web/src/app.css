@@ -5,6 +5,79 @@
 :root {
   --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-display: 'Montserrat', 'IBM Plex Sans', sans-serif;
+
+  /* Default Theme: Tech Innovation (Blue) */
+  --color-brand-50: 240 249 255;
+  --color-brand-100: 224 242 254;
+  --color-brand-200: 186 230 253;
+  --color-brand-300: 125 211 252;
+  --color-brand-400: 56 189 248;
+  --color-brand-500: 14 165 233;
+  --color-brand-600: 2 132 199;
+  --color-brand-700: 3 105 161;
+  --color-brand-800: 7 89 133;
+  --color-brand-900: 12 74 110;
+  --color-brand-950: 8 47 73;
+}
+
+[data-brand="ocean"] {
+  /* Ocean Depths (Cyan/Teal) */
+  --color-brand-50: 236 254 255;
+  --color-brand-100: 207 250 254;
+  --color-brand-200: 165 243 252;
+  --color-brand-300: 103 232 249;
+  --color-brand-400: 34 211 238;
+  --color-brand-500: 6 182 212;
+  --color-brand-600: 8 145 166;
+  --color-brand-700: 14 116 144;
+  --color-brand-800: 21 94 117;
+  --color-brand-900: 22 78 99;
+  --color-brand-950: 8 51 68;
+}
+
+[data-brand="midnight"] {
+  /* Midnight Galaxy (Violet/Purple) */
+  --color-brand-50: 245 243 255;
+  --color-brand-100: 237 233 254;
+  --color-brand-200: 221 214 254;
+  --color-brand-300: 196 181 253;
+  --color-brand-400: 167 139 250;
+  --color-brand-500: 139 92 246;
+  --color-brand-600: 124 58 237;
+  --color-brand-700: 109 40 217;
+  --color-brand-800: 91 33 182;
+  --color-brand-900: 76 29 149;
+  --color-brand-950: 46 16 101;
+}
+
+[data-brand="forest"] {
+  /* Forest Canopy (Emerald/Green) */
+  --color-brand-50: 236 253 245;
+  --color-brand-100: 209 250 229;
+  --color-brand-200: 167 243 208;
+  --color-brand-300: 110 231 183;
+  --color-brand-400: 52 211 153;
+  --color-brand-500: 16 185 129;
+  --color-brand-600: 5 150 105;
+  --color-brand-700: 4 120 87;
+  --color-brand-800: 6 95 70;
+  --color-brand-900: 6 78 59;
+  --color-brand-950: 2 44 34;
+}
+
+[data-brand="sunset"] {
+  /* Sunset Boulevard (Orange/Red) */
+  --color-brand-50: 255 247 237;
+  --color-brand-100: 255 237 213;
+  --color-brand-200: 254 214 170;
+  --color-brand-300: 253 186 116;
+  --color-brand-400: 251 146 60;
+  --color-brand-500: 249 115 22;
+  --color-brand-600: 234 88 12;
+  --color-brand-700: 194 65 12;
+  --color-brand-800: 154 52 18;
+  --color-brand-900: 124 45 18;
+  --color-brand-950: 67 20 7;
 }
 
 @layer base {
