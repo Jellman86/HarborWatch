@@ -98,16 +98,16 @@
     <div class="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-slate-400 ml-1">Target Container</label>
-                <input bind:value={updateContainerId} placeholder="container-id" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                <label for="container-id" class="text-[10px] font-black uppercase text-slate-400 ml-1">Target Container</label>
+                <input id="container-id" bind:value={updateContainerId} placeholder="container-id" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
             </div>
             <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-slate-400 ml-1">New Image</label>
-                <input bind:value={updateTargetImage} placeholder="image:tag" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                <label for="target-image" class="text-[10px] font-black uppercase text-slate-400 ml-1">New Image</label>
+                <input id="target-image" bind:value={updateTargetImage} placeholder="image:tag" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
             </div>
             <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-slate-400 ml-1">Health URL</label>
-                <input bind:value={validateURL} placeholder="http://..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                <label for="validate-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Health URL</label>
+                <input id="validate-url" bind:value={validateURL} placeholder="http://..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
             </div>
         </div>
 

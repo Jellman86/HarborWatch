@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Chart from 'svelte-apexcharts';
+    import { chart } from 'svelte-apexcharts';
     import type { Metric } from '../api-types';
 
     let { metrics, title, type = 'cpu' } = $props<{
@@ -27,6 +27,7 @@
     ]);
 
     let options = $derived({
+        series: series,
         chart: {
             type: 'area',
             height: 250,
@@ -103,6 +104,4 @@
     });
 </script>
 
-<div class="w-full">
-    <Chart {options} {series} />
-</div>
+<div class="w-full h-[250px]" use:chart={options}></div>

@@ -46,12 +46,12 @@
             
             <div class="space-y-4">
                 <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase text-slate-400 ml-1">Instance URL</label>
-                    <input bind:value={harborwatchUrl} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                    <label for="harborwatch-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Instance URL</label>
+                    <input id="harborwatch-url" bind:value={harborwatchUrl} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
                 </div>
                 <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase text-slate-400 ml-1">Default Validation Pattern</label>
-                    <input bind:value={validateUrlPattern} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                    <label for="validate-pattern" class="text-[10px] font-black uppercase text-slate-400 ml-1">Default Validation Pattern</label>
+                    <input id="validate-pattern" bind:value={validateUrlPattern} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
                 </div>
             </div>
         </section>
@@ -104,6 +104,8 @@
                 <button 
                     onclick={() => autoScan = !autoScan}
                     class="w-10 h-5 rounded-full relative transition-colors {autoScan ? 'bg-brand-600' : 'bg-slate-300'}"
+                    aria-label={autoScan ? 'Disable Auto Scan' : 'Enable Auto Scan'}
+                    title={autoScan ? 'Disable Auto Scan' : 'Enable Auto Scan'}
                 >
                     <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {autoScan ? 'right-1' : 'left-1'}"></div>
                 </button>

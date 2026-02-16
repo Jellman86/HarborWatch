@@ -70,6 +70,8 @@ All notable changes to HarborWatch are documented in this file.
   - Improved Metrics Collector robustness with per-container execution timeouts
   - Enhanced visibility of auto-discovered labels and intelligence sources
   - Centralized global connectivity state in the main router
+  - Resolved Svelte 5 charting compatibility issues using ApexCharts actions
+  - Fully audited UI for Accessibility (A11y), adding labels and ARIA support
 - Label-Driven Auto-Discovery:
   - Containers now support `harborwatch.*` labels for "Light Touch" configuration
   - Automatic detection of update policies and intelligence sources directly from container metadata

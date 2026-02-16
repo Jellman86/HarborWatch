@@ -115,6 +115,8 @@
                         <button 
                             onclick={() => toggleTask(s.id, s.enabled)}
                             class="w-10 h-5 rounded-full relative transition-colors {s.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                            aria-label={s.enabled ? 'Pause Task' : 'Enable Task'}
+                            title={s.enabled ? 'Pause Task' : 'Enable Task'}
                         >
                             <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {s.enabled ? 'right-1' : 'left-1'}"></div>
                         </button>
