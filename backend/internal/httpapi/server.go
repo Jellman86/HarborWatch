@@ -300,7 +300,10 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				}
 
 				detail := gen.ContainerDetail{
-					Summary: summary,
+					Summary:        summary,
+					MalwareSummary: []gen.MalwareScanSummary{},
+					RecentMetrics:  []gen.Metric{},
+					ActionHistory:  []gen.AuditJobSummary{},
 				}
 
 				// Enrich with Security Data
@@ -310,6 +313,8 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					}
 					if ms, err := scanService.MalwareSummaries(ctx, id); err == nil {
 						detail.MalwareSummary = ms
+					} else {
+						detail.MalwareSummary = []gen.MalwareScanSummary{}
 					}
 				}
 
@@ -317,7 +322,6 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				if metricService != nil {
 					if m, err := metricService.GetMetrics(ctx, id, "1h"); err == nil {
 						// Convert internal metrics to gen.Metric
-						detail.RecentMetrics = make([]gen.Metric, 0, len(m))
 						for _, item := range m {
 							detail.RecentMetrics = append(detail.RecentMetrics, gen.Metric{
 								ContainerID: item.ContainerID,
@@ -335,6 +339,8 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				if auditService != nil {
 					if ah, err := auditService.ListAuditJobsForContainer(ctx, id); err == nil {
 						detail.ActionHistory = ah
+					} else {
+						detail.ActionHistory = []gen.AuditJobSummary{}
 					}
 				}
 
@@ -875,14 +881,16 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				writeError(w, http.StatusServiceUnavailable, "portainer_unavailable", "Portainer integration not configured")
 				return
 			}
-			stacks, err := portainerService.ListStacks(r.Context())
-			if err != nil {
-				writeError(w, http.StatusBadGateway, "portainer_error", err.Error())
-				return
-			}
-			writeJSON(w, http.StatusOK, stacks)
-		})
-	})
+					stacks, err := portainerService.ListStacks(r.Context())
+					if err != nil {
+						writeError(w, http.StatusBadGateway, "portainer_error", err.Error())
+						return
+					}
+					if stacks == nil {
+						stacks = []portainer.Stack{}
+					}
+					writeJSON(w, http.StatusOK, stacks)
+				})	})
 
 	staticDir := filepath.Clean(filepath.Join("..", "web", "dist"))
 	fs := http.FileServer(http.Dir(staticDir))

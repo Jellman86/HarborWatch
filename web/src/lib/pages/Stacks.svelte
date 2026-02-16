@@ -12,7 +12,8 @@
         try {
             const res = await fetch("/api/portainer/stacks");
             if (res.ok) {
-                stacks = await res.json();
+                const data = await res.json();
+                stacks = data || [];
             } else if (res.status === 503) {
                 error = "Portainer integration is not configured. Enable it in Settings.";
             } else {

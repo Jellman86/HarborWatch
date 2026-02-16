@@ -22,7 +22,12 @@
         try {
             const res = await fetch(`/api/docker/containers/${id}`);
             if (res.ok) {
-                detail = await res.json();
+                const data = await res.json();
+                // Defensive defaulting: ensure arrays exist before assignment
+                data.malwareSummary = data.malwareSummary || [];
+                data.actionHistory = data.actionHistory || [];
+                data.recentMetrics = data.recentMetrics || [];
+                detail = data;
             } else {
                 error = "Container not found";
             }

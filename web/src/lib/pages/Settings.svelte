@@ -25,7 +25,9 @@
         try {
             const res = await fetch("/api/settings");
             if (res.ok) {
-                settings = await res.json();
+                const data = await res.json();
+                data.environmentOverrides = data.environmentOverrides || {};
+                settings = data;
             }
         } catch (e) {
             console.error("Failed to load settings", e);
