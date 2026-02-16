@@ -66,7 +66,9 @@
         fetchJSON<ContainerSummary[]>("/api/docker/containers"),
         fetchJSON<ImageSummary[]>("/api/docker/images")
       ]);
-      health = h; containers = c; images = i;
+      health = h; 
+      containers = c || []; 
+      images = i || [];
       connectEvents();
     } catch (e) { 
       error = e instanceof Error ? e.message : "Connection to backend failed"; 

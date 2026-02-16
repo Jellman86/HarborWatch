@@ -36,7 +36,7 @@
                 fetch("/api/scans/malware/summary").then(r => r.ok ? r.json() : [])
             ]);
             summary = vuln;
-            malwareSummaries = mal;
+            malwareSummaries = mal || [];
         } catch (e) {
             console.error("Failed to load security data", e);
         }

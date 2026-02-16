@@ -45,7 +45,8 @@
         try {
             const res = await fetch(`/api/metrics/${id}?duration=6h`);
             if (res.ok) {
-                metrics = await res.json();
+                const data = await res.json();
+                metrics = data || [];
             }
         } catch (e) {
             console.error("Failed to fetch metrics", e);

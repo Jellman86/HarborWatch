@@ -16,7 +16,8 @@
         try {
             const response = await fetch("/api/audit/jobs");
             if (!response.ok) throw new Error("Failed to fetch audit log");
-            jobs = await response.json();
+            const data = await response.json();
+            jobs = data || [];
         } catch (e) {
             error = e instanceof Error ? e.message : "Unknown error";
         } finally {
@@ -36,7 +37,8 @@
         try {
             const res = await fetch(`/api/audit/jobs/${id}/steps`);
             if (res.ok) {
-                jobSteps = await res.json();
+                const data = await res.json();
+                jobSteps = data || [];
             }
         } catch (e) {
             console.error("Failed to load job steps", e);
