@@ -38,6 +38,13 @@ All notable changes to HarborWatch are documented in this file.
   - Idempotent database migration system for seamless schema updates
   - Frontend refactored to Svelte 5 runes for performance and clarity
   - Hardened update validation with retry loops and safe rollback cleanup
+- UI Expansion (YA-WAMF Inspired):
+  - Transitioned from single-page prototype to multi-view security appliance
+  - Integrated Tailwind CSS for production-grade styling
+  - Implemented persistent Sidebar navigation with collapse support
+  - Full Dark/Light mode support with system preference detection
+  - Modular component architecture: `Dashboard`, `Containers`, `Images`, `Security`, `Intelligence`, and `Updates`
+  - Visual update pipeline stepper with live progress terminal
 - CI/CD and deployment artifacts:
   - GitHub Actions workflows for build/push and PR validation
   - Single-container `Dockerfile`
