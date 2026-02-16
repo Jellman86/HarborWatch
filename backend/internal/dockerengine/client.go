@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/moby/moby/client"
 )
 
 const defaultDockerSocket = "/var/run/docker.sock"
@@ -51,6 +52,10 @@ func NewFromEnv() (*Client, error) {
 		httpClient: &http.Client{Transport: transport, Timeout: 15 * time.Second},
 		baseURL:    base,
 	}, nil
+}
+
+func NewRawClient() (*client.Client, error) {
+	return client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 }
 
 func (c *Client) ListContainers(ctx context.Context) ([]gen.ContainerSummary, error) {

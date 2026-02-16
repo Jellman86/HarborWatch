@@ -14,6 +14,12 @@ func main() {
 	// Fix permissions before starting
 	fixPermissions()
 
+	mux, schedSvc := httpapi.NewMuxWithScheduler()
+	if schedSvc != nil {
+		schedSvc.Start()
+		defer schedSvc.Stop()
+	}
+
 	addr := ":8080"
 	if v := os.Getenv("PORT"); v != "" {
 		addr = ":" + v
@@ -21,7 +27,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    addr,
-		Handler: httpapi.NewMux(),
+		Handler: mux,
 	}
 
 	log.Printf("harborwatch server starting on %s", addr)

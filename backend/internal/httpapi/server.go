@@ -15,6 +15,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/audit"
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
 	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
@@ -48,6 +49,11 @@ type AuditService interface {
 	ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error)
 }
 
+type SchedulerService interface {
+	AddTask(spec string, task scheduler.Task) error
+	RemoveTask(name string)
+}
+
 type UpdateService interface {
 	StartUpdate(req updates.Request) (gen.UpdateStartResponse, error)
 	GetJob(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error)
@@ -55,6 +61,11 @@ type UpdateService interface {
 }
 
 func NewMux() http.Handler {
+	mux, _ := NewMuxWithScheduler()
+	return mux
+}
+
+func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	dockerClient, err := dockerengine.NewFromEnv()
 	if err != nil {
 		dockerClient = nil
@@ -73,10 +84,22 @@ func NewMux() http.Handler {
 		auditService = nil
 	}
 	aiService := ai.NewService(ai.NewProviderFromEnv())
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService)
+	
+	schedSvc := scheduler.NewService()
+	// Add default background tasks
+	// 1. Weekly system prune (Sunday at 3 AM)
+	if dockerClient != nil {
+		// We need the raw moby client for the prune task
+		rawDocker, _ := dockerengine.NewRawClient() 
+		if rawDocker != nil {
+			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker))
+		}
+	}
+
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc), schedSvc
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -324,6 +347,11 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"analysis": analysis})
+	})
+
+	mux.HandleFunc("GET /api/scheduler/status", func(w http.ResponseWriter, r *http.Request) {
+		enabled := schedSvc != nil
+		writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
 	})
 
 	mux.HandleFunc("GET /api/updates/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {

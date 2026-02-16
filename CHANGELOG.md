@@ -45,6 +45,11 @@ All notable changes to HarborWatch are documented in this file.
   - Refactored AI integration to use industry-standard `go-openai` SDK and `yaml.v3` parser
   - New UI components for AI Analysis reports and status monitoring
   - Persistent AI analysis history in SQLite
+- Automation & Scheduler (v2 Milestone 7):
+  - Implemented core `scheduler` service using `robfig/cron/v3`
+  - Added automated `docker system prune` task for weekly system maintenance
+  - Integrated official Moby Docker SDK for robust engine interactions
+  - Added `/api/scheduler/status` endpoint
 - UI Expansion (YA-WAMF Inspired):
   - Transitioned from single-page prototype to multi-view security appliance
   - Integrated Tailwind CSS for production-grade styling
