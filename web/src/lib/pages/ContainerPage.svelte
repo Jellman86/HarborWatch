@@ -261,6 +261,7 @@
                                     <button 
                                         onclick={() => detail!.rules!.autoRollback = !detail!.rules!.autoRollback}
                                         class="w-10 h-5 rounded-full relative transition-colors {detail.rules.autoRollback ? 'bg-emerald-500' : 'bg-slate-300'}"
+                                        aria-label="Toggle Auto-Rollback"
                                     >
                                         <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {detail.rules.autoRollback ? 'right-1' : 'left-1'}"></div>
                                     </button>
