@@ -30,6 +30,12 @@ type fakeDockerClient struct {
 func (f fakeDockerClient) ListContainers(ctx context.Context) ([]gen.ContainerSummary, error) {
 	return f.containers, nil
 }
+func (f fakeDockerClient) GetContainer(ctx context.Context, id string) (gen.ContainerSummary, error) {
+	return gen.ContainerSummary{ID: id}, nil
+}
+func (f fakeDockerClient) GetContainerComposeConfig(ctx context.Context, id string, ps *portainer.Client) (string, error) {
+	return "version: '3'", nil
+}
 func (f fakeDockerClient) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
 	return f.images, nil
 }
@@ -59,6 +65,9 @@ func (f fakeScanService) Job(ctx context.Context, jobID string) (gen.ScanJobStat
 func (f fakeScanService) LatestSummary(ctx context.Context) (*gen.ScanSummary, error) {
 	return f.summary, nil
 }
+func (f fakeScanService) LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error) {
+	return f.summary, nil
+}
 func (f fakeScanService) MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error) {
 	return nil, nil
 }
@@ -74,6 +83,9 @@ type fakeAuditService struct {
 }
 
 func (f fakeAuditService) ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error) {
+	return f.jobs, nil
+}
+func (f fakeAuditService) ListAuditJobsForContainer(ctx context.Context, containerID string) ([]gen.AuditJobSummary, error) {
 	return f.jobs, nil
 }
 func (f fakeAuditService) GetAuditJobSteps(ctx context.Context, id string) ([]gen.UpdateStepEvent, error) {
@@ -154,7 +166,7 @@ func (f fakeUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, 
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	ts := httptest.NewServer(NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
+	ts := httptest.NewServer(NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
 	defer ts.Close()
 	resp, err := http.Get(ts.URL + "/health")
 	if err != nil || resp.StatusCode != http.StatusOK {
@@ -163,7 +175,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestDockerContainersEndpoint(t *testing.T) {
-	mux := NewMuxWithDeps(fakeDockerClient{containers: []gen.ContainerSummary{{ID: "abc", Image: "nginx:latest", State: "running"}}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	mux := NewMuxWithDeps(fakeDockerClient{containers: []gen.ContainerSummary{{ID: "abc", Image: "nginx:latest", State: "running"}}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers", nil))
 	if rec.Code != http.StatusOK {
@@ -177,7 +189,7 @@ func TestDockerContainersEndpoint(t *testing.T) {
 
 func TestReleaseSummaryEndpoint(t *testing.T) {
 	fake := fakeReleaseService{summary: gen.ReleaseRiskSummary{Repo: "Jellman86/HarborWatch", TotalRisk: 42}}
-	mux := NewMuxWithDeps(nil, nil, fake, nil, nil, nil, nil, nil, nil, nil, nil)
+	mux := NewMuxWithDeps(nil, nil, fake, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/releases/summary?repo=Jellman86/HarborWatch", nil))
 	if rec.Code != http.StatusOK {
@@ -187,7 +199,7 @@ func TestReleaseSummaryEndpoint(t *testing.T) {
 
 func TestUpdateEndpoints(t *testing.T) {
 	up := fakeUpdateService{startResp: gen.UpdateStartResponse{JobID: "u1", Status: "running"}, job: &gen.UpdateJobStatus{JobID: "u1", Status: "running"}}
-	mux := NewMuxWithDeps(nil, nil, nil, up, nil, nil, nil, nil, nil, nil, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, up, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	recRun := httptest.NewRecorder()
 	mux.ServeHTTP(recRun, httptest.NewRequest(http.MethodPost, "/api/updates/run", strings.NewReader(`{"containerId":"c1","targetImage":"img","validateUrl":"http://x"}`)))
