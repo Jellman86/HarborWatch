@@ -27,6 +27,10 @@ func (trivyScanner) Scan(ctx context.Context, target string) (Result, error) {
 	cmd := exec.CommandContext(ctx, "trivy", "image", "--quiet", "--format", "json", target)
 	output, err := cmd.Output()
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return Result{}, fmt.Errorf("trivy scan failed (exit %d): %s", exitErr.ExitCode(), string(exitErr.Stderr))
+		}
 		return Result{}, fmt.Errorf("trivy scan failed: %w", err)
 	}
 

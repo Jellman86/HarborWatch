@@ -18,6 +18,7 @@ services:
     volumes:
       - ${HW_DATA_PATH:-./data}:/data
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - ${HW_CLAMAV_DB_PATH:-./clamav-db}:/var/lib/clamav:ro
     ports:
       - "${HARBORWATCH_PORT:-18080}:8000"
     environment:

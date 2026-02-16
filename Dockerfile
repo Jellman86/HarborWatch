@@ -25,8 +25,11 @@ ENV PORT=8000
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    gnupg \
+    lsb-release \
     clamav \
     clamav-daemon \
+    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.50.1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -u 1000 appuser && \
