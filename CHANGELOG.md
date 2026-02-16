@@ -49,7 +49,8 @@ All notable changes to HarborWatch are documented in this file.
   - Implemented core `scheduler` service using `robfig/cron/v3`
   - Added automated `docker system prune` task for weekly system maintenance
   - Integrated official Moby Docker SDK for robust engine interactions
-  - Added `/api/scheduler/status` endpoint
+  - Added SQLite persistence for schedules to ensure tasks survive restarts
+  - Added `/api/scheduler/status` and `/api/scheduler/schedules` endpoints
 - UI Expansion (YA-WAMF Inspired):
   - Transitioned from single-page prototype to multi-view security appliance
   - Integrated Tailwind CSS for production-grade styling

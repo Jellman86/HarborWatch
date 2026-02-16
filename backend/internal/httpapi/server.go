@@ -52,6 +52,7 @@ type AuditService interface {
 type SchedulerService interface {
 	AddTask(spec string, task scheduler.Task) error
 	RemoveTask(name string)
+	ListSchedules(ctx context.Context) ([]scheduler.ScheduleEntry, error)
 }
 
 type UpdateService interface {
@@ -66,6 +67,11 @@ func NewMux() http.Handler {
 }
 
 func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
+	dbPath := os.Getenv("HARBORWATCH_DB_PATH")
+	if dbPath == "" {
+		dbPath = "/tmp/harborwatch.db"
+	}
+
 	dockerClient, err := dockerengine.NewFromEnv()
 	if err != nil {
 		dockerClient = nil
@@ -85,16 +91,28 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	}
 	aiService := ai.NewService(ai.NewProviderFromEnv())
 	
-	schedSvc := scheduler.NewService()
-	// Add default background tasks
-	// 1. Weekly system prune (Sunday at 3 AM)
+	// Scheduler Setup
+	schedStore, _ := scheduler.OpenStore(dbPath)
+	if schedStore != nil {
+		_ = schedStore.Init(context.Background())
+	}
+	schedSvc := scheduler.NewService(schedStore)
+
+	// Register available tasks
 	if dockerClient != nil {
-		// We need the raw moby client for the prune task
 		rawDocker, _ := dockerengine.NewRawClient() 
 		if rawDocker != nil {
+			schedSvc.RegisterTask("docker_system_prune", func() scheduler.Task {
+				return scheduler.NewDockerPruneTask(rawDocker)
+			})
+			
+			// Add default weekly prune if not already in DB
 			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker))
 		}
 	}
+
+	// Load all enabled schedules from DB
+	_ = schedSvc.LoadSchedules(context.Background())
 
 	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc), schedSvc
 }
@@ -352,6 +370,19 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 	mux.HandleFunc("GET /api/scheduler/status", func(w http.ResponseWriter, r *http.Request) {
 		enabled := schedSvc != nil
 		writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+	})
+
+	mux.HandleFunc("GET /api/scheduler/schedules", func(w http.ResponseWriter, r *http.Request) {
+		if schedSvc == nil {
+			writeError(w, http.StatusServiceUnavailable, "scheduler_unavailable", "Scheduler not initialized")
+			return
+		}
+		list, err := schedSvc.ListSchedules(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "scheduler_error", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
 	})
 
 	mux.HandleFunc("GET /api/updates/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
