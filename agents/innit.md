@@ -41,6 +41,12 @@ IMPLEMENTATION STATUS (COMPLETED)
 --------------------------------------------------
 HarborWatch v0.5.0 is complete. All milestones implemented and hardened.
 
+NEXT PHASE: HarborWatch v2 (The Autonomous Appliance)
+Refer to `docs/ROADMAP_v2.md` for the detailed specification of:
+- Milestone 6: AI Intelligence Core
+- Milestone 7: Automation & Scheduler
+- Milestone 8: Ecosystem Integrations
+
 You are a senior staff software engineer and security-focused SRE. Your task is to build HarborWatch: a local-first container maintenance and security platform for self-hosted Docker environments.
 
 The goal is to build a **self-hosted appliance-style product**: simple deployment, minimal moving parts, and a single-container runtime.
