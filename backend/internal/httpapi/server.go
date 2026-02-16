@@ -31,14 +31,9 @@ import (
 type DockerClient interface {
 	ListContainers(ctx context.Context) ([]gen.ContainerSummary, error)
 	GetContainer(ctx context.Context, id string) (gen.ContainerSummary, error)
-	GetContainerComposeConfig(ctx context.Context, id string, portainer PortainerService) (string, error)
+	GetContainerComposeConfig(ctx context.Context, id string, portainer *portainer.Client) (string, error)
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 	OpenEventStream(ctx context.Context) (io.ReadCloser, error)
-}
-
-type PortainerService interface {
-	ListStacks(ctx context.Context) ([]portainer.Stack, error)
-	GetStackFile(ctx context.Context, stackID int) (string, error)
 }
 
 type ScanService interface {
@@ -143,7 +138,7 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	aiService := ai.NewService(ai.NewProviderFromEnv())
 	notificationService := notifications.NewService()
 	
-	var portainerService PortainerService
+	var portainerService *portainer.Client
 	if settingsStore != nil {
 		st, _ := settingsStore.Get(context.Background())
 		if st.DiscordWebhookURL != "" {
@@ -154,7 +149,7 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 		}
 	}
 
-	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService)
+	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService)
 	
 	var auditService *audit.Service
 	if settingsStore != nil {
@@ -248,7 +243,7 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService), schedSvc
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)

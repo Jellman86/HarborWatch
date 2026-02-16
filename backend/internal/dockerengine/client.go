@@ -135,12 +135,7 @@ func (c *Client) OpenEventStream(ctx context.Context) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-type PortainerService interface {
-	ListStacks(ctx context.Context) ([]portainer.Stack, error)
-	GetStackFile(ctx context.Context, stackID int) (string, error)
-}
-
-func (c *Client) GetContainerComposeConfig(ctx context.Context, id string, ps PortainerService) (string, error) {
+func (c *Client) GetContainerComposeConfig(ctx context.Context, id string, ps *portainer.Client) (string, error) {
 	// 1. Get full inspect data
 	inspect, err := c.getJSONRaw(ctx, "/containers/"+id+"/json")
 	if err != nil {
