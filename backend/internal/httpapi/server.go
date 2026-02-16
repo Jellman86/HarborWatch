@@ -87,7 +87,7 @@ type AuditService interface {
 }
 
 type SchedulerService interface {
-	AddTask(spec string, task scheduler.Task) error
+	AddTask(spec string, task scheduler.Task, enabled bool) error
 	RemoveTask(name string)
 	ToggleTask(ctx context.Context, name string, enabled bool) error
 	RunTask(ctx context.Context, name string) error
