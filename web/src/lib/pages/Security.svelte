@@ -2,6 +2,10 @@
     import { onMount } from "svelte";
     import type { ScanSummary, MalwareScanSummary, ScanJobStatus, ScanStartResponse } from "../api-types";
 
+    let { params } = $props<{
+        params?: { target: string };
+    }>();
+
     // Component State
     let summary = $state<ScanSummary | null>(null);
     let malwareSummaries = $state<MalwareScanSummary[]>([]);
@@ -10,6 +14,12 @@
     let target = $state("nginx:latest");
     let malwareTarget = $state("/var/lib/docker");
     let pollTimer: number | null = null;
+
+    $effect(() => {
+        if (params?.target) {
+            target = params.target;
+        }
+    });
 
     const riskBand = (score: number) => score >= 80 ? "Critical" : score >= 60 ? "High" : score >= 30 ? "Medium" : score > 0 ? "Low" : "None";
 

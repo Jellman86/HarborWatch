@@ -49,6 +49,7 @@ type AIService interface {
 
 type AuditService interface {
 	ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error)
+	GetAuditJobSteps(ctx context.Context, id string) ([]gen.UpdateStepEvent, error)
 }
 
 type SchedulerService interface {
@@ -384,6 +385,19 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		writeJSON(w, http.StatusOK, jobs)
+	})
+
+	mux.HandleFunc("GET /api/audit/jobs/{id}/steps", func(w http.ResponseWriter, r *http.Request) {
+		if auditService == nil {
+			writeError(w, http.StatusServiceUnavailable, "audit_service_unavailable", "Audit service not initialized")
+			return
+		}
+		steps, err := auditService.GetAuditJobSteps(r.Context(), r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "audit_steps_query_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, steps)
 	})
 
 	mux.HandleFunc("GET /api/ai/status", func(w http.ResponseWriter, r *http.Request) {

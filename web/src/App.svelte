@@ -23,6 +23,12 @@
 
   // Navigation State
   let currentRoute = $state("dashboard");
+  let routeParams = $state<any>(null);
+
+  function navigate(route: string, params: any = null) {
+    currentRoute = route;
+    routeParams = params;
+  }
 
   // Global Shared State
   let health = $state<HealthResponse | null>(null);
@@ -77,7 +83,7 @@
 </script>
 
 <div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
-  <Sidebar {currentRoute} onNavigate={(route) => currentRoute = route} />
+  <Sidebar {currentRoute} onNavigate={navigate} />
 
   <main class="transition-all duration-300 {layoutStore.sidebarCollapsed ? 'pl-20' : 'pl-64'} min-h-screen">
     <div class="max-w-7xl mx-auto p-8">
@@ -93,11 +99,11 @@
       {#if currentRoute === 'dashboard'}
         <Dashboard {health} {containers} {images} {events} onRefresh={loadGlobalData} />
       {:else if currentRoute === 'containers'}
-        <Containers {containers} />
+        <Containers {containers} onNavigate={navigate} />
       {:else if currentRoute === 'images'}
         <Images {images} />
       {:else if currentRoute === 'security'}
-        <Security />
+        <Security params={routeParams} />
       {:else if currentRoute === 'automation'}
         <Automation />
       {:else if currentRoute === 'doctor'}
@@ -105,7 +111,7 @@
       {:else if currentRoute === 'intelligence'}
         <Intelligence />
       {:else if currentRoute === 'updates'}
-        <Updates />
+        <Updates params={routeParams} />
       {:else if currentRoute === 'audit'}
         <AuditLog />
       {:else if currentRoute === 'settings'}

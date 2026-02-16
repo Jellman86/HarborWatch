@@ -2,8 +2,9 @@
     import type { ContainerSummary, Metric } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
 
-    let { containers } = $props<{
+    let { containers, onNavigate } = $props<{
         containers: ContainerSummary[];
+        onNavigate: (route: string, params?: any) => void;
     }>();
 
     let expandedContainer = $state<string | null>(null);
@@ -73,6 +74,18 @@
         } finally {
             aiAnalyzing = false;
         }
+    }
+
+    function handleTriggerScan(image: string) {
+        onNavigate('security', { target: image });
+    }
+
+    function handleCheckUpdate(container: ContainerSummary) {
+        onNavigate('updates', { 
+            containerId: container.id, 
+            targetImage: container.image,
+            validateUrl: container.labels?.['harborwatch.validate.url'] || 'http://localhost:18080/health'
+        });
     }
 </script>
 
@@ -150,12 +163,20 @@
                         </td>
                         <td class="px-6 py-4 text-right">
                             <div class="flex justify-end gap-1">
-                                <button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all" title="Trigger Scan">
+                                <button 
+                                    onclick={() => handleTriggerScan(c.image)}
+                                    class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all" 
+                                    title="Trigger Scan"
+                                >
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                     </svg>
                                 </button>
-                                <button class="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-brand-900/20 rounded-lg transition-all" title="Check Update">
+                                <button 
+                                    onclick={() => handleCheckUpdate(c)}
+                                    class="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-brand-900/20 rounded-lg transition-all" 
+                                    title="Check Update"
+                                >
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                     </svg>

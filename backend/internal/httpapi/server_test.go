@@ -73,6 +73,9 @@ type fakeAuditService struct {
 func (f fakeAuditService) ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error) {
 	return f.jobs, nil
 }
+func (f fakeAuditService) GetAuditJobSteps(ctx context.Context, id string) ([]gen.UpdateStepEvent, error) {
+	return nil, nil
+}
 
 type fakeAIService struct{ enabled bool }
 

@@ -3,12 +3,25 @@
     import type { UpdateJobStatus, UpdateStepEvent, UpdateStartResponse } from "../api-types";
 
     // Component State
+    let { params } = $props<{
+        params?: { containerId: string; targetImage: string; validateUrl: string };
+    }>();
+
     let updateJob = $state<UpdateJobStatus | null>(null);
     let updateLive = $state<UpdateStepEvent[]>([]);
     let updateError = $state("");
     let updateContainerId = $state("");
     let updateTargetImage = $state("");
     let validateURL = $state("http://localhost:18080/health");
+
+    // Pre-fill form from params when they change
+    $effect(() => {
+        if (params) {
+            updateContainerId = params.containerId;
+            updateTargetImage = params.targetImage;
+            validateURL = params.validateUrl;
+        }
+    });
 
     let updateEventSource: EventSource | null = null;
     let updatePollTimer: number | null = null;

@@ -60,3 +60,26 @@ LIMIT 100
 	}
 	return jobs, nil
 }
+
+func (s *Service) GetAuditJobSteps(ctx context.Context, id string) ([]gen.UpdateStepEvent, error) {
+	// For now, we only have detailed step logs for Updates. 
+	// Scans are atomic jobs without sub-steps in the DB currently.
+	rows, err := s.db.QueryContext(ctx, `
+SELECT step, status, message, ts FROM update_steps WHERE run_id=? ORDER BY id ASC
+`, id)
+	if err != nil {
+		return nil, fmt.Errorf("query job steps: %w", err)
+	}
+	defer rows.Close()
+
+	var steps []gen.UpdateStepEvent
+	for rows.Next() {
+		var e gen.UpdateStepEvent
+		e.JobID = id
+		if err := rows.Scan(&e.Step, &e.Status, &e.Message, &e.Timestamp); err != nil {
+			return nil, fmt.Errorf("scan job step: %w", err)
+		}
+		steps = append(steps, e)
+	}
+	return steps, nil
+}
