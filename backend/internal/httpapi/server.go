@@ -525,10 +525,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					writeError(w, http.StatusBadGateway, "scan_read_failed", err.Error())
 					return
 				}
-				if summary == nil {
-					writeError(w, http.StatusNotFound, "scan_not_found", "No scan results available")
-					return
-				}
+				// Return 200 null if no summary exists, preventing 404 console errors
 				writeJSON(w, http.StatusOK, summary)
 			})
 
@@ -947,9 +944,16 @@ func spaHandler(static http.Handler, staticDir string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := filepath.Clean(filepath.Join(staticDir, r.URL.Path))
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			// Cache immutable assets for 1 year
+			if strings.Contains(r.URL.Path, "/assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
 			static.ServeHTTP(w, r)
 			return
 		}
+		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
 	})
 }
