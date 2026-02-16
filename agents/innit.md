@@ -36,6 +36,11 @@ Current focus for next iteration:
   - Persistent job tracking and summary store for malware scans
   - API endpoints for triggering and viewing malware scan results
 
+--------------------------------------------------
+IMPLEMENTATION STATUS (COMPLETED)
+--------------------------------------------------
+HarborWatch v0.5.0 is complete. All milestones implemented and hardened.
+
 You are a senior staff software engineer and security-focused SRE. Your task is to build HarborWatch: a local-first container maintenance and security platform for self-hosted Docker environments.
 
 The goal is to build a **self-hosted appliance-style product**: simple deployment, minimal moving parts, and a single-container runtime.

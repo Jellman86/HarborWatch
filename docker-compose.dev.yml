@@ -5,11 +5,12 @@ name: HarborWatch-Dev
 # Uses GHCR 'dev' image built from the dev branch.
 #-----------------------------------------------
 services:
+#-----------------------------------------------
   harborwatch:
     image: ghcr.io/jellman86/harborwatch:dev
     container_name: harborwatch-dev
     restart: unless-stopped
-    user: "${PUID:-1000}:${PGID:-1000}"
+    user: "0:0"
     networks:
       - harborwatch_network
     depends_on:
@@ -28,7 +29,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
+#-----------------------------------------------
   clamav:
     image: clamav/clamav:latest
     container_name: harborwatch-clamav-dev
@@ -37,7 +38,7 @@ services:
       - harborwatch_network
     volumes:
       - ${HW_CLAMAV_DB_PATH:-./clamav-db}:/var/lib/clamav
-
+#-----------------------------------------------
 networks:
   harborwatch_network:
     name: ${DOCKER_NETWORK:-harborwatch_default}

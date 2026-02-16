@@ -9,7 +9,7 @@ services:
     image: ghcr.io/jellman86/harborwatch:latest
     container_name: harborwatch
     restart: unless-stopped
-    user: "${PUID:-1000}:${PGID:-1000}"
+    user: "0:0"
     networks:
       - harborwatch_network
     depends_on:
