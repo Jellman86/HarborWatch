@@ -1,9 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ScheduleEntry } from "../api-types";
 
-    // Since ScheduleEntry is newly added to the backend, 
-    // I will use a local type for safety until the next type generation run
     interface Schedule {
         id: string;
         cronSpec: string;
@@ -27,22 +24,55 @@
         }
     }
 
+    async function toggleTask(id: string, currentlyEnabled: boolean) {
+        try {
+            const res = await fetch("/api/scheduler/toggle", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id, enabled: !currentlyEnabled })
+            });
+            if (res.ok) {
+                // Optimistic update
+                const idx = schedules.findIndex(s => s.id === id);
+                if (idx !== -1) schedules[idx].enabled = !currentlyEnabled;
+            }
+        } catch (e) {
+            error = "Failed to toggle task";
+        }
+    }
+
+    async function runTask(id: string) {
+        try {
+            const res = await fetch("/api/scheduler/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id })
+            });
+            if (res.ok) {
+                alert(`Task ${id} has been manually triggered.`);
+                await loadSchedules();
+            }
+        } catch (e) {
+            error = "Failed to trigger task";
+        }
+    }
+
     onMount(loadSchedules);
 
     const formatTime = (ts?: number) => ts && ts > 0 ? new Date(ts * 1000).toLocaleString() : "Never";
     
-    // Human readable cron mapping
     const cronLabel = (spec: string) => {
         if (spec === "0 0 3 * * 0") return "Weekly (Sun 3 AM)";
-        if (spec.startsWith("0 0")) return "Daily at Midnight";
+        if (spec === "0 0 0 * * *") return "Daily at Midnight";
+        if (spec === "0 0 4 * * 0") return "Weekly (Sun 4 AM)";
         return spec;
     };
 
     const taskLabel = (id: string) => {
         switch(id) {
             case 'docker_system_prune': return "Docker System Garbage Collection";
-            case 'security_sweep_trivy': return "Nightly Vulnerability Scan";
-            case 'malware_sweep_clamav': return "Weekly Malware Sweep";
+            case 'security_sweep_trivy': return "Full Vulnerability Sweep (Trivy)";
+            case 'malware_sweep_clamav': return "Host Malware Sweep (ClamAV)";
             default: return id.replace(/_/g, ' ').toUpperCase();
         }
     };
@@ -83,13 +113,17 @@
                             {s.enabled ? 'Active' : 'Paused'}
                         </span>
                         <button 
+                            onclick={() => toggleTask(s.id, s.enabled)}
                             class="w-10 h-5 rounded-full relative transition-colors {s.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
                         >
                             <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {s.enabled ? 'right-1' : 'left-1'}"></div>
                         </button>
                     </div>
                     
-                    <button class="px-4 py-2 bg-slate-50 dark:bg-slate-900 hover:bg-brand-600 hover:text-white dark:hover:bg-brand-600 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400 transition-all border border-slate-100 dark:border-slate-700 uppercase tracking-widest">
+                    <button 
+                        onclick={() => runTask(s.id)}
+                        class="px-4 py-2 bg-slate-50 dark:bg-slate-900 hover:bg-brand-600 hover:text-white dark:hover:bg-brand-600 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400 transition-all border border-slate-100 dark:border-slate-700 uppercase tracking-widest"
+                    >
                         Run Now
                     </button>
                 </div>
@@ -108,10 +142,9 @@
             </svg>
         </div>
         <div>
-            <h4 class="text-sm font-bold text-brand-900 dark:text-brand-300">Pro-Tip: Label-Driven Automation</h4>
+            <h4 class="text-sm font-bold text-brand-900 dark:text-brand-300">Operational Policy: Off by Default</h4>
             <p class="text-xs text-brand-700 dark:text-brand-400 mt-1 leading-relaxed">
-                Add <code>harborwatch.enable=true</code> to any container to include it in the global automation scope. 
-                Use <code>harborwatch.update.policy=ai-only</code> for smart, risk-aware updates.
+                All automated maintenance and security sweeps are disabled by default. You must explicitly enable each task using the toggles above to activate its schedule.
             </p>
         </div>
     </div>

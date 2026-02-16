@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -48,40 +49,24 @@ func (s *Service) Stop() {
 	s.cron.Stop()
 }
 
-// AddTask schedules a new task and persists it to the database.
+// AddTask registers a task into the system. If it's not in the DB, it's saved as DISABLED.
 func (s *Service) AddTask(spec string, task Task) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// 1. Remove existing if present
-	if id, ok := s.tasks[task.Name()]; ok {
-		s.cron.Remove(id)
-	}
-
-	// 2. Schedule the function
 	taskName := task.Name()
-	id, err := s.cron.AddFunc(spec, func() {
-		log.Printf("Executing scheduled task: %s", taskName)
-		ctx := context.Background()
-		if err := task.Run(ctx); err != nil {
-			log.Printf("Error executing task %s: %v", taskName, err)
-		}
-		if s.store != nil {
-			_ = s.store.UpdateLastRun(ctx, taskName, time.Now().Unix())
-		}
-	})
-	if err != nil {
-		return err
+
+	// 1. Ensure it's in the registry so it can be enabled later
+	s.mu.Lock()
+	if _, ok := s.registry[taskName]; !ok {
+		// If no factory registered yet, use a simple one
+		s.registry[taskName] = func() Task { return task }
 	}
+	s.mu.Unlock()
 
-	s.tasks[taskName] = id
-
-	// 3. Persist to database
+	// 2. Persist to database if not present (Off by default)
 	if s.store != nil {
 		_ = s.store.SaveSchedule(context.Background(), ScheduleEntry{
 			ID:       taskName,
 			CronSpec: spec,
-			Enabled:  true,
+			Enabled:  false,
 		})
 	}
 
@@ -147,4 +132,82 @@ func (s *Service) ListSchedules(ctx context.Context) ([]ScheduleEntry, error) {
 		return []ScheduleEntry{}, nil
 	}
 	return s.store.ListSchedules(ctx)
+}
+
+func (s *Service) ToggleTask(ctx context.Context, name string, enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 1. Update database
+	if s.store != nil {
+		if err := s.store.ToggleSchedule(ctx, name, enabled); err != nil {
+			return err
+		}
+	}
+
+	// 2. Update runtime cron state
+	if !enabled {
+		if id, ok := s.tasks[name]; ok {
+			s.cron.Remove(id)
+			delete(s.tasks, name)
+		}
+		return nil
+	}
+
+	// If enabling, we need to find the spec and factory
+	if _, ok := s.tasks[name]; ok {
+		return nil // Already running
+	}
+
+	entries, _ := s.store.ListSchedules(ctx)
+	var spec string
+	for _, e := range entries {
+		if e.ID == name {
+			spec = e.CronSpec
+			break
+		}
+	}
+
+	factory, ok := s.registry[name]
+	if ok && spec != "" {
+		task := factory()
+		id, err := s.cron.AddFunc(spec, func() {
+			log.Printf("Executing scheduled task: %s", name)
+			if err := task.Run(context.Background()); err != nil {
+				log.Printf("Error executing task %s: %v", name, err)
+			}
+			if s.store != nil {
+				_ = s.store.UpdateLastRun(context.Background(), name, time.Now().Unix())
+			}
+		})
+		if err != nil {
+			return err
+		}
+		s.tasks[name] = id
+	}
+
+	return nil
+}
+
+func (s *Service) RunTask(ctx context.Context, name string) error {
+	s.mu.RLock()
+	factory, ok := s.registry[name]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("task %s not found in registry", name)
+	}
+
+	task := factory()
+	log.Printf("Manually triggering task: %s", name)
+	go func() {
+		if err := task.Run(context.Background()); err != nil {
+			log.Printf("Manual task %s failed: %v", name, err)
+		}
+		if s.store != nil {
+			_ = s.store.UpdateLastRun(context.Background(), name, time.Now().Unix())
+		}
+	}()
+
+	return nil
 }

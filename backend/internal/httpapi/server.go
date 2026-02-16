@@ -52,6 +52,8 @@ type AuditService interface {
 type SchedulerService interface {
 	AddTask(spec string, task scheduler.Task) error
 	RemoveTask(name string)
+	ToggleTask(ctx context.Context, name string, enabled bool) error
+	RunTask(ctx context.Context, name string) error
 	ListSchedules(ctx context.Context) ([]scheduler.ScheduleEntry, error)
 }
 
@@ -102,12 +104,25 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	if dockerClient != nil {
 		rawDocker, _ := dockerengine.NewRawClient() 
 		if rawDocker != nil {
+			// 1. Docker Prune (Weekly Sun 3 AM)
 			schedSvc.RegisterTask("docker_system_prune", func() scheduler.Task {
 				return scheduler.NewDockerPruneTask(rawDocker)
 			})
-			
-			// Add default weekly prune if not already in DB
 			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker))
+
+			// 2. Trivy Sweep (Daily Midnight)
+			if scanService != nil {
+				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
+					return scheduler.NewTrivySweepTask(rawDocker, scanService)
+				})
+				_ = schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService))
+
+				// 3. ClamAV Sweep (Weekly Sun 4 AM)
+				schedSvc.RegisterTask("malware_sweep_clamav", func() scheduler.Task {
+					return scheduler.NewClamAVSweepTask(rawDocker, scanService)
+				})
+				_ = schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService))
+			}
 		}
 	}
 
@@ -383,6 +398,45 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		writeJSON(w, http.StatusOK, list)
+	})
+
+	mux.HandleFunc("POST /api/scheduler/toggle", func(w http.ResponseWriter, r *http.Request) {
+		if schedSvc == nil {
+			writeError(w, http.StatusServiceUnavailable, "scheduler_unavailable", "Scheduler not initialized")
+			return
+		}
+		var req struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+			return
+		}
+		if err := schedSvc.ToggleTask(r.Context(), req.ID, req.Enabled); err != nil {
+			writeError(w, http.StatusInternalServerError, "toggle_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	mux.HandleFunc("POST /api/scheduler/run", func(w http.ResponseWriter, r *http.Request) {
+		if schedSvc == nil {
+			writeError(w, http.StatusServiceUnavailable, "scheduler_unavailable", "Scheduler not initialized")
+			return
+		}
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+			return
+		}
+		if err := schedSvc.RunTask(r.Context(), req.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, "trigger_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "triggered"})
 	})
 
 	mux.HandleFunc("GET /api/updates/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {

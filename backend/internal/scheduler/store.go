@@ -35,7 +35,7 @@ func (s *Store) Init(ctx context.Context) error {
 CREATE TABLE IF NOT EXISTS schedules (
   id TEXT PRIMARY KEY,
   cron_spec TEXT NOT NULL,
-  enabled INTEGER NOT NULL DEFAULT 1,
+  enabled INTEGER NOT NULL DEFAULT 0,
   last_run INTEGER NOT NULL DEFAULT 0
 );
 `)
@@ -47,17 +47,21 @@ CREATE TABLE IF NOT EXISTS schedules (
 }
 
 func (s *Store) SaveSchedule(ctx context.Context, entry ScheduleEntry) error {
-	enabled := 0
-	if entry.Enabled {
-		enabled = 1
-	}
+	// We use INSERT OR IGNORE to ensure we don't overwrite user-toggled states 
+	// during the boot-time task registration.
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO schedules(id, cron_spec, enabled)
-VALUES(?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
-  cron_spec=excluded.cron_spec,
-  enabled=excluded.enabled
-`, entry.ID, entry.CronSpec, enabled)
+INSERT OR IGNORE INTO schedules(id, cron_spec, enabled)
+VALUES(?, ?, 0)
+`, entry.ID, entry.CronSpec)
+	return err
+}
+
+func (s *Store) ToggleSchedule(ctx context.Context, id string, enabled bool) error {
+	val := 0
+	if enabled {
+		val = 1
+	}
+	_, err := s.db.ExecContext(ctx, "UPDATE schedules SET enabled=? WHERE id=?", val, id)
 	return err
 }
 

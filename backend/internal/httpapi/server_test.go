@@ -87,6 +87,10 @@ type fakeSchedulerService struct{}
 
 func (f fakeSchedulerService) AddTask(spec string, task scheduler.Task) error { return nil }
 func (f fakeSchedulerService) RemoveTask(name string)                         {}
+func (f fakeSchedulerService) ToggleTask(ctx context.Context, name string, enabled bool) error {
+	return nil
+}
+func (f fakeSchedulerService) RunTask(ctx context.Context, name string) error { return nil }
 func (f fakeSchedulerService) ListSchedules(ctx context.Context) ([]scheduler.ScheduleEntry, error) {
 	return []scheduler.ScheduleEntry{}, nil
 }

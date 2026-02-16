@@ -5,9 +5,17 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/moby/moby/client"
 )
+
+// ScannerService is an interface to avoid circular dependencies with scanning package
+type ScannerService interface {
+	StartScan(target string) (gen.ScanStartResponse, error)
+	StartMalwareScan(target string) (gen.ScanStartResponse, error)
+}
 
 // DockerPruneTask cleans up dangling images and stopped containers.
 type DockerPruneTask struct {
@@ -40,11 +48,65 @@ func (t *DockerPruneTask) Run(ctx context.Context) error {
 	return nil
 }
 
-// SecurityScanTask (Placeholder for future implementation)
-type SecurityScanTask struct {
-	NameStr string
-	Action  func(ctx context.Context) error
+// TrivySweepTask scans all running containers for vulnerabilities.
+type TrivySweepTask struct {
+	docker  *client.Client
+	scanner ScannerService
 }
 
-func (t *SecurityScanTask) Name() string { return t.NameStr }
-func (t *SecurityScanTask) Run(ctx context.Context) error { return t.Action(ctx) }
+func NewTrivySweepTask(cli *client.Client, s ScannerService) *TrivySweepTask {
+	return &TrivySweepTask{docker: cli, scanner: s}
+}
+
+func (t *TrivySweepTask) Name() string { return "security_sweep_trivy" }
+
+func (t *TrivySweepTask) Run(ctx context.Context) error {
+	containers, err := t.docker.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, c := range containers {
+		log.Printf("Automated Security Sweep: Triggering Trivy scan for %s", c.Image)
+		_, _ = t.scanner.StartScan(c.Image)
+	}
+	return nil
+}
+
+// ClamAVSweepTask scans all container host mounts for malware.
+type ClamAVSweepTask struct {
+	docker  *client.Client
+	scanner ScannerService
+}
+
+func NewClamAVSweepTask(cli *client.Client, s ScannerService) *ClamAVSweepTask {
+	return &ClamAVSweepTask{docker: cli, scanner: s}
+}
+
+func (t *ClamAVSweepTask) Name() string { return "malware_sweep_clamav" }
+
+func (t *ClamAVSweepTask) Run(ctx context.Context) error {
+	containers, err := t.docker.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Track paths to avoid duplicate scanning of the same host volume
+	seenPaths := make(map[string]bool)
+
+	for _, c := range containers {
+		inspect, err := t.docker.ContainerInspect(ctx, c.ID)
+		if err != nil {
+			continue
+		}
+
+		for _, m := range inspect.Mounts {
+			if m.Source != "" && !seenPaths[m.Source] {
+				log.Printf("Automated Security Sweep: Triggering ClamAV scan for path %s", m.Source)
+				_, _ = t.scanner.StartMalwareScan(m.Source)
+				seenPaths[m.Source] = true
+			}
+		}
+	}
+	return nil
+}
