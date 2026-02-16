@@ -1,177 +1,131 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { HealthResponse, ScanSummary, ContainerSummary, ImageSummary, DockerEvent } from "../api-types";
+    import type { ContainerSummary, ScanSummary } from "../api-types";
 
-    let { health, containers, images, events, onRefresh } = $props<{
-        health: HealthResponse | null;
-        containers: ContainerSummary[];
-        images: ImageSummary[];
-        events: DockerEvent[];
-        onRefresh: () => void;
-    }>();
+    let { containers } = $props<{ containers: ContainerSummary[] }>();
+    let scanSummary = $state<ScanSummary | null>(null);
+    let fleetAdvice = $state("");
+    let analyzingFleet = $state(false);
 
-    let summary = $state<ScanSummary | null>(null);
-    let aiAdvice = $state("");
-    let loadingAdvice = $state(false);
-
-    async function loadSummary() {
+    async function loadData() {
         try {
             const res = await fetch("/api/scans/summary");
-            if (res.ok) summary = await res.json();
-        } catch {}
+            if (res.ok) scanSummary = await res.json();
+        } catch (e) {
+            console.error("Failed to load dashboard data", e);
+        }
     }
 
     async function getFleetAdvice() {
-        loadingAdvice = true;
+        if (containers.length === 0) return;
+        analyzingFleet = true;
         try {
-            const res = await fetch("/api/ai/analyze-metrics", {
+            const res = await fetch("/api/ai/fleet-advice", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    containerId: "global_fleet", 
-                    metrics: containers.map(c => ({ name: c.names[0], image: c.image, state: c.state }))
-                })
+                body: JSON.stringify(containers)
             });
             if (res.ok) {
                 const data = await res.json();
-                aiAdvice = data.analysis;
+                fleetAdvice = data.advice;
             }
-        } catch {} finally {
-            loadingAdvice = false;
+        } catch (e) {
+            console.error("Fleet analysis failed", e);
+        } finally {
+            analyzingFleet = false;
         }
     }
 
     onMount(() => {
-        loadSummary();
+        loadData();
     });
 
-    const formatId = (id: string) => (id.length > 12 ? id.slice(0, 12) : id);
-    const riskBand = (score: number) => score >= 80 ? "Critical" : score >= 60 ? "High" : score >= 30 ? "Medium" : score > 0 ? "Low" : "None";
+    let runningCount = $derived(containers.filter(c => c.state === 'running').length);
+    let updateCount = $derived(containers.filter(c => c.updateAvailable).length);
 </script>
 
-<div class="space-y-6">
-    <div class="flex items-center justify-between">
-        <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Control Center</h2>
-        <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-brand-500/20" onclick={onRefresh}>
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-        </button>
-    </div>
-
-    <!-- AI Fleet Advice -->
-    <div class="bg-brand-600 rounded-2xl p-6 text-white shadow-xl shadow-brand-500/20 flex flex-col md:flex-row items-center gap-6">
-        <div class="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-brand-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+<div class="space-y-10">
+    <div class="flex items-center justify-between opacity-0 animate-reveal">
+        <div class="border-l-4 border-brand-600 pl-6 py-2">
+            <h2 class="text-4xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Command Oversight</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Global posture and intelligence summary for the managed fleet.</p>
         </div>
-        <div class="flex-1">
-            <h3 class="text-lg font-black uppercase tracking-tight">Fleet Intelligence</h3>
-            <p class="text-brand-100 text-sm mt-1 leading-relaxed">
-                {#if aiAdvice}
-                    {aiAdvice}
-                {:else}
-                    AI-powered health check is ready. Analyze your fleet for optimization opportunities.
-                {/if}
-            </p>
-        </div>
-        <button 
-            onclick={getFleetAdvice}
-            disabled={loadingAdvice}
-            class="px-6 py-3 bg-white text-brand-600 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-brand-50 transition-all disabled:opacity-50"
-        >
-            {loadingAdvice ? 'Analyzing...' : 'Audit Fleet Health'}
-        </button>
-    </div>
-
-    <!-- Stats Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:shadow-md">
-            <span class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Asset Fleet</span>
-            <div class="mt-2 flex items-baseline gap-2">
-                <span class="text-3xl font-black text-slate-900 dark:text-white">{containers.length}</span>
-                <span class="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase">Containers</span>
-            </div>
-        </div>
-        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:shadow-md">
-            <span class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Stored Artifacts</span>
-            <div class="mt-2 flex items-baseline gap-2">
-                <span class="text-3xl font-black text-slate-900 dark:text-white">{images.length}</span>
-                <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Images</span>
-            </div>
-        </div>
-        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:shadow-md">
-            <span class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Aggregate Risk</span>
-            <div class="mt-2 flex items-baseline gap-2">
-                <span class="text-3xl font-black {summary && summary.riskScore > 50 ? 'text-rose-600' : 'text-emerald-600'}">
-                    {summary ? summary.riskScore : '0'}
-                </span>
-                <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">{summary ? riskBand(summary.riskScore) : 'N/A'}</span>
-            </div>
-        </div>
-        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:shadow-md">
-            <span class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Appliance Health</span>
-            <div class="mt-2 flex items-baseline gap-2">
-                <span class="text-xl font-black text-brand-600 dark:text-brand-400 uppercase tracking-tighter">{health?.status ?? 'Connecting...'}</span>
-                <span class="text-[10px] font-bold text-slate-400 ml-auto">{health?.version}</span>
+        <div class="flex gap-2">
+            <div class="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-3">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">System Nominal</span>
             </div>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Live Events -->
-        <div class="lg:col-span-2 bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl flex flex-col h-[450px]">
-            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
-                <h3 class="font-bold text-slate-400 flex items-center gap-2 text-xs uppercase tracking-widest">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Operational Stream
-                </h3>
-                <span class="text-[10px] font-mono text-slate-600">docker.sock</span>
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 opacity-0 animate-reveal stagger-1">
+        <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
             </div>
-            <div class="flex-1 overflow-y-auto p-4 space-y-1 font-mono text-[11px]">
-                {#each events as e}
-                    <div class="flex gap-3 text-slate-400">
-                        <span class="text-slate-600">[{new Date(e.time * 1000).toLocaleTimeString()}]</span>
-                        <span class="font-bold text-emerald-500 uppercase w-16">{e.action}</span>
-                        <span class="text-slate-300 truncate flex-1">{formatId(e.id)}</span>
-                        <span class="text-slate-600 truncate max-w-[150px]">via {e.from}</span>
-                    </div>
-                {:else}
-                    <div class="flex items-center justify-center h-full text-slate-600 italic">Listening for engine events...</div>
-                {/each}
-            </div>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Active Assets</p>
+            <p class="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{runningCount}<span class="text-lg text-slate-400 ml-2 font-medium">/ {containers.length}</span></p>
         </div>
 
-        <!-- Security Quick View -->
-        <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-            <h3 class="font-bold text-slate-900 dark:text-white mb-6 uppercase tracking-widest text-xs flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                Security Hotspots
-            </h3>
-            {#if summary}
-                <div class="space-y-4">
-                    <div class="p-4 bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/30 rounded-xl">
-                        <div class="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase mb-1">Critical CVEs</div>
-                        <div class="text-3xl font-black text-rose-700 dark:text-rose-300">{summary.critical}</div>
+        <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            </div>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Updates Detected</p>
+            <p class="text-4xl font-black {updateCount > 0 ? 'text-amber-500' : 'text-slate-900 dark:text-white'} tracking-tighter">{updateCount}</p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform text-rose-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            </div>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vulnerabilities</p>
+            <p class="text-4xl font-black {scanSummary?.critical > 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'} tracking-tighter">{scanSummary?.critical || 0}</p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+            </div>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Security Scans</p>
+            <p class="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{scanSummary?.totalScans || 0}</p>
+        </div>
+    </div>
+
+    <!-- AI Advisor -->
+    <div class="bg-slate-900 rounded-[2.5rem] p-10 border border-slate-800 shadow-2xl relative overflow-hidden opacity-0 animate-reveal stagger-2">
+        <div class="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-brand-600/10 to-transparent pointer-events-none"></div>
+        
+        <div class="relative z-10 space-y-8">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     </div>
-                    <div class="p-4 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 rounded-xl">
-                        <div class="text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase mb-1">High Severity</div>
-                        <div class="text-3xl font-black text-orange-700 dark:text-orange-300">{summary.high}</div>
+                    <div>
+                        <h3 class="text-xl font-black text-white uppercase tracking-tight">Fleet Intelligence Advisor</h3>
+                        <p class="text-xs text-slate-400 font-medium">Heuristic analysis of your current deployment state.</p>
                     </div>
-                    <div class="mt-6 pt-4 border-t border-slate-50 dark:border-slate-700 text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed italic">
-                        Latest scan for <code class="bg-slate-100 dark:bg-slate-700 px-1 rounded not-italic font-bold">{summary.target}</code> completed on {new Date(summary.scannedAt * 1000).toLocaleDateString()}.
+                </div>
+                <button 
+                    onclick={getFleetAdvice}
+                    disabled={analyzingFleet}
+                    class="px-8 py-3 bg-white hover:bg-slate-100 text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 active:scale-95 shadow-xl"
+                >
+                    {analyzingFleet ? 'Processing Fleet Data...' : 'Generate AI Advice'}
+                </button>
+            </div>
+
+            {#if fleetAdvice}
+                <div class="bg-slate-950/50 border border-slate-800 rounded-3xl p-8">
+                    <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
+                        {fleetAdvice}
                     </div>
                 </div>
             {:else}
-                <div class="flex flex-col items-center justify-center h-64 text-slate-400 gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <span class="text-sm italic">No security data available</span>
+                <div class="py-12 text-center">
+                    <p class="text-slate-500 text-sm font-medium italic">Request a fresh analysis to see proactive security and maintenance recommendations.</p>
                 </div>
             {/if}
         </div>

@@ -14,6 +14,8 @@
   import Diagnostics from "./lib/pages/Diagnostics.svelte";
   import Stacks from "./lib/pages/Stacks.svelte";
   import Settings from "./lib/pages/Settings.svelte";
+  import Audit from "./lib/pages/Audit.svelte";
+  import ToastContainer from "./lib/components/ToastContainer.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
   import { themeStore } from "./lib/stores/theme.svelte";
   
@@ -122,7 +124,7 @@
       {:else if currentRoute === 'updates'}
         <Updates params={routeParams} />
       {:else if currentRoute === 'audit'}
-        <AuditLog />
+        <Audit />
       {:else if currentRoute === 'diagnostics'}
         <Diagnostics />
       {:else if currentRoute === 'settings'}
@@ -130,6 +132,8 @@
       {/if}
     </div>
   </main>
+
+  <ToastContainer />
 </div>
 
 <style>

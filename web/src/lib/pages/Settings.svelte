@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import type { Settings } from "../api-types";
+    import { toasts } from "../stores/ToastStore";
 
     // Component State
     let settings = $state<Settings>({
@@ -18,8 +19,6 @@
 
     let activeTab = $state("notifications");
     let saving = $state(false);
-    let error = $state("");
-    let successMsg = $state("");
 
     async function loadSettings() {
         try {
@@ -31,7 +30,7 @@
             }
         } catch (e) {
             console.error("Failed to load settings", e);
-            error = "Failed to connect to backend.";
+            toasts.error("Failed to connect to backend service.");
         }
     }
 
@@ -41,8 +40,6 @@
 
     async function saveSettings() {
         saving = true;
-        error = "";
-        successMsg = "";
         try {
             const res = await fetch("/api/settings", {
                 method: "POST",
@@ -50,13 +47,12 @@
                 body: JSON.stringify(settings)
             });
 
-            if (!res.ok) throw new Error("Failed to save backend settings");
+            if (!res.ok) throw new Error("Backend refused settings update");
             
-            successMsg = "Configuration updated successfully.";
-            setTimeout(() => successMsg = "", 3000);
+            toasts.success("Appliance configuration synchronized.");
             await loadSettings(); // Reload to get fresh override state
         } catch (e) {
-            error = e instanceof Error ? e.message : "Save failed";
+            toasts.error(e instanceof Error ? e.message : "Synchronization failed");
         } finally {
             saving = false;
         }
@@ -66,13 +62,15 @@
 </script>
 
 <div class="max-w-4xl space-y-8">
-    <div class="border-l-4 border-brand-600 pl-6 py-2">
-        <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Appliance Configuration</h2>
-        <p class="text-sm text-slate-500 font-medium mt-1">Universal control for HarborWatch intelligence and integrations.</p>
+    <div class="flex items-center justify-between opacity-0 animate-reveal">
+        <div class="border-l-4 border-brand-600 pl-6 py-2">
+            <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">Appliance Configuration</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Universal control for HarborWatch intelligence and integrations.</p>
+        </div>
     </div>
 
     <!-- Tab Navigation -->
-    <div class="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-200 dark:border-slate-800 shadow-inner">
+    <div class="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-200 dark:border-slate-800 shadow-inner opacity-0 animate-reveal stagger-1">
         {#each [
             { id: 'notifications', label: 'Notifications', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
             { id: 'keys', label: 'API Keys', icon: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z' },
@@ -91,10 +89,10 @@
     </div>
 
     <!-- Settings Content -->
-    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden min-h-[500px] flex flex-col">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden min-h-[500px] flex flex-col opacity-0 animate-reveal stagger-2">
         <div class="p-8 flex-1 space-y-8">
             {#if activeTab === 'notifications'}
-                <div class="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="space-y-8">
                     <div class="space-y-6">
                         <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
                             <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600">
@@ -150,7 +148,7 @@
                     </div>
                 </div>
             {:else if activeTab === 'keys'}
-                <div class="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="space-y-10">
                     <div class="space-y-6">
                         <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
                             <div class="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600">
@@ -210,7 +208,7 @@
                     </div>
                 </div>
             {:else if activeTab === 'system'}
-                <div class="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="space-y-8">
                     <div class="space-y-6">
                         <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
                             <div class="w-8 h-8 rounded-lg bg-slate-500/10 flex items-center justify-center text-slate-600">
@@ -248,13 +246,7 @@
         <!-- Footer Actions -->
         <div class="px-8 py-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <div class="flex flex-col">
-                {#if error}
-                    <span class="text-xs font-bold text-rose-600 animate-pulse">{error}</span>
-                {:else if successMsg}
-                    <span class="text-xs font-bold text-emerald-600">{successMsg}</span>
-                {:else}
-                    <span class="text-[10px] text-slate-400 font-medium italic">Some settings may be read-only if defined in <code>docker-compose.yml</code>.</span>
-                {/if}
+                <span class="text-[10px] text-slate-400 font-medium italic">Some settings may be read-only if defined in <code>docker-compose.yml</code>.</span>
             </div>
             <button 
                 onclick={saveSettings}
