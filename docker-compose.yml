@@ -15,8 +15,8 @@ services:
     depends_on:
       - clamav
     volumes:
-      - ./data:/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${HW_DATA_PATH:-./data}:/data
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     ports:
       - "${HARBORWATCH_PORT:-18080}:8000"
     environment:
@@ -36,7 +36,7 @@ services:
     networks:
       - harborwatch_network
     volumes:
-      - ./clamav-db:/var/lib/clamav
+      - ${HW_CLAMAV_DB_PATH:-./clamav-db}:/var/lib/clamav
 
 networks:
   harborwatch_network:
