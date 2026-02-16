@@ -2,10 +2,13 @@ package updates
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 type fakeExecutor struct{ failStep string }
@@ -49,14 +52,18 @@ func (f fakeExecutor) Rollback(ctx context.Context, req Request, cause error) er
 
 func newTestService(t *testing.T, failStep string) *Service {
 	t.Helper()
-	store, err := OpenStore(filepath.Join(t.TempDir(), "updates.db"))
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+
+	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = store.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return NewService(store, fakeExecutor{failStep: failStep}, nil, nil, nil)
 }
 

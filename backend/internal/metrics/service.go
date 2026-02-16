@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"github.com/moby/moby/client"

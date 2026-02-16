@@ -2,6 +2,31 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.0] - 2026-02-16
+
+### Added
+- **Radical UI Theming Engine:**
+  - Implemented 5 structurally unique themes: **Tech Innovation**, **Ocean Depths**, **Midnight Galaxy**, **Forest Canopy**, and **Sunset Boulevard**.
+  - Themes now control global geometry (border radius, widths), typography pairs, and advanced effects (starfields, grid backgrounds, glassmorphism blur).
+  - Added a persistent **Theme & Interface** switcher in the Settings panel.
+- **Architectural Stability:**
+  - Implemented a **Unified Database Connection Pool** with WAL (Write-Ahead Logging) mode and 5-second busy timeouts.
+  - Resolved intermittent deadlocks and "Querying History..." hangs by sharing a single connection across all services.
+  - Stabilized Docker event streaming with a 10-second heartbeat and enhanced SSE compliance for reverse proxies.
+- **Monitoring & Lifecycle:**
+  - Refined the "Safe-by-Default" policy: Monitoring tasks (metrics, security) are now **On** by default, while destructive tasks (pruning) remain **Off** by default.
+  - Added backend debug logging for container inspection to improve diagnostics.
+
+### Fixed
+- **Routing & API:**
+  - Resolved "Container not found" errors by correcting API route precedence in the backend router.
+  - Corrected broken API paths for **Container Details** and **Audit Job** retrieval in the frontend.
+- **Synchronization Logic:**
+  - Fixed a critical deadlock where settings synchronization would hang if triggered during a database write.
+- **Frontend Refinement:**
+  - Resolved various Svelte 5 prop-mismatch warnings and TypeScript build errors.
+  - Fixed accessibility warnings in the Theme Switcher component.
+
 ## [0.6.1] - 2026-02-16
 
 ### Added

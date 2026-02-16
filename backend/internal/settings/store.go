@@ -3,7 +3,6 @@ package settings
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"os"
 
 	_ "modernc.org/sqlite"

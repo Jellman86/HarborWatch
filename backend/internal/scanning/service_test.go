@@ -2,10 +2,13 @@ package scanning
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 type fakeScanner struct {
@@ -29,14 +32,18 @@ func (f fakeScanner) Scan(ctx context.Context, target string) (Result, error) {
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	store, err := OpenStore(filepath.Join(t.TempDir(), "scan.db"))
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "scan.db"))
 	if err != nil {
-		t.Fatalf("open store: %v", err)
+		t.Fatalf("open sqlite: %v", err)
 	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+
+	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init store: %v", err)
 	}
-	t.Cleanup(func() { _ = store.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return store
 }
 

@@ -5,6 +5,7 @@ HarborWatch is a professional, local-first container maintenance and security ap
 ## Key Features
 
 - **Container Command Center:** Dedicated full-page views for every container with deep insights into metrics, security history, and lifecycle status.
+- **Radical Design System:** 5 fully distinctive UI themes (Tech, Ocean, Midnight, Forest, Sunset) that transform the entire interface architecture, typography, and geometry.
 - **Fleet Management:** modern Card and List views for your entire container inventory with real-time "Update Available" detection.
 - **Automated Compose Doctor:** Zero-config security auditing. HarborWatch automatically retrieves or reconstructs your `docker-compose.yml` for AI-powered security analysis.
 - **Per-Container Lifecycle Policies:** Fine-grained control over updates. Set "Auto", "Manual", or "Locked" policies per asset with custom health check validation.
