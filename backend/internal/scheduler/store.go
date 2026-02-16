@@ -90,6 +90,11 @@ func (s *Store) ListSchedules(ctx context.Context) ([]ScheduleEntry, error) {
 	return list, nil
 }
 
+func (s *Store) DeleteSchedule(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM schedules WHERE id=?", id)
+	return err
+}
+
 func (s *Store) GetSchedule(ctx context.Context, id string) (ScheduleEntry, error) {
 	var e ScheduleEntry
 	var enabled int
