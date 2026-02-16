@@ -63,11 +63,21 @@ func (s *Service) AddTask(spec string, task Task, enabled bool) error {
 
 	// 2. Persist to database if not present
 	if s.store != nil {
-		_ = s.store.SaveSchedule(context.Background(), ScheduleEntry{
+		ctx := context.Background()
+		_ = s.store.SaveSchedule(ctx, ScheduleEntry{
 			ID:       taskName,
 			CronSpec: spec,
 			Enabled:  enabled,
 		})
+
+		// 3. Fixup: If enabled requested, but DB has it disabled and it never ran (likely due to previous bug), enable it.
+		if enabled {
+			entry, err := s.store.GetSchedule(ctx, taskName)
+			if err == nil && !entry.Enabled && entry.LastRun == 0 {
+				log.Printf("Fixing up disabled system task: %s", taskName)
+				_ = s.store.ToggleSchedule(ctx, taskName, true)
+			}
+		}
 	}
 
 	return nil

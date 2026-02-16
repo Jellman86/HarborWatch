@@ -285,6 +285,70 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				writeJSON(w, http.StatusOK, containers)
 			})
 
+			r.Get("/images", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				images, err := dockerClient.ListImages(ctx)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "docker_error", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, images)
+			})
+
+			r.Get("/events", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				stream, err := dockerClient.OpenEventStream(r.Context())
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "docker_error", err.Error())
+					return
+				}
+				defer stream.Close()
+				flusher, ok := w.(http.Flusher)
+				if !ok {
+					writeError(w, http.StatusInternalServerError, "stream_unsupported", "streaming unsupported by response writer")
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set("Connection", "keep-alive")
+				heartbeat := time.NewTicker(15 * time.Second)
+				defer heartbeat.Stop()
+				scanner := bufio.NewScanner(stream)
+				scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+				for {
+					select {
+					case <-r.Context().Done():
+						return
+					case <-heartbeat.C:
+						fmt.Fprint(w, ": ping\n\n")
+						flusher.Flush()
+					default:
+						if !scanner.Scan() {
+							if err := scanner.Err(); err != nil && r.Context().Err() == nil {
+								fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
+								flusher.Flush()
+							}
+							return
+						}
+						event := convertEvent(scanner.Bytes())
+						payload, err := json.Marshal(event)
+						if err != nil {
+							continue
+						}
+						fmt.Fprintf(w, "event: docker\ndata: %s\n\n", payload)
+						flusher.Flush()
+					}
+				}
+			})
+
 			r.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
 				if dockerClient == nil {
 					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
@@ -396,70 +460,6 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					}
 					writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 				})
-			})
-
-			r.Get("/images", func(w http.ResponseWriter, r *http.Request) {
-				if dockerClient == nil {
-					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
-					return
-				}
-				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-				defer cancel()
-				images, err := dockerClient.ListImages(ctx)
-				if err != nil {
-					writeError(w, http.StatusBadGateway, "docker_error", err.Error())
-					return
-				}
-				writeJSON(w, http.StatusOK, images)
-			})
-
-			r.Get("/events", func(w http.ResponseWriter, r *http.Request) {
-				if dockerClient == nil {
-					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
-					return
-				}
-				stream, err := dockerClient.OpenEventStream(r.Context())
-				if err != nil {
-					writeError(w, http.StatusBadGateway, "docker_error", err.Error())
-					return
-				}
-				defer stream.Close()
-				flusher, ok := w.(http.Flusher)
-				if !ok {
-					writeError(w, http.StatusInternalServerError, "stream_unsupported", "streaming unsupported by response writer")
-					return
-				}
-				w.Header().Set("Content-Type", "text/event-stream")
-				w.Header().Set("Cache-Control", "no-cache")
-				w.Header().Set("Connection", "keep-alive")
-				heartbeat := time.NewTicker(15 * time.Second)
-				defer heartbeat.Stop()
-				scanner := bufio.NewScanner(stream)
-				scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-				for {
-					select {
-					case <-r.Context().Done():
-						return
-					case <-heartbeat.C:
-						fmt.Fprint(w, ": ping\n\n")
-						flusher.Flush()
-					default:
-						if !scanner.Scan() {
-							if err := scanner.Err(); err != nil && r.Context().Err() == nil {
-								fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
-								flusher.Flush()
-							}
-							return
-						}
-						event := convertEvent(scanner.Bytes())
-						payload, err := json.Marshal(event)
-						if err != nil {
-							continue
-						}
-						fmt.Fprintf(w, "event: docker\ndata: %s\n\n", payload)
-						flusher.Flush()
-					}
-				}
 			})
 		})
 

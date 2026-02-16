@@ -12,6 +12,7 @@ type ScheduleEntry struct {
 	ID       string `json:"id"`
 	CronSpec string `json:"cronSpec"`
 	Enabled  bool   `json:"enabled"`
+	LastRun  int64  `json:"lastRun"`
 }
 
 type Store struct {
@@ -70,7 +71,7 @@ func (s *Store) ToggleSchedule(ctx context.Context, id string, enabled bool) err
 }
 
 func (s *Store) ListSchedules(ctx context.Context) ([]ScheduleEntry, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, cron_spec, enabled FROM schedules")
+	rows, err := s.db.QueryContext(ctx, "SELECT id, cron_spec, enabled, last_run FROM schedules")
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +81,7 @@ func (s *Store) ListSchedules(ctx context.Context) ([]ScheduleEntry, error) {
 	for rows.Next() {
 		var e ScheduleEntry
 		var enabled int
-		if err := rows.Scan(&e.ID, &e.CronSpec, &enabled); err != nil {
+		if err := rows.Scan(&e.ID, &e.CronSpec, &enabled, &e.LastRun); err != nil {
 			return nil, err
 		}
 		e.Enabled = enabled == 1
@@ -89,9 +90,15 @@ func (s *Store) ListSchedules(ctx context.Context) ([]ScheduleEntry, error) {
 	return list, nil
 }
 
-func (s *Store) DeleteSchedule(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM schedules WHERE id=?", id)
-	return err
+func (s *Store) GetSchedule(ctx context.Context, id string) (ScheduleEntry, error) {
+	var e ScheduleEntry
+	var enabled int
+	err := s.db.QueryRowContext(ctx, "SELECT id, cron_spec, enabled, last_run FROM schedules WHERE id=?", id).Scan(&e.ID, &e.CronSpec, &enabled, &e.LastRun)
+	if err != nil {
+		return ScheduleEntry{}, err
+	}
+	e.Enabled = enabled == 1
+	return e, nil
 }
 
 func (s *Store) UpdateLastRun(ctx context.Context, id string, ts int64) error {
