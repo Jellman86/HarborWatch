@@ -57,7 +57,7 @@ func newTestService(t *testing.T, failStep string) *Service {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	return NewService(store, fakeExecutor{failStep: failStep})
+	return NewService(store, fakeExecutor{failStep: failStep}, nil)
 }
 
 func TestUpdatePipelineSuccess(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 )
 
 type Request struct {
@@ -21,13 +22,19 @@ type Request struct {
 type Service struct {
 	store    *Store
 	executor Executor
+	ai       *ai.Service
 
 	mu          sync.RWMutex
 	subscribers map[string][]chan gen.UpdateStepEvent
 }
 
-func NewService(store *Store, executor Executor) *Service {
-	return &Service{store: store, executor: executor, subscribers: map[string][]chan gen.UpdateStepEvent{}}
+func NewService(store *Store, executor Executor, aiSvc *ai.Service) *Service {
+	return &Service{
+		store:       store,
+		executor:    executor,
+		ai:          aiSvc,
+		subscribers: map[string][]chan gen.UpdateStepEvent{},
+	}
 }
 
 func NewServiceFromEnv() (*Service, error) {
@@ -42,7 +49,8 @@ func NewServiceFromEnv() (*Service, error) {
 	if err := store.Init(context.Background()); err != nil {
 		return nil, err
 	}
-	return NewService(store, NewCommandExecutor()), nil
+	aiSvc := ai.NewService(ai.NewProviderFromEnv())
+	return NewService(store, NewCommandExecutor(), aiSvc), nil
 }
 
 func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
@@ -104,6 +112,33 @@ func (s *Service) execute(jobID string, req Request) {
 		s.finish(jobID, "failed", failed)
 		return
 	}
+
+	// NEW: AI Release Analysis Step
+	if s.ai != nil && s.ai.HasProvider() {
+		_ = s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
+			// In a real implementation, we'd fetch the actual release notes here.
+			// For now, we simulate with a placeholder.
+			notes := "Placeholder release notes for " + req.TargetImage
+			analysis, err := s.ai.AnalyzeReleaseNotes(ctx, notes)
+			if err != nil {
+				return err
+			}
+			summary := &gen.AIAnalysisSummary{
+				RiskScore:       analysis.RiskScore,
+				RiskLevel:       string(analysis.RiskLevel),
+				Summary:         analysis.Summary,
+				BreakingChanges: analysis.BreakingChanges,
+			}
+			_ = s.store.SaveAIAnalysis(ctx, jobID, summary)
+			
+			// Policy enforcement: Pause if high risk
+			if analysis.RiskScore >= 80 {
+				return fmt.Errorf("AI detected high risk (%d): %s", analysis.RiskScore, analysis.Summary)
+			}
+			return nil
+		})
+	}
+
 	if err := s.runStep(ctx, jobID, "backup", func(ctx context.Context) error { return s.executor.Backup(ctx, req) }); err != nil {
 		s.rollback(jobID, req, err)
 		return

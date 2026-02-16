@@ -77,6 +77,7 @@
 
     const steps = [
         { id: 'preflight', label: 'Preflight' },
+        { id: 'release_analysis', label: 'AI Analysis' },
         { id: 'backup', label: 'Backup' },
         { id: 'pull', label: 'Pull Image' },
         { id: 'recreate', label: 'Recreate' },
@@ -141,6 +142,36 @@
                     {updateJob?.status ?? 'Running'}
                 </span>
             </div>
+
+            <!-- AI Analysis Result -->
+            {#if updateJob?.aiAnalysis}
+                <div class="mx-6 mb-6 p-5 bg-brand-50 dark:bg-brand-900/10 border border-brand-100 dark:border-brand-900/30 rounded-2xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <span class="font-bold text-slate-900 dark:text-slate-100 text-sm uppercase tracking-wider">AI Intelligence Report</span>
+                        </div>
+                        <span class="px-2 py-1 rounded text-[10px] font-black uppercase {updateJob.aiAnalysis.riskLevel === 'Low' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+                            {updateJob.aiAnalysis.riskLevel} Risk
+                        </span>
+                    </div>
+                    <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4 italic">
+                        "{updateJob.aiAnalysis.summary}"
+                    </p>
+                    {#if updateJob.aiAnalysis.breakingChanges.length > 0}
+                        <div class="space-y-2">
+                            <span class="text-[9px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest">Potential Breaking Changes:</span>
+                            <ul class="list-disc list-inside text-xs text-slate-500 dark:text-slate-400">
+                                {#each updateJob.aiAnalysis.breakingChanges as change}
+                                    <li>{change}</li>
+                                {/each}
+                            </ul>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
 
             <!-- Pipeline Stepper -->
             <div class="p-10">

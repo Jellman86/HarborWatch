@@ -3,6 +3,7 @@ package updates
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
@@ -57,6 +58,13 @@ CREATE TABLE IF NOT EXISTS update_steps (
 		_, _ = s.db.ExecContext(ctx, "ALTER TABLE update_runs ADD COLUMN container_id TEXT NOT NULL DEFAULT ''")
 	}
 
+	// 3. Migration: Add ai_analysis if it doesn't exist (v0.6.0)
+	var hasAIAnalysis bool
+	err = s.db.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('update_runs') WHERE name='ai_analysis'").Scan(&hasAIAnalysis)
+	if err == nil && !hasAIAnalysis {
+		_, _ = s.db.ExecContext(ctx, "ALTER TABLE update_runs ADD COLUMN ai_analysis TEXT NOT NULL DEFAULT ''")
+	}
+
 	return nil
 }
 
@@ -81,6 +89,12 @@ UPDATE update_runs SET status=?, updated_at=?, error=? WHERE id=?
 	return nil
 }
 
+func (s *Store) SaveAIAnalysis(ctx context.Context, jobID string, summary *gen.AIAnalysisSummary) error {
+	data, _ := json.Marshal(summary)
+	_, err := s.db.ExecContext(ctx, `UPDATE update_runs SET ai_analysis=? WHERE id=?`, string(data), jobID)
+	return err
+}
+
 func (s *Store) AddStep(ctx context.Context, e gen.UpdateStepEvent) error {
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO update_steps(run_id, step, status, message, ts)
@@ -94,16 +108,24 @@ VALUES(?, ?, ?, ?, ?)
 
 func (s *Store) GetRun(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, container_id, target_image, validate_url, status, created_at, updated_at, error
+SELECT id, container_id, target_image, validate_url, status, created_at, updated_at, error, ai_analysis
 FROM update_runs WHERE id=?
 `, jobID)
 
 	var run gen.UpdateJobStatus
-	if err := row.Scan(&run.JobID, &run.ContainerID, &run.TargetImage, &run.ValidateURL, &run.Status, &run.CreatedAt, &run.UpdatedAt, &run.Error); err != nil {
+	var aiRaw string
+	if err := row.Scan(&run.JobID, &run.ContainerID, &run.TargetImage, &run.ValidateURL, &run.Status, &run.CreatedAt, &run.UpdatedAt, &run.Error, &aiRaw); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("read update run: %w", err)
+	}
+
+	if aiRaw != "" {
+		var summary gen.AIAnalysisSummary
+		if err := json.Unmarshal([]byte(aiRaw), &summary); err == nil {
+			run.AIAnalysis = &summary
+		}
 	}
 
 	rows, err := s.db.QueryContext(ctx, `

@@ -38,6 +38,11 @@ All notable changes to HarborWatch are documented in this file.
   - Idempotent database migration system for seamless schema updates
   - Frontend refactored to Svelte 5 runes for performance and clarity
   - Hardened update validation with retry loops and safe rollback cleanup
+- AI Intelligence Core (v2 Milestone 6):
+  - Integrated OpenAI provider for semantic analysis of release notes
+  - Automated "Risk Gatekeeper" in the update pipeline to pause updates on high-risk changes
+  - New UI components for AI Analysis reports and status monitoring
+  - Persistent AI analysis history in SQLite
 - UI Expansion (YA-WAMF Inspired):
   - Transitioned from single-page prototype to multi-view security appliance
   - Integrated Tailwind CSS for production-grade styling

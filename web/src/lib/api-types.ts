@@ -16,4 +16,4 @@ export type ReleaseRiskSummary = { repo: string; latestTag: string; latestPublis
 export type UpdateStartRequest = { containerId: string; targetImage: string; validateUrl: string };
 export type UpdateStartResponse = { jobId: string; status: string };
 export type UpdateStepEvent = { jobId: string; step: string; status: string; message: string; timestamp: number };
-export type UpdateJobStatus = { jobId: string; containerId: string; targetImage: string; validateUrl: string; status: string; createdAt: number; updatedAt: number; error: string; steps: UpdateStepEvent[] };
+export type UpdateJobStatus = { jobId: string; containerId: string; targetImage: string; validateUrl: string; status: string; createdAt: number; updatedAt: number; error: string; aiAnalysis?: { riskScore: number; riskLevel: string; summary: string; breakingChanges: string[] }; steps: UpdateStepEvent[] };

@@ -1,9 +1,24 @@
 <script lang="ts">
+    import { onMount } from "svelte";
+
     // HarborWatch Settings (Persistence via LocalStorage for now)
     let harborwatchUrl = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('hw_url') ?? window.location.origin) : "");
     let validateUrlPattern = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('hw_validate_pattern') ?? "http://localhost:18080/health") : "");
     let notifyDiscord = $state(false);
     let autoScan = $state(true);
+    let aiEnabled = $state(false);
+
+    async function loadAIStatus() {
+        try {
+            const res = await fetch("/api/ai/status");
+            const data = await res.json();
+            aiEnabled = data.enabled;
+        } catch {}
+    }
+
+    onMount(() => {
+        loadAIStatus();
+    });
 
     function saveSettings() {
         if (typeof localStorage !== 'undefined') {
@@ -38,6 +53,25 @@
                     <label class="text-[10px] font-black uppercase text-slate-400 ml-1">Default Validation Pattern</label>
                     <input bind:value={validateUrlPattern} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
                 </div>
+            </div>
+        </section>
+
+        <section class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+            <h3 class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                AI Intelligence
+            </h3>
+            
+            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                <div>
+                    <span class="text-sm font-bold text-slate-700 dark:text-slate-300">AI Provider Status</span>
+                    <p class="text-[10px] text-slate-500">Enable by setting <code>OPENAI_API_KEY</code> in environment.</p>
+                </div>
+                <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase {aiEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}">
+                    {aiEnabled ? 'Active' : 'Disabled'}
+                </span>
             </div>
         </section>
 

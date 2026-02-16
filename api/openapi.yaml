@@ -380,6 +380,13 @@ components:
         createdAt: { type: integer, format: int64 }
         updatedAt: { type: integer, format: int64 }
         error: { type: string }
+        aiAnalysis:
+          type: object
+          properties:
+            riskScore: { type: integer }
+            riskLevel: { type: string }
+            summary: { type: string }
+            breakingChanges: { type: array, items: { type: string } }
         steps:
           type: array
           items: { $ref: '#/components/schemas/UpdateStepEvent' }
