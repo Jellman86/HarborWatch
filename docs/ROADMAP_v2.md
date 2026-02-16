@@ -110,3 +110,27 @@ The system follows a tiered discovery process for each container:
 ### 4. Portainer Sync Logic
 - **Discovery:** System matches container names/labels against the Portainer `/api/stacks` endpoint.
 - **Update Hook:** When HarborWatch updates a container, it will optionally trigger the Portainer Stack Webhook (if defined) to ensure Portainer's internal DB stays in sync with the live container state.
+
+---
+
+## Milestone 9: Performance Profiler & AI Diagnostics
+**Goal:** Proactively identify resource exhaustion and optimize container efficiency.
+
+### 9.1. The Metrics Collector
+*   **Mechanism:** Stream `docker stats --no-stream` for all active containers every 60 seconds.
+*   **Data Points:** CPU %, Memory Usage (current/max), Memory Limit, Network I/O, Block I/O.
+*   **Persistence:** Store in a `container_metrics` table with a **retention policy** (e.g., 7 days of raw data, 30 days of hourly averages).
+
+### 9.2. Resource Exhaustion Alerts
+*   **Feature:** "Early Warning System."
+*   **Logic:** If a container's Memory Usage > 90% of its Limit for 3 consecutive checks, trigger a "Near-OOM" alert.
+*   **Diagnosis:** If a container crashes, HarborWatch provides a "Crash Context" report showing its resource trends in the 5 minutes leading up to the failure.
+
+### 9.3. AI Performance Consultant
+*   **Feature:** "Analyze My Resources."
+*   **Prompting:** Pass a 24-hour metric window to the AI.
+*   **Insight:** AI identifies "Memory Leaks" (steady linear growth) vs. "Expected Spikes" and suggests optimized `mem_limit` and `cpu_shares` values for your `docker-compose.yml`.
+
+### 9.4. Visual Profiler UI
+*   **Dashboard Integration:** Small "Sparkline" charts next to each container in the Inventory.
+*   **Deep Dive View:** A dedicated page with interactive charts (ApexCharts) to overlay metrics from multiple containers to find cross-service bottlenecks.

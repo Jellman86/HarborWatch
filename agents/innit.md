@@ -46,6 +46,7 @@ Refer to `docs/ROADMAP_v2.md` for the detailed specification of:
 - Milestone 6: AI Intelligence Core
 - Milestone 7: Automation & Scheduler
 - Milestone 8: Ecosystem Integrations
+- Milestone 9: Performance Profiler & AI Diagnostics
 
 You are a senior staff software engineer and security-focused SRE. Your task is to build HarborWatch: a local-first container maintenance and security platform for self-hosted Docker environments.
 
