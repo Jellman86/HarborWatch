@@ -49,8 +49,8 @@ func (s *Service) Stop() {
 	s.cron.Stop()
 }
 
-// AddTask registers a task into the system. If it's not in the DB, it's saved as DISABLED.
-func (s *Service) AddTask(spec string, task Task) error {
+// AddTask registers a task into the system. If it's not in the DB, it's saved with the provided default enabled state.
+func (s *Service) AddTask(spec string, task Task, enabled bool) error {
 	taskName := task.Name()
 
 	// 1. Ensure it's in the registry so it can be enabled later
@@ -61,12 +61,12 @@ func (s *Service) AddTask(spec string, task Task) error {
 	}
 	s.mu.Unlock()
 
-	// 2. Persist to database if not present (On by default for system tasks)
+	// 2. Persist to database if not present
 	if s.store != nil {
 		_ = s.store.SaveSchedule(context.Background(), ScheduleEntry{
 			ID:       taskName,
 			CronSpec: spec,
-			Enabled:  true,
+			Enabled:  enabled,
 		})
 	}
 

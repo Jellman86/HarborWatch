@@ -192,12 +192,12 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 			schedSvc.RegisterTask("docker_system_prune", func() scheduler.Task {
 				return scheduler.NewDockerPruneTask(rawDocker)
 			})
-			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker))
+			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker), false) // Destructive: Off by default
 
 			schedSvc.RegisterTask("container_update_check", func() scheduler.Task {
 				return dockerengine.NewUpdateCheckTask(rawDocker)
 			})
-			_ = schedSvc.AddTask("0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker))
+			_ = schedSvc.AddTask("0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker), true)
 
 			// Trigger immediate update check on boot
 			go func() {
@@ -210,12 +210,12 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 				schedSvc.RegisterTask("metrics_collector", func() scheduler.Task {
 					return metricService.GetCollectorTask()
 				})
-				_ = schedSvc.AddTask("* * * * *", metricService.GetCollectorTask())
+				_ = schedSvc.AddTask("* * * * *", metricService.GetCollectorTask(), true)
 
 				schedSvc.RegisterTask("metrics_prune", func() scheduler.Task {
 					return metricService.GetPruneTask()
 				})
-				_ = schedSvc.AddTask("0 0 0 * * *", metricService.GetPruneTask())
+				_ = schedSvc.AddTask("0 0 0 * * *", metricService.GetPruneTask(), true)
 			}
 
 			// Security: Scheduled Sweeps
@@ -223,12 +223,12 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
 					return scheduler.NewTrivySweepTask(rawDocker, scanService)
 				})
-				_ = schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService))
+				_ = schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService), true)
 
 				schedSvc.RegisterTask("malware_sweep_clamav", func() scheduler.Task {
 					return scheduler.NewClamAVSweepTask(rawDocker, scanService)
 				})
-				_ = schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService))
+				_ = schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService), true)
 			}
 		}
 	}
@@ -246,7 +246,7 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 			olderThan := time.Now().Add(-7 * 24 * time.Hour).Unix()
 			_, err := diagService.PruneLogs(ctx, olderThan)
 			return err
-		}))
+		}), true)
 	}
 
 	// Bootstrap schedules from DB
