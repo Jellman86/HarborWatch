@@ -180,6 +180,17 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 			})
 			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker))
 
+			schedSvc.RegisterTask("container_update_check", func() scheduler.Task {
+				return dockerengine.NewUpdateCheckTask(rawDocker)
+			})
+			_ = schedSvc.AddTask("0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker))
+
+			// Trigger immediate update check on boot
+			go func() {
+				time.Sleep(5 * time.Second)
+				_ = schedSvc.RunTask(context.Background(), "container_update_check")
+			}()
+
 			// Metrics Engine
 			if metricService != nil {
 				schedSvc.RegisterTask("metrics_collector", func() scheduler.Task {

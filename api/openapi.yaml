@@ -340,6 +340,7 @@ components:
         state: { type: string }
         status: { type: string }
         labels: { type: object, additionalProperties: { type: string } }
+        updateAvailable: { type: boolean }
     ImageSummary:
       type: object
       required: [id, repoTags, size]

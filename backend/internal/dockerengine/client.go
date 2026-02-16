@@ -67,12 +67,13 @@ func (c *Client) ListContainers(ctx context.Context) ([]gen.ContainerSummary, er
 	out := make([]gen.ContainerSummary, 0, len(raw))
 	for _, item := range raw {
 		out = append(out, gen.ContainerSummary{
-			ID:     item.ID,
-			Names:  item.Names,
-			Image:  item.Image,
-			State:  item.State,
-			Status: item.Status,
-			Labels: item.Labels,
+			ID:              item.ID,
+			Names:           item.Names,
+			Image:           item.Image,
+			State:           item.State,
+			Status:          item.Status,
+			Labels:          item.Labels,
+			UpdateAvailable: globalUpdateStore.Get(item.Image),
 		})
 	}
 	return out, nil

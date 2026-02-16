@@ -8,7 +8,15 @@
         onNavigate: (route: string, params?: any) => void;
     }>();
 
+    let viewMode = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('hw_container_view') ?? 'list') : 'list');
     let expandedContainer = $state<string | null>(null);
+
+    function toggleView() {
+        viewMode = viewMode === 'list' ? 'cards' : 'list';
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('hw_container_view', viewMode);
+        }
+    }
     let metrics = $state<Metric[]>([]);
     let loadingMetrics = $state(false);
     let aiAnalyzing = $state(false);
@@ -94,13 +102,34 @@
 <div class="space-y-6">
     <div class="flex items-center justify-between">
         <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Container Inventory</h2>
-        <div class="flex gap-2">
+        <div class="flex items-center gap-3">
+            <div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                <button 
+                    onclick={() => { if(viewMode !== 'list') toggleView() }}
+                    class="p-1.5 rounded-lg transition-all {viewMode === 'list' ? 'bg-white dark:bg-slate-700 shadow-sm text-brand-600' : 'text-slate-400 hover:text-slate-600'}"
+                    title="List View"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <button 
+                    onclick={() => { if(viewMode !== 'cards') toggleView() }}
+                    class="p-1.5 rounded-lg transition-all {viewMode === 'cards' ? 'bg-white dark:bg-slate-700 shadow-sm text-brand-600' : 'text-slate-400 hover:text-slate-600'}"
+                    title="Card View"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                </button>
+            </div>
             <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">
                 {containers.length} Total
             </span>
         </div>
     </div>
 
+    {#if viewMode === 'list'}
     <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <table class="w-full text-left border-collapse">
             <thead>
@@ -132,8 +161,17 @@
                             </button>
                         </td>
                         <td class="px-6 py-4 font-mono text-xs text-slate-400">{formatId(c.id)}</td>
-                        <td class="px-6 py-4 font-bold text-slate-900 dark:text-white">
-                            {c.names?.[0]?.replace(/^\//, '') ?? 'unnamed'}
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-slate-900 dark:text-white">
+                                    {c.names?.[0]?.replace(/^\//, '') ?? 'unnamed'}
+                                </span>
+                                {#if c.updateAvailable}
+                                    <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded text-[8px] font-black uppercase animate-pulse">
+                                        Update Available
+                                    </span>
+                                {/if}
+                            </div>
                         </td>
                         <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 truncate max-w-[150px]" title={c.image}>
                             {c.image}
@@ -249,4 +287,72 @@
             </tbody>
         </table>
     </div>
+    {:else}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {#each containers as c}
+            <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col group hover:border-brand-500/50 transition-all">
+                <div class="p-5 flex-1">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex flex-col min-w-0">
+                            <h3 class="font-black text-slate-900 dark:text-white truncate text-lg tracking-tight">
+                                {c.names?.[0]?.replace(/^\//, '') ?? 'unnamed'}
+                            </h3>
+                            <span class="text-[10px] font-mono text-slate-400">{formatId(c.id)}</span>
+                        </div>
+                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase {stateColor(c.state)}">
+                            {c.state}
+                        </span>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Image</span>
+                            <span class="text-xs text-slate-600 dark:text-slate-300 truncate font-medium" title={c.image}>{c.image}</span>
+                        </div>
+
+                        <div class="flex flex-col h-[40px] justify-center">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Activity (1h)</span>
+                            <Sparkline containerId={c.id} />
+                        </div>
+
+                        {#if c.updateAvailable}
+                            <div class="p-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl flex items-center gap-3 animate-pulse">
+                                <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+                                <span class="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase">Update Available</span>
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+
+                <div class="px-5 py-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                    <div class="flex gap-2">
+                        {#if getIntelURL(c.labels)}
+                            <a href={getIntelURL(c.labels)} target="_blank" class="p-2 text-slate-400 hover:text-brand-600 transition-colors" title="Repository">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                </svg>
+                            </a>
+                        {/if}
+                    </div>
+                    <div class="flex gap-2">
+                        <button 
+                            onclick={() => handleTriggerScan(c.image)}
+                            class="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-brand-600 transition-all"
+                        >
+                            Scan
+                        </button>
+                        <button 
+                            onclick={() => handleCheckUpdate(c)}
+                            class="px-4 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 hover:border-brand-500 transition-all"
+                        >
+                            Update
+                        </button>
+                    </div>
+                </div>
+            </div>
+        {:else}
+            <div class="col-span-full py-12 text-center text-slate-400 italic">No containers found on socket</div>
+        {/each}
+    </div>
+    {/if}
 </div>
