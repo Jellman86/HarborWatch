@@ -104,4 +104,6 @@
     });
 </script>
 
-<div class="w-full h-[250px]" use:chart={options}></div>
+{#key metrics.length}
+    <div class="w-full h-[250px]" use:chart={options}></div>
+{/key}

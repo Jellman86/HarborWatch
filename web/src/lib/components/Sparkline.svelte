@@ -57,7 +57,9 @@
 </script>
 
 {#if !loading && metrics.length > 0}
-    <div class="w-[100px] h-[30px]" use:chart={options}></div>
+    {#key metrics.length}
+        <div class="w-[100px] h-[30px]" use:chart={options}></div>
+    {/key}
 {:else}
     <div class="w-[100px] h-[30px] bg-slate-100 dark:bg-slate-800/50 rounded animate-pulse"></div>
 {/if}

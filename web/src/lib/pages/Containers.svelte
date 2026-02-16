@@ -229,14 +229,16 @@
                                         <span class="text-sm font-bold uppercase tracking-widest">Retrieving Metrics...</span>
                                     </div>
                                 {:else if metrics.length > 0}
-                                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                                        <div class="bg-white dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                                            <MetricChart {metrics} title="CPU Utilization (6h)" type="cpu" />
+                                    {#key expandedContainer}
+                                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                            <div class="bg-white dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                <MetricChart {metrics} title="CPU Utilization (6h)" type="cpu" />
+                                            </div>
+                                            <div class="bg-white dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                <MetricChart {metrics} title="Memory footprint (6h)" type="memory" />
+                                            </div>
                                         </div>
-                                        <div class="bg-white dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                                            <MetricChart {metrics} title="Memory footprint (6h)" type="memory" />
-                                        </div>
-                                    </div>
+                                    {/key}
 
                                     <div class="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
                                         <div class="flex items-center justify-between mb-4">
