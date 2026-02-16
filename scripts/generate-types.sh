@@ -8,8 +8,9 @@ package gen
 
 type HealthResponse struct { Status string `json:"status"`; Service string `json:"service"`; Version string `json:"version"` }
 type Metric struct { ContainerID string `json:"containerId"`; Timestamp int64 `json:"timestamp"`; CPUPercent float64 `json:"cpuPercent"`; MemoryUsage int64 `json:"memoryUsage"`; MemoryLimit int64 `json:"memoryLimit"`; Pids int `json:"pids"` }
-type AuditJobSummary struct { ID string `json:"id"`; Type string `json:"type"`; Target string `json:"target"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
+type AuditJobSummary struct { ID string `json:"id"`; Type string `json:"type"`; Target string `json:"target"`; ContainerID string `json:"containerId,omitempty"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
 type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"names"`; Image string `json:"image"`; State string `json:"state"`; Status string `json:"status"`; Labels map[string]string `json:"labels"`; UpdateAvailable bool `json:"updateAvailable"` }
+type ContainerDetail struct { Summary ContainerSummary `json:"summary"`; VulnerabilitySummary *ScanSummary `json:"vulnerabilitySummary,omitempty"`; MalwareSummary []MalwareScanSummary `json:"malwareSummary,omitempty"`; RecentMetrics []Metric `json:"recentMetrics,omitempty"`; ActionHistory []AuditJobSummary `json:"actionHistory,omitempty"` }
 type ImageSummary struct { ID string `json:"id"`; RepoTags []string `json:"repoTags"`; Size int64 `json:"size"` }
 type DockerEvent struct { Type string `json:"type"`; Action string `json:"action"`; ID string `json:"id"`; From string `json:"from"`; Attributes map[string]string `json:"attributes,omitempty"`; Time int64 `json:"time"` }
 type ScanRunRequest struct { Target string `json:"target"` }
@@ -33,8 +34,9 @@ cat > web/src/lib/api-types.ts <<'GEN_TS'
 
 export type HealthResponse = { status: string; service: string; version: string };
 export type Metric = { containerId: string; timestamp: number; cpuPercent: number; memoryUsage: number; memoryLimit: number; pids: number };
-export type AuditJobSummary = { id: string; type: string; target: string; status: string; error?: string; startedAt: number; completedAt?: number };
+export type AuditJobSummary = { id: string; type: string; target: string; containerId?: string; status: string; error?: string; startedAt: number; completedAt?: number };
 export type ContainerSummary = { id: string; names: string[]; image: string; state: string; status: string; labels: Record<string, string>; updateAvailable: boolean };
+export type ContainerDetail = { summary: ContainerSummary; vulnerabilitySummary?: ScanSummary; malwareSummary?: MalwareScanSummary[]; recentMetrics?: Metric[]; actionHistory?: AuditJobSummary[] };
 export type ImageSummary = { id: string; repoTags: string[]; size: number };
 export type DockerEvent = { type: string; action: string; id: string; from: string; attributes?: Record<string, string>; time: number };
 export type ScanRunRequest = { target: string };

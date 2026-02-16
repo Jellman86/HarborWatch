@@ -163,9 +163,12 @@
                         <td class="px-6 py-4 font-mono text-xs text-slate-400">{formatId(c.id)}</td>
                         <td class="px-6 py-4">
                             <div class="flex items-center gap-2">
-                                <span class="font-bold text-slate-900 dark:text-white">
+                                <button 
+                                    onclick={() => onNavigate('container-detail', { id: c.id })}
+                                    class="font-bold text-slate-900 dark:text-white hover:text-brand-600 transition-colors text-left"
+                                >
                                     {c.names?.[0]?.replace(/^\//, '') ?? 'unnamed'}
-                                </span>
+                                </button>
                                 {#if c.updateAvailable}
                                     <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded text-[8px] font-black uppercase animate-pulse">
                                         Update Available
@@ -342,10 +345,10 @@
                             Scan
                         </button>
                         <button 
-                            onclick={() => handleCheckUpdate(c)}
+                            onclick={() => onNavigate('container-detail', { id: c.id })}
                             class="px-4 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 hover:border-brand-500 transition-all"
                         >
-                            Update
+                            Manage
                         </button>
                     </div>
                 </div>

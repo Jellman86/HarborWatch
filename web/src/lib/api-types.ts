@@ -2,8 +2,9 @@
 
 export type HealthResponse = { status: string; service: string; version: string };
 export type Metric = { containerId: string; timestamp: number; cpuPercent: number; memoryUsage: number; memoryLimit: number; pids: number };
-export type AuditJobSummary = { id: string; type: string; target: string; status: string; error?: string; startedAt: number; completedAt?: number };
-export type ContainerSummary = { id: string; names: string[]; image: string; state: string; status: string; labels: Record<string, string> };
+export type AuditJobSummary = { id: string; type: string; target: string; containerId?: string; status: string; error?: string; startedAt: number; completedAt?: number };
+export type ContainerSummary = { id: string; names: string[]; image: string; state: string; status: string; labels: Record<string, string>; updateAvailable: boolean };
+export type ContainerDetail = { summary: ContainerSummary; vulnerabilitySummary?: ScanSummary; malwareSummary?: MalwareScanSummary[]; recentMetrics?: Metric[]; actionHistory?: AuditJobSummary[] };
 export type ImageSummary = { id: string; repoTags: string[]; size: number };
 export type DockerEvent = { type: string; action: string; id: string; from: string; attributes?: Record<string, string>; time: number };
 export type ScanRunRequest = { target: string };
@@ -18,3 +19,4 @@ export type UpdateStartRequest = { containerId: string; targetImage: string; val
 export type UpdateStartResponse = { jobId: string; status: string };
 export type UpdateStepEvent = { jobId: string; step: string; status: string; message: string; timestamp: number };
 export type UpdateJobStatus = { jobId: string; containerId: string; targetImage: string; validateUrl: string; status: string; createdAt: number; updatedAt: number; error: string; aiAnalysis?: { riskScore: number; riskLevel: string; summary: string; breakingChanges: string[] }; steps: UpdateStepEvent[] };
+export type Settings = { discordWebhookUrl?: string; gotifyUrl?: string; gotifyToken?: string; portainerUrl?: string; portainerApiKey?: string };

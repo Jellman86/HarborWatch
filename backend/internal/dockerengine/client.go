@@ -79,6 +79,23 @@ func (c *Client) ListContainers(ctx context.Context) ([]gen.ContainerSummary, er
 	return out, nil
 }
 
+func (c *Client) GetContainer(ctx context.Context, id string) (gen.ContainerSummary, error) {
+	var item containerJSON
+	if err := c.getJSON(ctx, "/containers/"+id+"/json", &item); err != nil {
+		return gen.ContainerSummary{}, err
+	}
+
+	return gen.ContainerSummary{
+		ID:              item.ID,
+		Names:           item.Names,
+		Image:           item.Image,
+		State:           item.State,
+		Status:          item.Status,
+		Labels:          item.Labels,
+		UpdateAvailable: globalUpdateStore.Get(item.Image),
+	}, nil
+}
+
 func (c *Client) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
 	var raw []imageJSON
 	if err := c.getJSON(ctx, "/images/json", &raw); err != nil {
@@ -114,6 +131,51 @@ func (c *Client) OpenEventStream(ctx context.Context) (io.ReadCloser, error) {
 	}
 
 	return resp.Body, nil
+}
+
+func (c *Client) GetContainerComposeConfig(ctx context.Context, id string) (string, error) {
+	// 1. Get full inspect data
+	inspect, err := c.getJSONRaw(ctx, "/containers/"+id+"/json")
+	if err != nil {
+		return "", err
+	}
+
+	var data struct {
+		Config struct {
+			Labels map[string]string `json:"Labels"`
+		} `json:"Config"`
+	}
+	if err := json.Unmarshal(inspect, &data); err != nil {
+		return "", err
+	}
+
+	// 2. Try to find the original compose file path from labels
+	// com.docker.compose.project.config_files is standard for modern Compose
+	if path, ok := data.Config.Labels["com.docker.compose.project.config_files"]; ok {
+		// Note: This path is relative to the HOST. 
+		// If the user has mounted the relevant host directory into HarborWatch, we can read it.
+		// For now, we return the path info or attempt a reconstruction.
+		if content, err := os.ReadFile(path); err == nil {
+			return string(content), nil
+		}
+	}
+
+	// 3. Fallback: Reconstruct "Effective Compose" from inspect data
+	// This ensures the "Doctor" always has something to audit.
+	return fmt.Sprintf("# Reconstructed Effective Configuration\n%s", string(inspect)), nil
+}
+
+func (c *Client) getJSONRaw(ctx context.Context, path string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL.String()+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, into any) error {

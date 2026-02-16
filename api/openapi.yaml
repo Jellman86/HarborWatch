@@ -27,6 +27,21 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ContainerSummary'
+  /api/docker/containers/{id}:
+    get:
+      operationId: getDockerContainerDetail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Detailed container information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerDetail'
   /api/docker/images:
     get:
       operationId: listDockerImages
@@ -302,6 +317,21 @@ paths:
                   $ref: '#/components/schemas/Metric'
 components:
   schemas:
+    ContainerDetail:
+      type: object
+      required: [summary]
+      properties:
+        summary: { $ref: '#/components/schemas/ContainerSummary' }
+        vulnerabilitySummary: { $ref: '#/components/schemas/ScanSummary' }
+        malwareSummary:
+          type: array
+          items: { $ref: '#/components/schemas/MalwareScanSummary' }
+        recentMetrics:
+          type: array
+          items: { $ref: '#/components/schemas/Metric' }
+        actionHistory:
+          type: array
+          items: { $ref: '#/components/schemas/AuditJobSummary' }
     Metric:
       type: object
       required: [containerId, timestamp, cpuPercent, memoryUsage, memoryLimit, pids]
@@ -326,6 +356,7 @@ components:
         id: { type: string }
         type: { type: string }
         target: { type: string }
+        containerId: { type: string }
         status: { type: string }
         error: { type: string }
         startedAt: { type: integer, format: int64 }

@@ -3,6 +3,7 @@
   import Sidebar from "./lib/components/Sidebar.svelte";
   import Dashboard from "./lib/pages/Dashboard.svelte";
   import Containers from "./lib/pages/Containers.svelte";
+  import ContainerPage from "./lib/pages/ContainerPage.svelte";
   import Images from "./lib/pages/Images.svelte";
   import Security from "./lib/pages/Security.svelte";
   import Intelligence from "./lib/pages/Intelligence.svelte";
@@ -104,6 +105,8 @@
         <Dashboard {health} {containers} {images} {events} onRefresh={loadGlobalData} />
       {:else if currentRoute === 'containers'}
         <Containers {containers} onNavigate={navigate} />
+      {:else if currentRoute === 'container-detail'}
+        <ContainerPage id={routeParams.id} onNavigate={navigate} />
       {:else if currentRoute === 'stacks'}
         <Stacks />
       {:else if currentRoute === 'images'}

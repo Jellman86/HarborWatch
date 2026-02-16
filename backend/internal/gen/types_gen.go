@@ -4,8 +4,9 @@ package gen
 
 type HealthResponse struct { Status string `json:"status"`; Service string `json:"service"`; Version string `json:"version"` }
 type Metric struct { ContainerID string `json:"containerId"`; Timestamp int64 `json:"timestamp"`; CPUPercent float64 `json:"cpuPercent"`; MemoryUsage int64 `json:"memoryUsage"`; MemoryLimit int64 `json:"memoryLimit"`; Pids int `json:"pids"` }
-type AuditJobSummary struct { ID string `json:"id"`; Type string `json:"type"`; Target string `json:"target"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
-type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"names"`; Image string `json:"image"`; State string `json:"state"`; Status string `json:"status"`; Labels map[string]string `json:"labels"` }
+type AuditJobSummary struct { ID string `json:"id"`; Type string `json:"type"`; Target string `json:"target"`; ContainerID string `json:"containerId,omitempty"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
+type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"names"`; Image string `json:"image"`; State string `json:"state"`; Status string `json:"status"`; Labels map[string]string `json:"labels"`; UpdateAvailable bool `json:"updateAvailable"` }
+type ContainerDetail struct { Summary ContainerSummary `json:"summary"`; VulnerabilitySummary *ScanSummary `json:"vulnerabilitySummary,omitempty"`; MalwareSummary []MalwareScanSummary `json:"malwareSummary,omitempty"`; RecentMetrics []Metric `json:"recentMetrics,omitempty"`; ActionHistory []AuditJobSummary `json:"actionHistory,omitempty"` }
 type ImageSummary struct { ID string `json:"id"`; RepoTags []string `json:"repoTags"`; Size int64 `json:"size"` }
 type DockerEvent struct { Type string `json:"type"`; Action string `json:"action"`; ID string `json:"id"`; From string `json:"from"`; Attributes map[string]string `json:"attributes,omitempty"`; Time int64 `json:"time"` }
 type ScanRunRequest struct { Target string `json:"target"` }
@@ -21,3 +22,4 @@ type UpdateStartResponse struct { JobID string `json:"jobId"`; Status string `js
 type UpdateStepEvent struct { JobID string `json:"jobId"`; Step string `json:"step"`; Status string `json:"status"`; Message string `json:"message"`; Timestamp int64 `json:"timestamp"` }
 type AIAnalysisSummary struct { RiskScore int `json:"riskScore"`; RiskLevel string `json:"riskLevel"`; Summary string `json:"summary"`; BreakingChanges []string `json:"breakingChanges"` }
 type UpdateJobStatus struct { JobID string `json:"jobId"`; ContainerID string `json:"containerId"`; TargetImage string `json:"targetImage"`; ValidateURL string `json:"validateUrl"`; Status string `json:"status"`; CreatedAt int64 `json:"createdAt"`; UpdatedAt int64 `json:"updatedAt"`; Error string `json:"error"`; AIAnalysis *AIAnalysisSummary `json:"aiAnalysis,omitempty"`; Steps []UpdateStepEvent `json:"steps"` }
+type Settings struct { DiscordWebhookURL string `json:"discordWebhookUrl"`; GotifyURL string `json:"gotifyUrl"`; GotifyToken string `json:"gotifyToken"`; PortainerURL string `json:"portainerUrl"`; PortainerApiKey string `json:"portainerApiKey"` }

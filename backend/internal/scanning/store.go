@@ -175,12 +175,22 @@ FROM scan_jobs WHERE job_id=?
 }
 
 func (s *Store) LatestSummary(ctx context.Context) (*gen.ScanSummary, error) {
-	row := s.db.QueryRowContext(ctx, `
+	return s.LatestSummaryForTarget(ctx, "")
+}
+
+func (s *Store) LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error) {
+	query := `
 SELECT target, source, scanned_at, critical, high, medium, low, unknown
 FROM scan_results
-ORDER BY scanned_at DESC, id DESC
-LIMIT 1
-`)
+`
+	var args []any
+	if target != "" {
+		query += " WHERE target = ?"
+		args = append(args, target)
+	}
+	query += " ORDER BY scanned_at DESC, id DESC LIMIT 1"
+
+	row := s.db.QueryRowContext(ctx, query, args...)
 
 	var summary gen.ScanSummary
 	if err := row.Scan(
