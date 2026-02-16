@@ -35,9 +35,14 @@ func (c *Collector) Run(ctx context.Context) error {
 		if cont.State != "running" {
 			continue
 		}
-		if err := c.collectOne(ctx, cont.ID); err != nil {
+		
+		// Use a sub-context with a tight timeout for each individual container
+		// to prevent one slow container from stalling the entire sweep.
+		subCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		if err := c.collectOne(subCtx, cont.ID); err != nil {
 			log.Printf("Failed to collect stats for %s: %v", cont.ID, err)
 		}
+		cancel()
 	}
 	return nil
 }

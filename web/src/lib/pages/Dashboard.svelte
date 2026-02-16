@@ -11,12 +11,34 @@
     }>();
 
     let summary = $state<ScanSummary | null>(null);
+    let aiAdvice = $state("");
+    let loadingAdvice = $state(false);
 
     async function loadSummary() {
         try {
             const res = await fetch("/api/scans/summary");
             if (res.ok) summary = await res.json();
         } catch {}
+    }
+
+    async function getFleetAdvice() {
+        loadingAdvice = true;
+        try {
+            const res = await fetch("/api/ai/analyze-metrics", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    containerId: "global_fleet", 
+                    metrics: containers.map(c => ({ name: c.names[0], image: c.image, state: c.state }))
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                aiAdvice = data.analysis;
+            }
+        } catch {} finally {
+            loadingAdvice = false;
+        }
     }
 
     onMount(() => {
@@ -35,6 +57,32 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             Refresh
+        </button>
+    </div>
+
+    <!-- AI Fleet Advice -->
+    <div class="bg-brand-600 rounded-2xl p-6 text-white shadow-xl shadow-brand-500/20 flex flex-col md:flex-row items-center gap-6">
+        <div class="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-brand-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="text-lg font-black uppercase tracking-tight">Fleet Intelligence</h3>
+            <p class="text-brand-100 text-sm mt-1 leading-relaxed">
+                {#if aiAdvice}
+                    {aiAdvice}
+                {:else}
+                    AI-powered health check is ready. Analyze your fleet for optimization opportunities.
+                {/if}
+            </p>
+        </div>
+        <button 
+            onclick={getFleetAdvice}
+            disabled={loadingAdvice}
+            class="px-6 py-3 bg-white text-brand-600 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-brand-50 transition-all disabled:opacity-50"
+        >
+            {loadingAdvice ? 'Analyzing...' : 'Audit Fleet Health'}
         </button>
     </div>
 

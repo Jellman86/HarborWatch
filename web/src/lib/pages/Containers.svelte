@@ -27,6 +27,11 @@
         return labels['harborwatch.update.policy'] || (labels['harborwatch.enable'] === 'true' ? 'auto' : null);
     };
 
+    const getIntelURL = (labels: Record<string, string>) => {
+        if (!labels) return null;
+        return labels['harborwatch.intel.url'] || labels['org.opencontainers.image.source'] || labels['org.label-schema.vcs-url'];
+    };
+
     async function toggleExpand(id: string) {
         if (expandedContainer === id) {
             expandedContainer = null;
@@ -89,6 +94,7 @@
                     <th class="px-6 py-4">ID</th>
                     <th class="px-6 py-4">Name</th>
                     <th class="px-6 py-4">Image</th>
+                    <th class="px-6 py-4">Source</th>
                     <th class="px-6 py-4">State</th>
                     <th class="px-6 py-4">Policy</th>
                     <th class="px-6 py-4 text-right">Actions</th>
@@ -111,8 +117,20 @@
                         <td class="px-6 py-4 font-bold text-slate-900 dark:text-white">
                             {c.names?.[0]?.replace(/^\//, '') ?? 'unnamed'}
                         </td>
-                        <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 truncate max-w-[200px]" title={c.image}>
+                        <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 truncate max-w-[150px]" title={c.image}>
                             {c.image}
+                        </td>
+                        <td class="px-6 py-4">
+                            {#if getIntelURL(c.labels)}
+                                <a href={getIntelURL(c.labels)} target="_blank" class="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                    </svg>
+                                    <span class="text-[10px] font-bold uppercase tracking-tight">Repo</span>
+                                </a>
+                            {:else}
+                                <span class="text-[10px] text-slate-400 italic">None</span>
+                            {/if}
                         </td>
                         <td class="px-6 py-4">
                             <span class="px-2 py-1 rounded-md text-[10px] font-black uppercase {stateColor(c.state)}">
@@ -129,16 +147,15 @@
                             {/if}
                         </td>
                         <td class="px-6 py-4 text-right">
-                            <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button class="p-2 text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors" title="Restart">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            <div class="flex justify-end gap-1">
+                                <button class="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded-lg transition-all" title="Trigger Scan">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                     </svg>
                                 </button>
-                                <button class="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors" title="Stop">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                                <button class="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-brand-900/20 rounded-lg transition-all" title="Check Update">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                     </svg>
                                 </button>
                             </div>
