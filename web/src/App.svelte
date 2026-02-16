@@ -10,6 +10,7 @@
   import Automation from "./lib/pages/Automation.svelte";
   import Doctor from "./lib/pages/Doctor.svelte";
   import AuditLog from "./lib/pages/AuditLog.svelte";
+  import Diagnostics from "./lib/pages/Diagnostics.svelte";
   import Settings from "./lib/pages/Settings.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
   import { themeStore } from "./lib/stores/theme.svelte";
@@ -116,6 +117,8 @@
         <Updates params={routeParams} />
       {:else if currentRoute === 'audit'}
         <AuditLog />
+      {:else if currentRoute === 'diagnostics'}
+        <Diagnostics />
       {:else if currentRoute === 'settings'}
         <Settings />
       {/if}

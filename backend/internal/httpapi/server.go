@@ -15,6 +15,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/audit"
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
@@ -45,6 +46,12 @@ type AIService interface {
 	AnalyzeReleaseNotes(ctx context.Context, notes string) (ai.AnalysisResult, error)
 	AuditCompose(ctx context.Context, yaml string) (string, error)
 	AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error)
+}
+
+type DiagService interface {
+	Log(level, source, message string)
+	ListLogs(ctx context.Context, limit int) ([]diag.LogEntry, error)
+	GetSystemStatus() diag.SystemStatus
 }
 
 type AuditService interface {
@@ -79,6 +86,12 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	dbPath := os.Getenv("HARBORWATCH_DB_PATH")
 	if dbPath == "" {
 		dbPath = "/tmp/harborwatch.db"
+	}
+
+	// 1. Diagnostics Setup (First, to capture other init logs)
+	diagService, _ := diag.NewService(dbPath)
+	if diagService != nil {
+		diagService.Log("INFO", "System", "HarborWatch initializing...")
 	}
 
 	dockerClient, err := dockerengine.NewFromEnv()
@@ -162,10 +175,10 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	// Load all enabled schedules from DB
 	_ = schedSvc.LoadSchedules(context.Background())
 
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService), schedSvc
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService), schedSvc
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -469,6 +482,27 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		writeJSON(w, http.StatusOK, data)
+	})
+
+	mux.HandleFunc("GET /api/system/status", func(w http.ResponseWriter, r *http.Request) {
+		if diagService == nil {
+			writeError(w, http.StatusServiceUnavailable, "diag_unavailable", "Diagnostic service not initialized")
+			return
+		}
+		writeJSON(w, http.StatusOK, diagService.GetSystemStatus())
+	})
+
+	mux.HandleFunc("GET /api/system/logs", func(w http.ResponseWriter, r *http.Request) {
+		if diagService == nil {
+			writeError(w, http.StatusServiceUnavailable, "diag_unavailable", "Diagnostic service not initialized")
+			return
+		}
+		logs, err := diagService.ListLogs(r.Context(), 100)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "diag_log_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, logs)
 	})
 
 	mux.HandleFunc("GET /api/scheduler/schedules", func(w http.ResponseWriter, r *http.Request) {

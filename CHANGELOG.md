@@ -61,10 +61,16 @@ All notable changes to HarborWatch are documented in this file.
   - Implemented persistent Sidebar navigation with collapse support
   - Full Dark/Light mode support with system preference detection
   - Modular component architecture: `Dashboard`, `Containers`, `Images`, `Security`, `Intelligence`, and `Updates`
+  - Added `System Health` (Diagnostics) view with real-time telemetry and internal log streaming
   - Added `Operations Log` (Audit) view with expandable detailed execution history
   - Implemented "Contextual Navigation": trigger scans or updates directly from container inventory with pre-filled state
   - Added `System Settings` view for global application configuration
   - Visual update pipeline stepper with live progress terminal
+- Self-Monitoring & Diagnostics:
+  - Implemented `diag` service for persistent internal application logging
+  - Added real-time telemetry for uptime, memory allocation, and database size
+  - Built-in automatic log pruning with 7-day retention
+  - New `/api/system/status` and `/api/system/logs` endpoints for self-aware monitoring
 - System Refinements & Quality Audit:
   - Implemented "Action Hub" pattern in Container Inventory for light-touch management
   - Added AI Fleet Health Advice to the Dashboard for proactive optimization
