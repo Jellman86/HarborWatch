@@ -42,7 +42,7 @@ func newTestStore(t *testing.T) *Store {
 
 func TestServiceStartScanSuccess(t *testing.T) {
 	store := newTestStore(t)
-	svc := NewService(fakeScanner{result: Result{Source: "fake", High: 2, Medium: 1}}, store)
+	svc := NewService(fakeScanner{result: Result{Source: "fake", High: 2, Medium: 1}}, nil, store)
 
 	started, err := svc.StartScan("nginx:latest")
 	if err != nil {
@@ -55,9 +55,9 @@ func TestServiceStartScanSuccess(t *testing.T) {
 	var jobStatus string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		job, ok := svc.Job(started.JobID)
-		if !ok {
-			t.Fatalf("expected job %s", started.JobID)
+		job, err := svc.Job(context.Background(), started.JobID)
+		if err != nil {
+			t.Fatalf("expected job %s: %v", started.JobID, err)
 		}
 		jobStatus = job.Status
 		if jobStatus == "completed" {
@@ -83,7 +83,7 @@ func TestServiceStartScanSuccess(t *testing.T) {
 
 func TestServiceStartScanFailure(t *testing.T) {
 	store := newTestStore(t)
-	svc := NewService(fakeScanner{err: errors.New("boom")}, store)
+	svc := NewService(fakeScanner{err: errors.New("boom")}, nil, store)
 
 	started, err := svc.StartScan("nginx:latest")
 	if err != nil {
@@ -93,7 +93,7 @@ func TestServiceStartScanFailure(t *testing.T) {
 	var jobStatus string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		job, _ := svc.Job(started.JobID)
+		job, _ := svc.Job(context.Background(), started.JobID)
 		jobStatus = job.Status
 		if jobStatus == "failed" {
 			break

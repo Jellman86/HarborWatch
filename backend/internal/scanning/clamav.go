@@ -68,8 +68,7 @@ func (clamAVScanner) ScanPath(ctx context.Context, path string) (MalwareResult, 
 
 func parseClamOutput(output string) []string {
 	var threats []string
-	lines := strings.Split(output, "
-")
+	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		if strings.HasSuffix(line, " FOUND") {
 			// Example: /path/to/file: Eicar-Signature FOUND
