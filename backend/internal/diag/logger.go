@@ -82,8 +82,7 @@ func (s *Service) Log(level, source, message string) {
 	_, err := s.db.Exec("INSERT INTO internal_logs (timestamp, level, message, source) VALUES (?, ?, ?, ?)",
 		time.Now().Unix(), level, message, source)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to write to internal_logs: %v
-", err)
+		fmt.Fprintf(os.Stderr, "failed to write to internal_logs: %v\n", err)
 	}
 }
 

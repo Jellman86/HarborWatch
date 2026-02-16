@@ -1,30 +1,65 @@
 <script lang="ts">
     import { onMount } from "svelte";
 
-    // HarborWatch Settings (Persistence via LocalStorage for now)
+    // Component State
     let harborwatchUrl = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('hw_url') ?? window.location.origin) : "");
     let validateUrlPattern = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('hw_validate_pattern') ?? "http://localhost:18080/health") : "");
-    let notifyDiscord = $state(false);
-    let autoScan = $state(true);
+    let discordWebhookUrl = $state("");
     let aiEnabled = $state(false);
+    let saving = $state(false);
+    let error = $state("");
 
-    async function loadAIStatus() {
+    async function loadSettings() {
         try {
-            const res = await fetch("/api/ai/status");
-            const data = await res.json();
-            aiEnabled = data.enabled;
-        } catch {}
+            const [aiRes, setRes] = await Promise.all([
+                fetch("/api/ai/status"),
+                fetch("/api/settings")
+            ]);
+            
+            if (aiRes.ok) {
+                const data = await aiRes.json();
+                aiEnabled = data.enabled;
+            }
+
+            if (setRes.ok) {
+                const data = await setRes.json();
+                discordWebhookUrl = data.discordWebhookUrl || "";
+            }
+        } catch (e) {
+            console.error("Failed to load settings", e);
+        }
     }
 
     onMount(() => {
-        loadAIStatus();
+        loadSettings();
     });
 
-    function saveSettings() {
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('hw_url', harborwatchUrl);
-            localStorage.setItem('hw_validate_pattern', validateUrlPattern);
-            alert("Settings saved locally.");
+    async function saveSettings() {
+        saving = true;
+        error = "";
+        try {
+            // Local persistence for UI-only settings
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('hw_url', harborwatchUrl);
+                localStorage.setItem('hw_validate_pattern', validateUrlPattern);
+            }
+
+            // Backend persistence for integration settings
+            const res = await fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    discordWebhookUrl
+                })
+            });
+
+            if (!res.ok) throw new Error("Failed to save backend settings");
+            
+            alert("Settings saved successfully.");
+        } catch (e) {
+            error = e instanceof Error ? e.message : "Save failed";
+        } finally {
+            saving = false;
         }
     }
 </script>
@@ -80,13 +115,16 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
-                Notifications (Coming Soon)
+                Notifications
             </h3>
             
-            <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-xl opacity-50 cursor-not-allowed">
-                <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Enable Discord Webhooks</span>
-                <div class="w-10 h-5 bg-slate-300 rounded-full relative">
-                    <div class="absolute left-1 top-1 w-3 h-3 bg-white rounded-full"></div>
+            <div class="space-y-4">
+                <div class="space-y-1">
+                    <label for="discord-webhook" class="text-[10px] font-black uppercase text-slate-400 ml-1">Discord Webhook URL</label>
+                    <div class="flex gap-2">
+                        <input id="discord-webhook" type="password" bind:value={discordWebhookUrl} placeholder="https://discord.com/api/webhooks/..." class="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+                    </div>
+                    <p class="text-[9px] text-slate-500 ml-1 italic">Notifications are sent for high-risk updates and security alerts.</p>
                 </div>
             </div>
         </section>
@@ -112,12 +150,19 @@
             </div>
         </section>
 
+        {#if error}
+            <div class="p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-xs font-bold animate-pulse">
+                {error}
+            </div>
+        {/if}
+
         <div class="flex justify-end pt-4">
             <button 
                 onclick={saveSettings}
-                class="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-brand-500/20"
+                disabled={saving}
+                class="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all shadow-lg shadow-brand-500/20"
             >
-                Save Configuration
+                {saving ? 'Saving...' : 'Save Configuration'}
             </button>
         </div>
     </div>

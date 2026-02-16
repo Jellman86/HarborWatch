@@ -17,6 +17,8 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
+	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
+	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
 	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
@@ -52,6 +54,17 @@ type DiagService interface {
 	Log(level, source, message string)
 	ListLogs(ctx context.Context, limit int) ([]diag.LogEntry, error)
 	GetSystemStatus() diag.SystemStatus
+	PruneLogs(ctx context.Context, olderThan int64) (int64, error)
+}
+
+type NotificationService interface {
+	Dispatch(ctx context.Context, msg notifications.Message)
+	AddDispatcher(d notifications.Dispatcher)
+}
+
+type SettingsService interface {
+	Get(ctx context.Context) (settings.Settings, error)
+	Save(ctx context.Context, s settings.Settings) error
 }
 
 type AuditService interface {
@@ -69,6 +82,8 @@ type SchedulerService interface {
 
 type MetricsService interface {
 	GetMetrics(ctx context.Context, containerID string, duration string) ([]metrics.Metric, error)
+	GetCollectorTask() *metrics.Collector
+	GetPruneTask() *metrics.PruneTask
 }
 
 type UpdateService interface {
@@ -88,66 +103,79 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 		dbPath = "/tmp/harborwatch.db"
 	}
 
-	// 1. Diagnostics Setup (First, to capture other init logs)
+	// 1. Diagnostics Setup
 	diagService, _ := diag.NewService(dbPath)
 	if diagService != nil {
 		diagService.Log("INFO", "System", "HarborWatch initializing...")
 	}
 
 	dockerClient, err := dockerengine.NewFromEnv()
-	if err != nil {
-		dockerClient = nil
+	if err != nil && diagService != nil {
+		diagService.Log("ERROR", "Docker", fmt.Sprintf("Failed to init docker client: %v", err))
 	}
-	scanService, err := scanning.NewServiceFromEnv()
-	if err != nil {
-		scanService = nil
-	}
-	releaseService := releases.NewService()
-	updateService, err := updates.NewServiceFromEnv()
-	if err != nil {
-		updateService = nil
-	}
-	auditService, err := audit.NewServiceFromEnv()
-	if err != nil {
-		auditService = nil
-	}
-	aiService := ai.NewService(ai.NewProviderFromEnv())
 	
-	// Metrics Setup
+	// 2. Open Stores
+	updatesStore, _ := updates.OpenStore(dbPath)
+	if updatesStore != nil {
+		_ = updatesStore.Init(context.Background())
+	}
+	
+	settingsStore, _ := settings.OpenStore(dbPath)
+	if settingsStore != nil {
+		_ = settingsStore.Init(context.Background())
+	}
+
+	// 3. Initialize Domain Services
+	scanService, _ := scanning.NewServiceFromEnv()
+	releaseService := releases.NewService()
+	aiService := ai.NewService(ai.NewProviderFromEnv())
+	notificationService := notifications.NewService()
+	
+	if settingsStore != nil {
+		st, _ := settingsStore.Get(context.Background())
+		if st.DiscordWebhookURL != "" {
+			notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
+		}
+	}
+
+	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService)
+	
+	var auditService *audit.Service
+	if settingsStore != nil {
+		auditService = audit.NewService(settingsStore.GetDB())
+	}
+
+	// 4. Metrics Setup
 	var metricService *metrics.Service
 	if dockerClient != nil {
 		rawDocker, _ := dockerengine.NewRawClient()
 		if rawDocker != nil {
-			ms, err := metrics.NewServiceFromEnv(rawDocker)
-			if err == nil {
-				metricService = ms
-			}
+			metricService, _ = metrics.NewServiceFromEnv(rawDocker)
 		}
 	}
 
-	// Scheduler Setup
+	// 5. Scheduler Setup
 	schedStore, _ := scheduler.OpenStore(dbPath)
 	if schedStore != nil {
 		_ = schedStore.Init(context.Background())
 	}
 	schedSvc := scheduler.NewService(schedStore)
 
-	// Register available tasks
+	// 6. Register automated tasks
 	if dockerClient != nil {
 		rawDocker, _ := dockerengine.NewRawClient() 
 		if rawDocker != nil {
-			// 1. Docker Prune (Weekly Sun 3 AM)
+			// Maintenance: Weekly Prune
 			schedSvc.RegisterTask("docker_system_prune", func() scheduler.Task {
 				return scheduler.NewDockerPruneTask(rawDocker)
 			})
 			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker))
 
-			// 2. Metrics Collector (Every minute) & Pruner (Daily)
+			// Metrics Engine
 			if metricService != nil {
 				schedSvc.RegisterTask("metrics_collector", func() scheduler.Task {
 					return metricService.GetCollectorTask()
 				})
-				// Enable by default for "Light Touch" observability
 				_ = schedSvc.AddTask("* * * * *", metricService.GetCollectorTask())
 
 				schedSvc.RegisterTask("metrics_prune", func() scheduler.Task {
@@ -156,14 +184,13 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 				_ = schedSvc.AddTask("0 0 0 * * *", metricService.GetPruneTask())
 			}
 
-			// 3. Trivy Sweep (Daily Midnight)
+			// Security: Scheduled Sweeps
 			if scanService != nil {
 				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
 					return scheduler.NewTrivySweepTask(rawDocker, scanService)
 				})
 				_ = schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService))
 
-				// 3. ClamAV Sweep (Weekly Sun 4 AM)
 				schedSvc.RegisterTask("malware_sweep_clamav", func() scheduler.Task {
 					return scheduler.NewClamAVSweepTask(rawDocker, scanService)
 				})
@@ -172,13 +199,29 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 		}
 	}
 
-	// Load all enabled schedules from DB
+	// 7. Internal Maintenance: Diagnostic log pruning
+	if diagService != nil {
+		schedSvc.RegisterTask("diag_log_prune", func() scheduler.Task {
+			return scheduler.NewGenericTask("diag_log_prune", func(ctx context.Context) error {
+				olderThan := time.Now().Add(-7 * 24 * time.Hour).Unix()
+				_, err := diagService.PruneLogs(ctx, olderThan)
+				return err
+			})
+		})
+		_ = schedSvc.AddTask("0 0 1 * * *", scheduler.NewGenericTask("diag_log_prune", func(ctx context.Context) error {
+			olderThan := time.Now().Add(-7 * 24 * time.Hour).Unix()
+			_, err := diagService.PruneLogs(ctx, olderThan)
+			return err
+		}))
+	}
+
+	// Bootstrap schedules from DB
 	_ = schedSvc.LoadSchedules(context.Background())
 
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService), schedSvc
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore), schedSvc
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -516,6 +559,42 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		writeJSON(w, http.StatusOK, list)
+	})
+
+	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		if settingsService == nil {
+			writeError(w, http.StatusServiceUnavailable, "settings_unavailable", "Settings service not initialized")
+			return
+		}
+		st, err := settingsService.Get(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "settings_get_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	})
+
+	mux.HandleFunc("POST /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		if settingsService == nil {
+			writeError(w, http.StatusServiceUnavailable, "settings_unavailable", "Settings service not initialized")
+			return
+		}
+		var st settings.Settings
+		if err := json.NewDecoder(r.Body).Decode(&st); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+			return
+		}
+		if err := settingsService.Save(r.Context(), st); err != nil {
+			writeError(w, http.StatusInternalServerError, "settings_save_failed", err.Error())
+			return
+		}
+
+		// Re-initialize notification dispatchers after saving
+		if st.DiscordWebhookURL != "" {
+			notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
 	mux.HandleFunc("POST /api/scheduler/toggle", func(w http.ResponseWriter, r *http.Request) {

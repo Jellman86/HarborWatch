@@ -12,6 +12,7 @@ import (
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 )
 
 type Request struct {
@@ -24,16 +25,18 @@ type Service struct {
 	store    *Store
 	executor Executor
 	ai       *ai.Service
+	notif    *notifications.Service
 
 	mu          sync.RWMutex
 	subscribers map[string][]chan gen.UpdateStepEvent
 }
 
-func NewService(store *Store, executor Executor, aiSvc *ai.Service) *Service {
+func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notifications.Service) *Service {
 	return &Service{
 		store:       store,
 		executor:    executor,
 		ai:          aiSvc,
+		notif:       notif,
 		subscribers: map[string][]chan gen.UpdateStepEvent{},
 	}
 }
@@ -51,7 +54,10 @@ func NewServiceFromEnv() (*Service, error) {
 		return nil, err
 	}
 	aiSvc := ai.NewService(ai.NewProviderFromEnv())
-	return NewService(store, NewCommandExecutor(), aiSvc), nil
+	notifSvc := notifications.NewService()
+	// Discovery logic for dispatchers from settings store would go here if we had access to it directly, 
+	// but usually it's handled by the main orchestrator injecting the configured service.
+	return NewService(store, NewCommandExecutor(), aiSvc, notifSvc), nil
 }
 
 func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
@@ -134,6 +140,14 @@ func (s *Service) execute(jobID string, req Request) {
 			
 			// Policy enforcement: Pause if high risk
 			if analysis.RiskScore >= 80 {
+				if s.notif != nil {
+					s.notif.Dispatch(ctx, notifications.Message{
+						Title:  "Update Paused: High Risk Detected",
+						Body:   fmt.Sprintf("AI detected high risk (%d) for %s: %s", analysis.RiskScore, req.TargetImage, analysis.Summary),
+						Level:  notifications.LevelCritical,
+						Source: "Update Engine",
+					})
+				}
 				return fmt.Errorf("AI detected high risk (%d): %s", analysis.RiskScore, analysis.Summary)
 			}
 			return nil
@@ -181,6 +195,15 @@ func (s *Service) finish(jobID, status string, err error) {
 	msg := ""
 	if err != nil {
 		msg = err.Error()
+		// Send notification for failures
+		if (status == "failed" || status == "rolled_back") && s.notif != nil {
+			s.notif.Dispatch(context.Background(), notifications.Message{
+				Title:  fmt.Sprintf("Update Job %s: %s", status, jobID),
+				Body:   fmt.Sprintf("Error: %s", msg),
+				Level:  notifications.LevelCritical,
+				Source: "Update Engine",
+			})
+		}
 	}
 	_ = s.store.UpdateRunStatus(context.Background(), jobID, status, msg, time.Now().UTC().Unix())
 }

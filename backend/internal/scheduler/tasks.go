@@ -110,3 +110,18 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 	}
 	return nil
 }
+
+// GenericTask is a helper to wrap a simple function as a Task.
+type GenericTask struct {
+	name string
+	run  func(ctx context.Context) error
+}
+
+func NewGenericTask(name string, run func(ctx context.Context) error) *GenericTask {
+	return &GenericTask{name: name, run: run}
+}
+
+func (t *GenericTask) Name() string { return t.name }
+func (t *GenericTask) Run(ctx context.Context) error {
+	return t.run(ctx)
+}

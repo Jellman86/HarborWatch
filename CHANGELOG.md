@@ -71,6 +71,11 @@ All notable changes to HarborWatch are documented in this file.
   - Added real-time telemetry for uptime, memory allocation, and database size
   - Built-in automatic log pruning with 7-day retention
   - New `/api/system/status` and `/api/system/logs` endpoints for self-aware monitoring
+- Ecosystem Integrations:
+  - Implemented core Notification Dispatcher with multi-platform support
+  - Added Discord Webhook integration for critical system alerts
+  - Integrated notifications with Update Engine (alerts on high-risk AI detection and pipeline failures)
+  - Added persistent backend application settings store
 - System Refinements & Quality Audit:
   - Implemented "Action Hub" pattern in Container Inventory for light-touch management
   - Added AI Fleet Health Advice to the Dashboard for proactive optimization
