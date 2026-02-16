@@ -184,6 +184,18 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/MalwareScanSummary'
+  /api/audit/jobs:
+    get:
+      operationId: listAuditJobs
+      responses:
+        '200':
+          description: Historical job list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditJobSummary'
 components:
   schemas:
     HealthResponse:
@@ -193,6 +205,17 @@ components:
         status: { type: string }
         service: { type: string }
         version: { type: string }
+    AuditJobSummary:
+      type: object
+      required: [id, type, target, status, startedAt]
+      properties:
+        id: { type: string }
+        type: { type: string }
+        target: { type: string }
+        status: { type: string }
+        error: { type: string }
+        startedAt: { type: integer, format: int64 }
+        completedAt: { type: integer, format: int64 }
     ContainerSummary:
       type: object
       required: [id, names, image, state, status]

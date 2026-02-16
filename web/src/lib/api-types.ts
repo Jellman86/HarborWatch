@@ -1,6 +1,7 @@
 // Code generated from api/openapi.yaml; DO NOT EDIT.
 
 export type HealthResponse = { status: string; service: string; version: string };
+export type AuditJobSummary = { id: string; type: string; target: string; status: string; error?: string; startedAt: number; completedAt?: number };
 export type ContainerSummary = { id: string; names: string[]; image: string; state: string; status: string };
 export type ImageSummary = { id: string; repoTags: string[]; size: number };
 export type DockerEvent = { type: string; action: string; id: string; from: string; attributes?: Record<string, string>; time: number };

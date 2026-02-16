@@ -7,6 +7,8 @@
   import Security from "./lib/pages/Security.svelte";
   import Intelligence from "./lib/pages/Intelligence.svelte";
   import Updates from "./lib/pages/Updates.svelte";
+  import AuditLog from "./lib/pages/AuditLog.svelte";
+  import Settings from "./lib/pages/Settings.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
   import { themeStore } from "./lib/stores/theme.svelte";
   
@@ -40,7 +42,7 @@
   let updateJob = $state<UpdateJobStatus | null>(null);
   let updateLive = $state<UpdateStepEvent[]>([]);
 
-  // Form State
+  // Form State (Default Values)
   let target = $state("nginx:latest");
   let malwareTarget = $state("/var/lib/docker");
   let repo = $state("Jellman86/HarborWatch");
@@ -229,6 +231,10 @@
           bind:updateContainerId bind:updateTargetImage bind:validateURL 
           onStartUpdate={startUpdate} 
         />
+      {:else if currentRoute === 'audit'}
+        <AuditLog />
+      {:else if currentRoute === 'settings'}
+        <Settings />
       {/if}
     </div>
   </main>

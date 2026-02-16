@@ -44,6 +44,8 @@ All notable changes to HarborWatch are documented in this file.
   - Implemented persistent Sidebar navigation with collapse support
   - Full Dark/Light mode support with system preference detection
   - Modular component architecture: `Dashboard`, `Containers`, `Images`, `Security`, `Intelligence`, and `Updates`
+  - Added `Operations Log` (Audit) view to track historical scan and update jobs
+  - Added `System Settings` view for global application configuration
   - Visual update pipeline stepper with live progress terminal
 - CI/CD and deployment artifacts:
   - GitHub Actions workflows for build/push and PR validation

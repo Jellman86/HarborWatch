@@ -13,6 +13,7 @@ import (
 
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/audit"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
 	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
@@ -36,6 +37,10 @@ type ReleaseService interface {
 	Analyze(ctx context.Context, repo string) (gen.ReleaseRiskSummary, error)
 }
 
+type AuditService interface {
+	ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error)
+}
+
 type UpdateService interface {
 	StartUpdate(req updates.Request) (gen.UpdateStartResponse, error)
 	GetJob(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error)
@@ -56,10 +61,14 @@ func NewMux() http.Handler {
 	if err != nil {
 		updateService = nil
 	}
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService)
+	auditService, err := audit.NewServiceFromEnv()
+	if err != nil {
+		auditService = nil
+	}
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService)
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -266,6 +275,19 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			return
 		}
 		writeJSON(w, http.StatusAccepted, resp)
+	})
+
+	mux.HandleFunc("GET /api/audit/jobs", func(w http.ResponseWriter, r *http.Request) {
+		if auditService == nil {
+			writeError(w, http.StatusServiceUnavailable, "audit_service_unavailable", "Audit service not initialized")
+			return
+		}
+		jobs, err := auditService.ListAuditJobs(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "audit_query_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, jobs)
 	})
 
 	mux.HandleFunc("GET /api/updates/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
