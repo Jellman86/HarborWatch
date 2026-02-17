@@ -20,6 +20,16 @@
         col: number;
     }
 
+    interface NodeGeometry {
+        x: number;
+        y: number;
+        top: number;
+        right: number;
+        bottom: number;
+        left: number;
+        row: number;
+    }
+
     let { title, subtitle = "", steps = [], accent = "#0ea5e9" } = $props<{
         title: string;
         subtitle?: string;
@@ -31,10 +41,13 @@
     const GRID_COL_GAP = 14;
     const GRID_ROW_GAP = 26;
     const MAX_SINGLE_ROW_NODES = 6;
+    const CONNECTOR_GAP_X = 10;
+    const CONNECTOR_GAP_Y = 6;
 
     let host = $state<HTMLDivElement | null>(null);
     let hostWidth = $state(0);
     let connectorPaths = $state<string[]>([]);
+    let connectorMarkerId = $derived(`flow-arrow-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "default"}`);
 
     let flowNodes = $derived<FlowNode[]>([
         { key: "start", kind: "terminal", label: "Start", logicalIndex: 0 },
@@ -115,6 +128,10 @@
         return placement;
     }
 
+    function clamp(value: number, min: number, max: number): number {
+        return Math.max(min, Math.min(max, value));
+    }
+
     async function updateGeometry() {
         const width = host?.getBoundingClientRect().width ?? 0;
         hostWidth = Number.isFinite(width) ? Math.max(Math.floor(width), 0) : 0;
@@ -130,28 +147,49 @@
         }
 
         const base = host.getBoundingClientRect();
-        const centers = new Map<number, { x: number; y: number }>();
+        const maxX = Math.max(base.width - 3, 3);
+        const maxY = Math.max(base.height - 3, 3);
+        const nodesByIndex = new Map<number, NodeGeometry>();
         const nodes = host.querySelectorAll<HTMLElement>("[data-logical-index]");
         nodes.forEach((el) => {
             const idx = Number(el.dataset.logicalIndex);
             if (!Number.isFinite(idx)) return;
             const box = el.getBoundingClientRect();
-            centers.set(idx, {
-                x: box.left - base.left + box.width / 2,
-                y: box.top - base.top + box.height / 2
+            const row = Number(el.dataset.row);
+            const centerX = clamp(box.left - base.left + box.width / 2, 3, maxX);
+            const centerY = clamp(box.top - base.top + box.height / 2, 3, maxY);
+            nodesByIndex.set(idx, {
+                x: centerX,
+                y: centerY,
+                left: clamp(box.left - base.left, 3, maxX),
+                right: clamp(box.right - base.left, 3, maxX),
+                top: clamp(box.top - base.top, 3, maxY),
+                bottom: clamp(box.bottom - base.top, 3, maxY),
+                row: Number.isFinite(row) ? row : 0
             });
         });
 
         const paths: string[] = [];
         for (let i = 0; i < flowNodes.length - 1; i++) {
-            const from = centers.get(i);
-            const to = centers.get(i + 1);
+            const from = nodesByIndex.get(i);
+            const to = nodesByIndex.get(i + 1);
             if (!from || !to) continue;
-            if (Math.abs(from.y - to.y) > 2 && Math.abs(from.x - to.x) > 2) {
-                const midY = (from.y + to.y) / 2;
-                paths.push(`M ${from.x} ${from.y} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`);
+
+            if (from.row === to.row) {
+                const leftToRight = to.x >= from.x;
+                const startX = clamp(leftToRight ? from.right + CONNECTOR_GAP_X : from.left - CONNECTOR_GAP_X, 3, maxX);
+                const endX = clamp(leftToRight ? to.left - CONNECTOR_GAP_X : to.right + CONNECTOR_GAP_X, 3, maxX);
+                if (Math.abs(endX - startX) > 2) {
+                    paths.push(`M ${startX} ${from.y} L ${endX} ${to.y}`);
+                } else {
+                    paths.push(`M ${from.x} ${from.y} L ${to.x} ${to.y}`);
+                }
             } else {
-                paths.push(`M ${from.x} ${from.y} L ${to.x} ${to.y}`);
+                const down = to.row > from.row;
+                const startY = clamp(down ? from.bottom + CONNECTOR_GAP_Y : from.top - CONNECTOR_GAP_Y, 3, maxY);
+                const endY = clamp(down ? to.top - CONNECTOR_GAP_Y : to.bottom + CONNECTOR_GAP_Y, 3, maxY);
+                const midY = clamp((startY + endY) / 2, 3, maxY);
+                paths.push(`M ${from.x} ${startY} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${endY}`);
             }
         }
         connectorPaths = paths;
@@ -192,8 +230,13 @@
             <div class="relative w-full" bind:this={host}>
                 {#if connectorPaths.length > 0}
                     <svg class="pointer-events-none absolute inset-0 h-full w-full" style={`color:${accent};`} aria-hidden="true">
+                        <defs>
+                            <marker id={connectorMarkerId} markerWidth="8" markerHeight="8" refX="6.6" refY="4" orient="auto" markerUnits="strokeWidth">
+                                <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor"></path>
+                            </marker>
+                        </defs>
                         {#each connectorPaths as path}
-                            <path d={path} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.42"></path>
+                            <path d={path} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end={`url(#${connectorMarkerId})`} opacity="0.58"></path>
                         {/each}
                     </svg>
                 {/if}
@@ -204,6 +247,7 @@
                             class="min-w-0 rounded-xl border px-3 py-3 transition-all {nodeClasses(node.kind, node.state)}"
                             style={nodeStyle(node)}
                             data-logical-index={node.logicalIndex}
+                            data-row={node.row}
                         >
                             {#if node.kind === "terminal"}
                                 <p class="text-[10px] font-black uppercase tracking-[0.18em] text-center">{node.label}</p>

@@ -70,6 +70,9 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 	s.mu.Unlock()
 
 	_ = s.store.CreateJob(context.Background(), job, "vulnerability")
+	if s.diag != nil {
+		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan queued job=%s target=%s", jobID, target))
+	}
 
 	go s.run(jobID, target)
 
@@ -124,6 +127,9 @@ func (s *Service) run(jobID, target string) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), envDuration("HW_TRIVY_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
+	if s.diag != nil {
+		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan started job=%s target=%s", jobID, target))
+	}
 
 	result, err := s.scanner.Scan(ctx, target)
 	if err != nil {
@@ -145,6 +151,10 @@ func (s *Service) run(jobID, target string) {
 	s.mu.Unlock()
 
 	_ = s.store.UpdateJob(context.Background(), jobID, "completed", "", now)
+	if s.diag != nil {
+		total := result.Critical + result.High + result.Medium + result.Low + result.Unknown
+		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan completed job=%s target=%s total=%d critical=%d high=%d medium=%d low=%d unknown=%d", jobID, result.Target, total, result.Critical, result.High, result.Medium, result.Low, result.Unknown))
+	}
 }
 
 func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string) {

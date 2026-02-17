@@ -59,10 +59,11 @@
         return out;
     }
 
-    function filteredFindings(): TrivyFindingRow[] {
-        const all = flattenFindings(details);
+    let allFindings = $derived<TrivyFindingRow[]>(flattenFindings(details));
+
+    let visibleFindings = $derived<TrivyFindingRow[]>((() => {
         const q = search.trim().toLowerCase();
-        const scoped = all.filter((item) => {
+        const scoped = allFindings.filter((item) => {
             if (severity !== "all" && item.severityNorm !== severity) return false;
             if (!q) return true;
             const haystack = [
@@ -83,14 +84,14 @@
             return (a.id || "").localeCompare(b.id || "");
         });
         return scoped;
-    }
+    })());
 
     function severityPill(sev: string): string {
         return severityClasses[sev] || severityClasses.UNKNOWN;
     }
 
     function findingCount(sev: string): number {
-        return flattenFindings(details).filter((v) => v.severityNorm === sev).length;
+        return allFindings.filter((v) => v.severityNorm === sev).length;
     }
 
     function formatWhen(value?: string): string {
@@ -165,7 +166,7 @@
         {/if}
 
         <div class="space-y-2 max-h-[560px] overflow-auto pr-1">
-            {#each filteredFindings() as finding (finding.key)}
+            {#each visibleFindings as finding (finding.key)}
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 bg-white dark:bg-slate-900/30">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="px-2 py-1 rounded-lg text-[10px] font-black uppercase {severityPill(finding.severityNorm)}">{finding.severityNorm}</span>
@@ -212,7 +213,11 @@
                     </details>
                 </div>
             {:else}
-                <div class="py-8 text-center text-slate-400 text-sm italic">No findings match your current filters.</div>
+                {#if allFindings.length === 0}
+                    <div class="py-8 text-center text-slate-500 text-sm italic">No vulnerabilities were reported by the latest Trivy scan for this image.</div>
+                {:else}
+                    <div class="py-8 text-center text-slate-400 text-sm italic">No findings match your current filters.</div>
+                {/if}
             {/each}
         </div>
     {/if}

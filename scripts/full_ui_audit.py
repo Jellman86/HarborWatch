@@ -56,10 +56,18 @@ def attach_page_listeners(page: Page, state: AuditState) -> None:
 
     def on_request_failed(req: Any) -> None:
         failure = req.failure
+        if isinstance(failure, str):
+            error_text = failure
+        elif isinstance(failure, dict):
+            error_text = str(failure.get("errorText", ""))
+        elif failure is not None:
+            error_text = str(getattr(failure, "error_text", "") or failure)
+        else:
+            error_text = ""
         state.log_event(
             "requestfailed",
             f"{req.method} {req.url}",
-            error_text=failure.error_text if failure else "",
+            error_text=error_text,
         )
 
     def on_response(resp: Any) -> None:
