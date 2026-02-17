@@ -39,6 +39,12 @@
             background: 'transparent',
             foreColor: '#94a3b8'
         },
+        dataLabels: {
+            enabled: false
+        },
+        legend: {
+            show: false
+        },
         title: {
             text: title,
             align: 'left',
