@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,8 +77,17 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 }
 
 func (s *Service) StartMalwareScan(target string) (gen.ScanStartResponse, error) {
-	if target == "" {
+	return s.StartMalwareScanPath(target, target, false)
+}
+
+func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
+	targetLabel = strings.TrimSpace(targetLabel)
+	scanPath = strings.TrimSpace(scanPath)
+	if targetLabel == "" {
 		return gen.ScanStartResponse{}, errors.New("target is required")
+	}
+	if scanPath == "" {
+		return gen.ScanStartResponse{}, errors.New("scan path is required")
 	}
 
 	jobID, err := newJobID()
@@ -87,7 +97,7 @@ func (s *Service) StartMalwareScan(target string) (gen.ScanStartResponse, error)
 
 	job := gen.ScanJobStatus{
 		JobID:     jobID,
-		Target:    target,
+		Target:    targetLabel,
 		Status:    "running",
 		StartedAt: time.Now().UTC().Unix(),
 		Source:    s.malwareScanner.Name(),
@@ -99,7 +109,11 @@ func (s *Service) StartMalwareScan(target string) (gen.ScanStartResponse, error)
 
 	_ = s.store.CreateJob(context.Background(), job, "malware")
 
-	go s.runMalware(jobID, target)
+	cleanupPath := ""
+	if cleanup {
+		cleanupPath = scanPath
+	}
+	go s.runMalware(jobID, targetLabel, scanPath, cleanupPath)
 
 	return gen.ScanStartResponse{JobID: jobID, Status: "running"}, nil
 }
@@ -133,18 +147,23 @@ func (s *Service) run(jobID, target string) {
 	_ = s.store.UpdateJob(context.Background(), jobID, "completed", "", now)
 }
 
-func (s *Service) runMalware(jobID, target string) {
+func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string) {
+	if cleanupPath != "" {
+		defer func() { _ = os.RemoveAll(cleanupPath) }()
+	}
+
 	s.clamavSem <- struct{}{}
 	defer func() { <-s.clamavSem }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), envDuration("HW_CLAMAV_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
 
-	result, err := s.malwareScanner.ScanPath(ctx, target)
+	result, err := s.malwareScanner.ScanPath(ctx, scanPath)
 	if err != nil {
 		s.setJobFailed(jobID, err)
 		return
 	}
+	result.Target = targetLabel
 
 	if err := s.store.SaveMalwareResult(ctx, result); err != nil {
 		s.setJobFailed(jobID, err)
@@ -207,6 +226,10 @@ func (s *Service) LatestSummaryForTarget(ctx context.Context, target string) (*g
 
 func (s *Service) MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error) {
 	return s.store.MalwareSummaries(ctx, target)
+}
+
+func (s *Service) MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error) {
+	return s.store.MalwareSummariesByPrefix(ctx, "container:"+containerID)
 }
 
 func newJobID() (string, error) {

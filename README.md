@@ -12,6 +12,7 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - **Dual-Engine Security Scanning:** Integrated vulnerability (Trivy) and malware (ClamAV) scanning with shared database persistence.
 - **High-Resolution Performance Profiling:** Real-time sparklines and detailed historical charts for CPU and Memory utilization.
 - **Unified Configuration:** Seamlessly merge `docker-compose` environment variables with persistent database settings.
+- **Automated Lifecycle Inputs:** Validation URLs and update form defaults are auto-derived from container metadata, health checks, exposed ports, and settings patterns, while remaining fully user-editable.
 
 ## Reliability & Performance Notes (v0.7.1)
 
@@ -27,6 +28,7 @@ HarborWatch is a professional, local-first container maintenance and security ap
   - `GET /api/docker/{id}/logs` (container stdout/stderr retrieval with tail/since controls)
   - `GET /api/diagnostics/snapshot` (aggregated diagnostics bundle for autonomous investigation)
   - `GET /api/diagnostics/containers/{id}/logs` (container logs through diagnostics namespace)
+  - `POST /api/scans/malware/container/{id}` (queue container rootfs + mount-point ClamAV scans)
 
 ## Robustness Notes (v0.7.3)
 
@@ -57,6 +59,20 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - `HW_TRIVY_SCAN_TIMEOUT` sets overall vulnerability scan job timeout (default `15m`).
 - `HW_TRIVY_INTERNAL_TIMEOUT` sets Trivy CLI timeout argument (default `10m`).
 - `HW_CLAMAV_SCAN_TIMEOUT` sets malware scan job timeout (default `15m`).
+- `HW_TRIVY_MAX_CONCURRENCY` limits parallel Trivy jobs (default `2`).
+- `HW_CLAMAV_MAX_CONCURRENCY` limits parallel ClamAV jobs (default `1`).
+- `HW_CLAMAV_SNAPSHOT_MAX_BYTES` caps container snapshot size for ClamAV container scans (default `2147483648`).
+
+## Validation URL Automation
+
+- If a container lifecycle rule does not define `validateUrl`, HarborWatch derives one automatically from:
+  - explicit validation labels (if present),
+  - Docker healthcheck URL hints,
+  - published/exposed ports,
+  - global settings (`validateUrlPattern`, `instanceUrl`).
+- `validateUrlPattern` supports placeholders:
+  - `{{INSTANCE_URL}}`, `{{HOST}}`, `{{PORT}}`, `{{SCHEME}}`, `{{PATH}}`, `{{CONTAINER_ID}}`, `{{CONTAINER_NAME}}`, `{{IMAGE}}`
+- Users can always override the derived URL in the Lifecycle policy UI.
 
 ## AI Provider Configuration
 

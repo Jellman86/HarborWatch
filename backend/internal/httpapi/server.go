@@ -45,10 +45,12 @@ type DockerClient interface {
 type ScanService interface {
 	StartScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
+	StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
 	Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
 	LatestSummary(ctx context.Context) (*gen.ScanSummary, error)
 	LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error)
 	MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error)
+	MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error)
 }
 
 type ReleaseService interface {
@@ -504,7 +506,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					if vs, err := scanService.LatestSummaryForTarget(ctx, summary.Image); err == nil {
 						detail.VulnerabilitySummary = vs
 					}
-					if ms, err := scanService.MalwareSummaries(ctx, id); err == nil {
+					if ms, err := scanService.MalwareSummariesForContainer(ctx, id); err == nil {
 						detail.MalwareSummary = ms
 					} else {
 						detail.MalwareSummary = []gen.MalwareScanSummary{}
@@ -540,6 +542,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				// Enrich with Rules
 				if rulesService != nil {
 					if r, err := rulesService.Get(ctx, id); err == nil {
+						r = effectiveContainerRules(ctx, summary, r, settingsService, diagService)
 						detail.Rules = &gen.ContainerRules{
 							ContainerID:  r.ContainerID,
 							UpdatePolicy: r.UpdatePolicy,
@@ -605,6 +608,15 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 						writeError(w, http.StatusInternalServerError, "rules_get_failed", err.Error())
 						return
 					}
+					summary := gen.ContainerSummary{ID: id}
+					if dockerClient != nil {
+						ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+						if c, err := dockerClient.GetContainer(ctx, id); err == nil {
+							summary = c
+						}
+						cancel()
+					}
+					res = effectiveContainerRules(r.Context(), summary, res, settingsService, diagService)
 					writeJSON(w, http.StatusOK, res)
 				}
 
@@ -619,6 +631,16 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 						return
 					}
 					req.ContainerID = chi.URLParam(r, "id")
+					req.UpdatePolicy = normalizeUpdatePolicy(req.UpdatePolicy)
+					summary := gen.ContainerSummary{ID: req.ContainerID}
+					if dockerClient != nil {
+						ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+						if c, err := dockerClient.GetContainer(ctx, req.ContainerID); err == nil {
+							summary = c
+						}
+						cancel()
+					}
+					req = effectiveContainerRules(r.Context(), summary, req, settingsService, diagService)
 					if err := rulesService.Save(r.Context(), req); err != nil {
 						writeError(w, http.StatusInternalServerError, "rules_save_failed", err.Error())
 						return
@@ -671,6 +693,30 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 				writeJSON(w, http.StatusAccepted, resp)
+			})
+
+			r.Post("/malware/container/{id}", func(w http.ResponseWriter, r *http.Request) {
+				if scanService == nil {
+					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+					return
+				}
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				containerID := chi.URLParam(r, "id")
+				ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+				_, err := dockerClient.GetContainer(ctx, containerID)
+				cancel()
+				if err != nil {
+					writeError(w, http.StatusNotFound, "container_not_found", err.Error())
+					return
+				}
+				go triggerContainerMalwareScans(containerID, scanService, diagService)
+				writeJSON(w, http.StatusAccepted, map[string]string{
+					"status":      "queued",
+					"containerId": containerID,
+				})
 			})
 
 			r.Get("/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -747,10 +793,59 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON payload")
 					return
 				}
+				req.ContainerID = strings.TrimSpace(req.ContainerID)
+				req.TargetImage = strings.TrimSpace(req.TargetImage)
+				req.ValidateURL = strings.TrimSpace(req.ValidateURL)
+				if req.ContainerID == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "containerId is required")
+					return
+				}
+
+				containerCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				summary := gen.ContainerSummary{ID: req.ContainerID}
+				if dockerClient != nil {
+					if c, err := dockerClient.GetContainer(containerCtx, req.ContainerID); err == nil {
+						summary = c
+					}
+				}
+				cancel()
+
+				if req.TargetImage == "" {
+					req.TargetImage = strings.TrimSpace(summary.Image)
+				}
+				if req.ValidateURL == "" {
+					req.ValidateURL = deriveValidationURL(r.Context(), summary, settingsService, diagService)
+				}
+				if req.TargetImage == "" || req.ValidateURL == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "targetImage and validateUrl could not be auto-derived; provide explicit values")
+					return
+				}
+
+				repoURL := firstNonEmpty(
+					summary.Labels["harborwatch.intel.url"],
+					summary.Labels["org.opencontainers.image.source"],
+					summary.Labels["org.label-schema.vcs-url"],
+				)
+				releaseContext := ""
+				if releaseService != nil {
+					if repo, ok := deriveGithubRepo(repoURL); ok {
+						releaseCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+						if intel, err := releaseService.Analyze(releaseCtx, repo); err == nil {
+							releaseContext = summarizeReleaseIntel(intel)
+						}
+						cancel()
+					}
+				}
+
 				resp, err := updateService.StartUpdate(updates.Request{
-					ContainerID: req.ContainerID,
-					TargetImage: req.TargetImage,
-					ValidateURL: req.ValidateURL,
+					ContainerID:    req.ContainerID,
+					TargetImage:    req.TargetImage,
+					ValidateURL:    req.ValidateURL,
+					CurrentImage:   strings.TrimSpace(summary.Image),
+					ContainerName:  trimContainerName(summary.Names),
+					Labels:         summary.Labels,
+					RepositoryURL:  repoURL,
+					ReleaseContext: releaseContext,
 				})
 				if err != nil {
 					writeError(w, http.StatusBadRequest, "update_start_failed", err.Error())

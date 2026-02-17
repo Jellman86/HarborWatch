@@ -76,6 +76,9 @@ func (f fakeScanService) StartScan(target string) (gen.ScanStartResponse, error)
 func (f fakeScanService) StartMalwareScan(target string) (gen.ScanStartResponse, error) {
 	return f.startResp, nil
 }
+func (f fakeScanService) StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
+	return f.startResp, nil
+}
 func (f fakeScanService) Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error) {
 	j, ok := f.jobs[jobID]
 	if !ok {
@@ -90,6 +93,9 @@ func (f fakeScanService) LatestSummaryForTarget(ctx context.Context, target stri
 	return f.summary, nil
 }
 func (f fakeScanService) MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error) {
+	return nil, nil
+}
+func (f fakeScanService) MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error) {
 	return nil, nil
 }
 

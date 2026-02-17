@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,9 +16,14 @@ import (
 )
 
 type Request struct {
-	ContainerID string
-	TargetImage string
-	ValidateURL string
+	ContainerID    string
+	TargetImage    string
+	ValidateURL    string
+	CurrentImage   string
+	ContainerName  string
+	Labels         map[string]string
+	RepositoryURL  string
+	ReleaseContext string
 }
 
 type DiagService interface {
@@ -109,9 +115,7 @@ func (s *Service) execute(jobID string, req Request) {
 	// NEW: AI Release Analysis Step
 	if s.ai != nil && s.ai.HasProvider() {
 		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
-			// In a real implementation, we'd fetch the actual release notes here.
-			// For now, we simulate with a placeholder.
-			notes := "Placeholder release notes for " + req.TargetImage
+			notes := buildAIReleaseContext(req)
 			analysis, err := s.ai.AnalyzeReleaseNotes(ctx, notes)
 			if err != nil {
 				return err
@@ -218,4 +222,53 @@ func newID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+func buildAIReleaseContext(req Request) string {
+	var b strings.Builder
+	b.WriteString("Container update context:\n")
+	b.WriteString(fmt.Sprintf("- container_id: %s\n", strings.TrimSpace(req.ContainerID)))
+	if name := strings.TrimSpace(req.ContainerName); name != "" {
+		b.WriteString(fmt.Sprintf("- container_name: %s\n", name))
+	}
+	if cur := strings.TrimSpace(req.CurrentImage); cur != "" {
+		b.WriteString(fmt.Sprintf("- current_image: %s\n", cur))
+	}
+	b.WriteString(fmt.Sprintf("- target_image: %s\n", strings.TrimSpace(req.TargetImage)))
+	b.WriteString(fmt.Sprintf("- current_tag: %s\n", extractImageTag(req.CurrentImage)))
+	b.WriteString(fmt.Sprintf("- target_tag: %s\n", extractImageTag(req.TargetImage)))
+	if repo := strings.TrimSpace(req.RepositoryURL); repo != "" {
+		b.WriteString(fmt.Sprintf("- source_repository: %s\n", repo))
+	}
+	if len(req.Labels) > 0 {
+		for _, k := range []string{"org.opencontainers.image.source", "org.label-schema.vcs-url", "com.docker.compose.project", "com.docker.compose.service"} {
+			if v := strings.TrimSpace(req.Labels[k]); v != "" {
+				b.WriteString(fmt.Sprintf("- label_%s: %s\n", strings.ReplaceAll(k, ".", "_"), v))
+			}
+		}
+	}
+	if rc := strings.TrimSpace(req.ReleaseContext); rc != "" {
+		b.WriteString("\nRepository intelligence:\n")
+		b.WriteString(rc)
+		b.WriteString("\n")
+	}
+	b.WriteString("\nEvaluate upgrade risk and breaking changes for this deployment context.")
+	return b.String()
+}
+
+func extractImageTag(image string) string {
+	raw := strings.TrimSpace(image)
+	if raw == "" {
+		return "unknown"
+	}
+	withoutDigest := strings.SplitN(raw, "@", 2)[0]
+	lastSlash := strings.LastIndex(withoutDigest, "/")
+	lastColon := strings.LastIndex(withoutDigest, ":")
+	if lastColon > lastSlash {
+		tag := strings.TrimSpace(withoutDigest[lastColon+1:])
+		if tag != "" {
+			return tag
+		}
+	}
+	return "latest"
 }

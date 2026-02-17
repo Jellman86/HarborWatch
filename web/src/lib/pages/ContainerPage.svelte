@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import type { ContainerDetail } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
+    import { toasts } from "../stores/ToastStore";
 
     let { id, onNavigate } = $props<{
         id: string;
@@ -14,12 +15,18 @@
     let loading = $state(true);
     let auditing = $state(false);
     let savingRules = $state(false);
+    let runningTrivyScan = $state(false);
+    let runningMalwareScan = $state(false);
     let activeTab = $state("insights");
     let error = $state("");
+    let scanMessage = $state("");
+    let lifecycleMessage = $state("");
 
-    async function loadDetail() {
-        loading = true;
-        error = "";
+    async function loadDetail(silent = false) {
+        if (!silent) {
+            loading = true;
+            error = "";
+        }
         try {
             const res = await fetch(`/api/docker/${id}`);
             if (res.ok) {
@@ -31,17 +38,24 @@
                 detail = data;
             } else {
                 const body = await res.json().catch(() => ({}));
-                error = body?.message || `Container lookup failed (${res.status})`;
+                if (!silent) {
+                    error = body?.message || `Container lookup failed (${res.status})`;
+                }
             }
         } catch (e) {
-            error = "Failed to load container data";
+            if (!silent) {
+                error = "Failed to load container data";
+            }
         } finally {
-            loading = false;
+            if (!silent) {
+                loading = false;
+            }
         }
     }
 
     async function saveRules() {
         if (!detail?.rules) return;
+        lifecycleMessage = "";
         savingRules = true;
         try {
             const res = await fetch(`/api/docker/${id}/rules`, {
@@ -50,10 +64,17 @@
                 body: JSON.stringify(detail.rules)
             });
             if (res.ok) {
-                alert("Lifecycle rules updated.");
+                await loadDetail(true);
+                lifecycleMessage = detail?.rules?.validateUrl
+                    ? `Validation URL in use: ${detail.rules.validateUrl}`
+                    : "Lifecycle policy updated.";
+                toasts.success("Lifecycle policy updated.");
+            } else {
+                const body = await res.json().catch(() => ({}));
+                toasts.error(body?.message || `Failed to save lifecycle policy (${res.status})`);
             }
         } catch (e) {
-            alert("Failed to save rules.");
+            toasts.error("Failed to save lifecycle policy.");
         } finally {
             savingRules = false;
         }
@@ -74,6 +95,109 @@
         } finally {
             auditing = false;
         }
+    }
+
+    async function triggerTrivyScan() {
+        if (!detail || runningTrivyScan) return;
+        runningTrivyScan = true;
+        scanMessage = "Starting Trivy scan...";
+        try {
+            const res = await fetch("/api/scans/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ target: detail.summary.image })
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.message || `scan failed (${res.status})`);
+            }
+            const payload = await res.json();
+            const jobId = payload?.jobId;
+            if (!jobId) {
+                throw new Error("scan job id was not returned");
+            }
+            toasts.info("Trivy scan started.");
+            scanMessage = "Trivy scan is running...";
+            const done = await waitForScanJob(jobId);
+            if (done === "completed") {
+                toasts.success("Trivy scan completed.");
+                scanMessage = "Trivy scan completed.";
+                await loadDetail(true);
+                return;
+            }
+            if (done === "failed") {
+                toasts.error("Trivy scan failed.");
+                scanMessage = "Trivy scan failed.";
+                return;
+            }
+            toasts.warning("Trivy scan is still running in the background.");
+            scanMessage = "Trivy scan still running.";
+        } catch (e) {
+            scanMessage = "Failed to start Trivy scan.";
+            toasts.error(e instanceof Error ? e.message : "Failed to start Trivy scan.");
+        } finally {
+            runningTrivyScan = false;
+        }
+    }
+
+    async function waitForScanJob(jobId: string): Promise<"completed" | "failed" | "running"> {
+        const maxPolls = 40;
+        for (let i = 0; i < maxPolls; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            const res = await fetch(`/api/scans/jobs/${jobId}`);
+            if (!res.ok) continue;
+            const job = await res.json();
+            const status = String(job?.status || "");
+            if (status === "completed") return "completed";
+            if (status === "failed") return "failed";
+        }
+        return "running";
+    }
+
+    async function triggerContainerMalwareScan() {
+        if (runningMalwareScan) return;
+        runningMalwareScan = true;
+        scanMessage = "Queueing ClamAV container scan...";
+        const previousTop = detail?.malwareSummary?.[0]?.scannedAt || 0;
+        try {
+            const res = await fetch(`/api/scans/malware/container/${id}`, { method: "POST" });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.message || `scan failed (${res.status})`);
+            }
+            toasts.success("ClamAV scans queued for container rootfs and mounts.");
+            scanMessage = "ClamAV scan queued. Waiting for results...";
+            await refreshMalwareHistory(previousTop);
+        } catch (e) {
+            scanMessage = "Failed to queue ClamAV scan.";
+            toasts.error(e instanceof Error ? e.message : "Failed to queue ClamAV scan.");
+        } finally {
+            runningMalwareScan = false;
+        }
+    }
+
+    async function refreshMalwareHistory(previousTopScannedAt: number) {
+        for (let i = 0; i < 20; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            await loadDetail(true);
+            const top = detail?.malwareSummary?.[0]?.scannedAt || 0;
+            if (top > previousTopScannedAt) {
+                scanMessage = "ClamAV results updated.";
+                toasts.success("ClamAV scan finished and results were added.");
+                return;
+            }
+        }
+        scanMessage = "ClamAV scan is still running in background.";
+        toasts.info("ClamAV scan is still running. Results will appear when complete.");
+    }
+
+    function openManualUpdate() {
+        if (!detail) return;
+        onNavigate("updates", {
+            containerId: detail.summary.id,
+            targetImage: detail.summary.image,
+            validateUrl: detail.rules?.validateUrl || ""
+        });
     }
 
     onMount(() => {
@@ -182,9 +306,23 @@
                             <div class="text-4xl font-black text-orange-700 dark:text-orange-300 mt-2">{detail.vulnerabilitySummary?.high ?? 0}</div>
                         </div>
                         <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-3xl flex flex-col justify-center items-center gap-3">
-                            <button class="w-full py-3 bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-500/20 hover:bg-brand-700 transition-all">
-                                Trigger New Scan
+                            <button
+                                onclick={triggerTrivyScan}
+                                disabled={runningTrivyScan}
+                                class="w-full py-3 bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-500/20 hover:bg-brand-700 transition-all disabled:opacity-50"
+                            >
+                                {runningTrivyScan ? 'Scanning...' : 'Run Trivy Scan'}
                             </button>
+                            <button
+                                onclick={triggerContainerMalwareScan}
+                                disabled={runningMalwareScan}
+                                class="w-full py-3 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all disabled:opacity-50"
+                            >
+                                {runningMalwareScan ? 'Queueing...' : 'Scan with ClamAV'}
+                            </button>
+                            {#if scanMessage}
+                                <p class="text-[10px] text-center text-slate-500">{scanMessage}</p>
+                            {/if}
                         </div>
                     </div>
                     
@@ -253,6 +391,9 @@
                                         placeholder="http://localhost:8080/health"
                                         class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-mono"
                                     />
+                                    <p class="text-[10px] text-slate-500">
+                                        Used during update validation. Leave empty and HarborWatch derives this from labels, healthcheck, ports, and settings pattern.
+                                    </p>
                                 </div>
 
                                 <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
@@ -276,6 +417,9 @@
                                 >
                                     {savingRules ? 'Saving...' : 'Apply Policy Overrides'}
                                 </button>
+                                {#if lifecycleMessage}
+                                    <p class="text-[10px] text-slate-500">{lifecycleMessage}</p>
+                                {/if}
                             </div>
                         {/if}
                     </div>
@@ -289,7 +433,7 @@
                                 Ad-hoc Actions
                             </h3>
                             <div class="space-y-3">
-                                <button class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-3">
+                                <button onclick={openManualUpdate} class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-3">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                     </svg>

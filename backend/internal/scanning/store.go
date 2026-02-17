@@ -133,6 +133,29 @@ func (s *Store) MalwareSummaries(ctx context.Context, target string) ([]gen.Malw
 	return summaries, nil
 }
 
+func (s *Store) MalwareSummariesByPrefix(ctx context.Context, prefix string) ([]gen.MalwareScanSummary, error) {
+	query := `SELECT target, source, scanned_at, infected, threats_found FROM malware_scan_results WHERE target LIKE ? ORDER BY scanned_at DESC`
+	rows, err := s.db.QueryContext(ctx, query, prefix+":%")
+	if err != nil {
+		return nil, fmt.Errorf("query malware summaries by prefix: %w", err)
+	}
+	defer rows.Close()
+
+	var summaries []gen.MalwareScanSummary
+	for rows.Next() {
+		var sm gen.MalwareScanSummary
+		var infected int
+		var threatsRaw string
+		if err := rows.Scan(&sm.Target, &sm.Source, &sm.ScannedAt, &infected, &threatsRaw); err != nil {
+			return nil, fmt.Errorf("scan malware summary: %w", err)
+		}
+		sm.Infected = infected == 1
+		_ = json.Unmarshal([]byte(threatsRaw), &sm.ThreatsFound)
+		summaries = append(summaries, sm)
+	}
+	return summaries, nil
+}
+
 func (s *Store) CreateJob(ctx context.Context, job gen.ScanJobStatus, scanType string) error {
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO scan_jobs(job_id, target, type, status, source, started_at)

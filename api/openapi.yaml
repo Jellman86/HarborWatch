@@ -278,6 +278,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/MalwareScanSummary'
+  /api/scans/malware/container/{id}:
+    post:
+      operationId: runContainerMalwareScan
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: Container malware scans queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  containerId: { type: string }
   /api/audit/jobs:
     get:
       operationId: listAuditJobs

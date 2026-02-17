@@ -2,6 +2,27 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.4] - 2026-02-17
+
+### Added
+- **Container ClamAV Action:**
+  - Added `POST /api/scans/malware/container/{id}` to queue malware scans for both container rootfs and mounted paths.
+  - Added container detail UI actions for `Run Trivy Scan` and `Scan with ClamAV` with non-blocking progress/result feedback.
+- **Asset Lifecycle Automation:**
+  - Added automatic `validateUrl` derivation from container labels, healthcheck command, ports, and global validation pattern settings.
+  - Rules APIs now auto-fill missing validation URLs while still allowing user overrides.
+- **Update Pipeline Input Automation:**
+  - `POST /api/updates/run` now auto-derives `targetImage` and `validateUrl` when omitted, using container context.
+  - Update AI analysis now includes container context and repository intelligence (when repo metadata is available).
+
+### Fixed
+- **ClamAV Container Scan Build/Runtime Stability:**
+  - Fixed Docker `CopyFromContainer` typing mismatch in container malware snapshot logic.
+  - Added container existence pre-check for malware-container scan trigger to avoid queueing invalid IDs.
+- **Container Lifecycle UX:**
+  - Replaced blocking alerts with toast-driven feedback for lifecycle policy save actions.
+  - Added inline explanation for Validation URL behavior and automation.
+
 ## [0.7.3] - 2026-02-17
 
 ### Fixed
