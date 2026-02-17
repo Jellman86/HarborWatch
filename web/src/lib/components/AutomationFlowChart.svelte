@@ -30,6 +30,7 @@
     const NODE_MIN_WIDTH = 164;
     const GRID_COL_GAP = 14;
     const GRID_ROW_GAP = 26;
+    const MAX_SINGLE_ROW_NODES = 6;
 
     let host = $state<HTMLDivElement | null>(null);
     let hostWidth = $state(0);
@@ -49,7 +50,10 @@
     ]);
 
     let singleRowCapacity = $derived(
-        Math.max(3, Math.floor((hostWidth + GRID_COL_GAP) / (NODE_MIN_WIDTH + GRID_COL_GAP)))
+        Math.min(
+            MAX_SINGLE_ROW_NODES,
+            Math.max(3, Math.floor((hostWidth + GRID_COL_GAP) / (NODE_MIN_WIDTH + GRID_COL_GAP)))
+        )
     );
     let useTwoRows = $derived(flowNodes.length > singleRowCapacity);
     let columns = $derived(useTwoRows ? Math.ceil(flowNodes.length / 2) : flowNodes.length);
