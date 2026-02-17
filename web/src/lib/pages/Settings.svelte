@@ -12,16 +12,13 @@
         lastRun?: number;
     }
 
-    interface ModelList {
-        models?: string[];
-        error?: string;
-    }
-
-    interface ModelCatalog {
-        providers?: Record<string, ModelList>;
-    }
-
     type AutomationDomain = "upgrades" | "maintenance" | "security";
+    type AIProvider = "openai" | "anthropic" | "gemini";
+
+    interface ModelOption {
+        value: string;
+        label: string;
+    }
 
     const defaultSettings: Settings = {
         discordWebhookUrl: "",
@@ -43,15 +40,32 @@
 
     let settings = $state<Settings>({ ...defaultSettings });
     let schedules = $state<Schedule[]>([]);
-    let modelCatalog = $state<ModelCatalog>({ providers: {} });
 
     let activeTab = $state("automations");
     let activeAutomationTab = $state<AutomationDomain>("upgrades");
 
     let loading = $state(false);
     let saving = $state(false);
-    let loadingModels = $state(false);
     let testingProvider = $state("");
+
+    // Latest curated model choices (validated against provider docs, February 2026).
+    const latestModelsByProvider: Record<AIProvider, ModelOption[]> = {
+        openai: [
+            { value: "gpt-5-mini", label: "GPT-5 mini (Fast, cost-efficient)" },
+            { value: "gpt-5.2", label: "GPT-5.2 (Recommended)" },
+            { value: "gpt-5.2-pro", label: "GPT-5.2 Pro (Most capable)" }
+        ],
+        anthropic: [
+            { value: "claude-haiku-4-5", label: "Claude Haiku 4.5 (Fastest)" },
+            { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5 (Recommended)" },
+            { value: "claude-opus-4-6", label: "Claude Opus 4.6 (Most capable)" }
+        ],
+        gemini: [
+            { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Lowest cost)" },
+            { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Recommended)" },
+            { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (Most capable)" }
+        ]
+    };
 
     const automationConfig: Record<AutomationDomain, {
         title: string;
@@ -128,23 +142,10 @@
         schedules = await res.json();
     }
 
-    async function loadModelCatalog() {
-        loadingModels = true;
-        try {
-            const res = await fetch("/api/ai/models");
-            if (!res.ok) throw new Error(`model catalog failed (${res.status})`);
-            modelCatalog = await res.json();
-        } catch (e) {
-            toasts.error(e instanceof Error ? e.message : "Failed to load AI models");
-        } finally {
-            loadingModels = false;
-        }
-    }
-
     async function loadAll() {
         loading = true;
         try {
-            await Promise.all([loadSettings(), loadSchedules(), loadModelCatalog()]);
+            await Promise.all([loadSettings(), loadSchedules()]);
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to load settings");
         } finally {
@@ -199,12 +200,15 @@
         }
     }
 
-    function providerModels(provider: "openai" | "anthropic" | "gemini"): string[] {
-        return modelCatalog.providers?.[provider]?.models || [];
+    function providerModels(provider: AIProvider): ModelOption[] {
+        return latestModelsByProvider[provider];
     }
 
-    function providerError(provider: "openai" | "anthropic" | "gemini"): string {
-        return modelCatalog.providers?.[provider]?.error || "";
+    function normalizeModel(provider: AIProvider, model: string | undefined): string {
+        const options = providerModels(provider);
+        if (options.length === 0) return "";
+        const normalized = String(model || "").trim();
+        return options.some((opt) => opt.value === normalized) ? normalized : options[0].value;
     }
 
     async function testProvider(provider: "openai" | "anthropic" | "gemini", model: string) {
@@ -250,6 +254,12 @@
     function formatTime(ts?: number): string {
         return ts && ts > 0 ? new Date(ts * 1000).toLocaleString() : "Never";
     }
+
+    $effect(() => {
+        settings.openaiModel = normalizeModel("openai", settings.openaiModel);
+        settings.anthropicModel = normalizeModel("anthropic", settings.anthropicModel);
+        settings.geminiModel = normalizeModel("gemini", settings.geminiModel);
+    });
 
     onMount(() => {
         loadAll();
@@ -370,66 +380,39 @@
                             <option value="gemini">Gemini</option>
                         </select>
                     </div>
-                    <button onclick={loadModelCatalog} disabled={loadingModels} class="px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
-                        {loadingModels ? "Refreshing..." : "Refresh Model Catalog"}
-                    </button>
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">OpenAI</h3>
                         <input type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey")} placeholder="sk-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        {#if providerModels("openai").length > 0}
-                            <select bind:value={settings.openaiModel} disabled={isLocked("openaiModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
-                                <option value="">Default</option>
-                                {#each providerModels("openai") as model}
-                                    <option value={model}>{model}</option>
-                                {/each}
-                            </select>
-                        {:else}
-                            <input bind:value={settings.openaiModel} disabled={isLocked("openaiModel")} placeholder="gpt-5-mini" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        {/if}
-                        {#if providerError("openai")}
-                            <p class="text-[11px] text-amber-600">{providerError("openai")}</p>
-                        {/if}
+                        <select bind:value={settings.openaiModel} disabled={isLocked("openaiModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                            {#each providerModels("openai") as model}
+                                <option value={model.value}>{model.label}</option>
+                            {/each}
+                        </select>
                         <button onclick={() => testProvider("openai", settings.openaiModel || "")} disabled={testingProvider === "openai"} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "openai" ? "Testing..." : "Test OpenAI"}</button>
                     </div>
 
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Anthropic</h3>
                         <input type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey")} placeholder="sk-ant-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        {#if providerModels("anthropic").length > 0}
-                            <select bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
-                                <option value="">Default</option>
-                                {#each providerModels("anthropic") as model}
-                                    <option value={model}>{model}</option>
-                                {/each}
-                            </select>
-                        {:else}
-                            <input bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel")} placeholder="claude-sonnet" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        {/if}
-                        {#if providerError("anthropic")}
-                            <p class="text-[11px] text-amber-600">{providerError("anthropic")}</p>
-                        {/if}
+                        <select bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                            {#each providerModels("anthropic") as model}
+                                <option value={model.value}>{model.label}</option>
+                            {/each}
+                        </select>
                         <button onclick={() => testProvider("anthropic", settings.anthropicModel || "")} disabled={testingProvider === "anthropic"} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "anthropic" ? "Testing..." : "Test Anthropic"}</button>
                     </div>
 
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Gemini</h3>
                         <input type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey")} placeholder="AIza..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        {#if providerModels("gemini").length > 0}
-                            <select bind:value={settings.geminiModel} disabled={isLocked("geminiModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
-                                <option value="">Default</option>
-                                {#each providerModels("gemini") as model}
-                                    <option value={model}>{model}</option>
-                                {/each}
-                            </select>
-                        {:else}
-                            <input bind:value={settings.geminiModel} disabled={isLocked("geminiModel")} placeholder="gemini-2.5-flash" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        {/if}
-                        {#if providerError("gemini")}
-                            <p class="text-[11px] text-amber-600">{providerError("gemini")}</p>
-                        {/if}
+                        <select bind:value={settings.geminiModel} disabled={isLocked("geminiModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                            {#each providerModels("gemini") as model}
+                                <option value={model.value}>{model.label}</option>
+                            {/each}
+                        </select>
                         <button onclick={() => testProvider("gemini", settings.geminiModel || "")} disabled={testingProvider === "gemini"} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "gemini" ? "Testing..." : "Test Gemini"}</button>
                     </div>
                 </div>

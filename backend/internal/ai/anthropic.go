@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const defaultAnthropicModel = "claude-sonnet-4-20250514"
+const defaultAnthropicModel = "claude-sonnet-4-5"
 
 type anthropicProvider struct {
 	apiKey     string

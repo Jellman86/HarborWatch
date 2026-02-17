@@ -13,9 +13,11 @@ type openAIProvider struct {
 	model  string
 }
 
+const defaultOpenAIModel = "gpt-5.2"
+
 func NewOpenAIProvider(apiKey, model string) Provider {
 	if model == "" {
-		model = openai.GPT4oMini
+		model = defaultOpenAIModel
 	}
 	return &openAIProvider{
 		client: openai.NewClient(apiKey),
