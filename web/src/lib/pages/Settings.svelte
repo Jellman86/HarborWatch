@@ -65,21 +65,21 @@
             subtitle: "Detect updates, assess risk, and prepare safe rollouts",
             accent: "#0ea5e9",
             tasks: ["container_update_check"],
-            flow: ["Detect", "Assess", "Plan", "Validate", "Notify"]
+            flow: ["Discover Tags", "Risk Review", "Stage Update", "Health Verify", "Promote/Rollback"]
         },
         maintenance: {
             title: "Maintenance Automation",
             subtitle: "Keep host resources healthy and control data growth",
             accent: "#14b8a6",
             tasks: ["docker_system_prune", "metrics_prune", "diag_log_prune"],
-            flow: ["Collect", "Prune", "Reclaim", "Report"]
+            flow: ["Measure Usage", "Prune Targets", "Reclaim Space", "Verify Capacity", "Notify Team"]
         },
         security: {
             title: "Security Automation",
             subtitle: "Continuously sweep vulnerabilities and malware",
             accent: "#f97316",
             tasks: ["security_sweep_trivy", "malware_sweep_clamav"],
-            flow: ["Select", "Scan", "Analyze", "Escalate"]
+            flow: ["Inventory Assets", "Run Trivy", "Run ClamAV", "Prioritize Findings", "Escalate Action"]
         }
     };
 
@@ -470,7 +470,7 @@
                 </div>
                 <div class="space-y-2">
                     <label for="validate-pattern" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation URL Pattern</label>
-                    <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked("validateUrlPattern")} placeholder="http://localhost:{{PORT}}/health" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                    <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked("validateUrlPattern")} placeholder={"http://localhost:{{PORT}}/health"} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                     <p class="text-[11px] text-slate-500">Template for deriving per-container validation URLs.</p>
                 </div>
             </div>

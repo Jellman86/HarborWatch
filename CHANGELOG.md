@@ -26,6 +26,10 @@ All notable changes to HarborWatch are documented in this file.
 - **Container Lifecycle UX:**
   - Replaced blocking alerts with toast-driven feedback for lifecycle policy save actions.
   - Added inline explanation for Validation URL behavior and automation.
+- **Settings Runtime Stability & UX:**
+  - Fixed `ReferenceError: PORT is not defined` in Settings by safely rendering the validation URL placeholder token.
+  - Reworked automation visuals into deterministic step-flow diagrams (no chart-width `NaN`/`foreignObject` render failures).
+  - Hardened Docker events SSE reconnect behavior with backoff and deduplicated reconnect timers to reduce UI console noise.
 
 ## [0.7.3] - 2026-02-17
 

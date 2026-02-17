@@ -29,6 +29,9 @@
   let error = $state("");
 
   let eventSource: EventSource | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectDelayMs = 2000;
+  const maxReconnectDelayMs = 30000;
 
   async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, init);
@@ -37,8 +40,15 @@
   }
 
   function connectEvents() {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     eventSource?.close();
     eventSource = new EventSource("/api/docker/events");
+    eventSource.onopen = () => {
+      reconnectDelayMs = 2000;
+    };
     eventSource.addEventListener("docker", (evt) => {
       try {
         const parsed = JSON.parse((evt as MessageEvent).data) as DockerEvent;
@@ -49,9 +59,13 @@
     });
 
     eventSource.onerror = () => {
-      console.warn("Docker events connection interrupted. Attempting to reconnect...");
       eventSource?.close();
-      setTimeout(connectEvents, 5000);
+      if (reconnectTimer) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectEvents();
+      }, reconnectDelayMs);
+      reconnectDelayMs = Math.min(reconnectDelayMs * 2, maxReconnectDelayMs);
     };
   }
 
@@ -77,6 +91,7 @@
   });
 
   onDestroy(() => {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
     eventSource?.close();
   });
 </script>
