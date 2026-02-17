@@ -390,17 +390,19 @@
                         </div>
                     </div>
 
-                    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-                        <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Vulnerability details</h3>
-                        <TrivyFindingsPanel details={vulnerabilityDetails} loading={loadingVulnerabilityDetails} />
-                    </div>
-
-                    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-                        <div class="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400">Malware scan details</h3>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+                        <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 h-full">
+                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Vulnerability details</h3>
+                            <TrivyFindingsPanel details={vulnerabilityDetails} loading={loadingVulnerabilityDetails} />
                         </div>
-                        <div class="p-6">
-                            <MalwareScanPanel details={malwareDetails} loading={loadingMalwareDetails} />
+
+                        <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden h-full">
+                            <div class="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                                <h3 class="text-sm font-black uppercase tracking-tight text-slate-400">Malware scan details</h3>
+                            </div>
+                            <div class="p-6">
+                                <MalwareScanPanel details={malwareDetails} loading={loadingMalwareDetails} />
+                            </div>
                         </div>
                     </div>
                 </div>
