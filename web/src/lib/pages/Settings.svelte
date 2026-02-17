@@ -308,7 +308,7 @@
                     {/each}
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div class="space-y-6">
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40">
                         <AutomationFlowChart
                             title={automationConfig[activeAutomationTab].title}
@@ -321,7 +321,7 @@
                         </p>
                     </div>
 
-                    <div class="space-y-3">
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
                         {#each schedulesForDomain(activeAutomationTab) as task}
                             <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30">
                                 <div class="flex flex-wrap items-center justify-between gap-3">

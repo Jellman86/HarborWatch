@@ -1,7 +1,23 @@
 <script lang="ts">
+    import { onMount, tick } from "svelte";
+
     interface FlowStep {
         label: string;
         state?: "active" | "idle" | "warning";
+    }
+
+    interface FlowNode {
+        key: string;
+        kind: "terminal" | "step";
+        label: string;
+        logicalIndex: number;
+        stepNumber?: number;
+        state?: "active" | "idle" | "warning";
+    }
+
+    interface PositionedFlowNode extends FlowNode {
+        row: number;
+        col: number;
     }
 
     let { title, subtitle = "", steps = [], accent = "#0ea5e9" } = $props<{
@@ -11,7 +27,55 @@
         accent?: string;
     }>();
 
-    function nodeClasses(state?: string): string {
+    const NODE_MIN_WIDTH = 164;
+    const GRID_COL_GAP = 14;
+    const GRID_ROW_GAP = 26;
+
+    let host = $state<HTMLDivElement | null>(null);
+    let hostWidth = $state(0);
+    let connectorPaths = $state<string[]>([]);
+
+    let flowNodes = $derived<FlowNode[]>([
+        { key: "start", kind: "terminal", label: "Start", logicalIndex: 0 },
+        ...steps.map((step, idx) => ({
+            key: `step-${idx}`,
+            kind: "step" as const,
+            label: step.label,
+            logicalIndex: idx + 1,
+            stepNumber: idx + 1,
+            state: step.state
+        })),
+        { key: "end", kind: "terminal", label: "End", logicalIndex: steps.length + 1 }
+    ]);
+
+    let singleRowCapacity = $derived(
+        Math.max(3, Math.floor((hostWidth + GRID_COL_GAP) / (NODE_MIN_WIDTH + GRID_COL_GAP)))
+    );
+    let useTwoRows = $derived(flowNodes.length > singleRowCapacity);
+    let columns = $derived(useTwoRows ? Math.ceil(flowNodes.length / 2) : flowNodes.length);
+
+    let positionedNodes = $derived<PositionedFlowNode[]>((() => {
+        const cols = Math.max(columns, 1);
+        if (!useTwoRows) {
+            return flowNodes.map((node, idx) => ({ ...node, row: 0, col: idx }));
+        }
+
+        const firstRowCount = cols;
+        const firstRow = flowNodes.slice(0, firstRowCount).map((node, idx) => ({ ...node, row: 0, col: idx }));
+        const secondRow = flowNodes
+            .slice(firstRowCount)
+            .map((node, idx, arr) => ({ ...node, row: 1, col: arr.length - 1 - idx }));
+        return [...firstRow, ...secondRow];
+    })());
+
+    let gridStyle = $derived(
+        `grid-template-columns: repeat(${Math.max(columns, 1)}, minmax(0, 1fr)); column-gap: ${GRID_COL_GAP}px; row-gap: ${GRID_ROW_GAP}px;`
+    );
+
+    function nodeClasses(kind: FlowNode["kind"], state?: string): string {
+        if (kind === "terminal") {
+            return "border-slate-300 bg-white text-slate-600 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-300";
+        }
         switch (state) {
             case "active":
                 return "border-transparent text-white shadow-lg";
@@ -38,6 +102,77 @@
         if (state === "warning") return "partial";
         return "idle";
     }
+
+    function nodeStyle(node: PositionedFlowNode): string {
+        const placement = `grid-column:${node.col + 1}; grid-row:${node.row + 1};`;
+        if (node.kind === "step" && node.state === "active") {
+            return `${placement} background:${accent};`;
+        }
+        return placement;
+    }
+
+    async function updateGeometry() {
+        const width = host?.getBoundingClientRect().width ?? 0;
+        hostWidth = Number.isFinite(width) ? Math.max(Math.floor(width), 0) : 0;
+        if (!host || flowNodes.length <= 1) {
+            connectorPaths = [];
+            return;
+        }
+
+        await tick();
+        if (!host) {
+            connectorPaths = [];
+            return;
+        }
+
+        const base = host.getBoundingClientRect();
+        const centers = new Map<number, { x: number; y: number }>();
+        const nodes = host.querySelectorAll<HTMLElement>("[data-logical-index]");
+        nodes.forEach((el) => {
+            const idx = Number(el.dataset.logicalIndex);
+            if (!Number.isFinite(idx)) return;
+            const box = el.getBoundingClientRect();
+            centers.set(idx, {
+                x: box.left - base.left + box.width / 2,
+                y: box.top - base.top + box.height / 2
+            });
+        });
+
+        const paths: string[] = [];
+        for (let i = 0; i < flowNodes.length - 1; i++) {
+            const from = centers.get(i);
+            const to = centers.get(i + 1);
+            if (!from || !to) continue;
+            if (Math.abs(from.y - to.y) > 2 && Math.abs(from.x - to.x) > 2) {
+                const midY = (from.y + to.y) / 2;
+                paths.push(`M ${from.x} ${from.y} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`);
+            } else {
+                paths.push(`M ${from.x} ${from.y} L ${to.x} ${to.y}`);
+            }
+        }
+        connectorPaths = paths;
+    }
+
+    onMount(() => {
+        void updateGeometry();
+        const onResize = () => void updateGeometry();
+        let observer: ResizeObserver | null = null;
+        if (typeof ResizeObserver !== "undefined" && host) {
+            observer = new ResizeObserver(() => void updateGeometry());
+            observer.observe(host);
+        }
+        window.addEventListener("resize", onResize);
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener("resize", onResize);
+        };
+    });
+
+    $effect(() => {
+        positionedNodes;
+        steps.length;
+        void updateGeometry();
+    });
 </script>
 
 <div class="space-y-3">
@@ -49,35 +184,34 @@
     </div>
 
     {#if steps.length > 0}
-        <div class="overflow-x-auto pb-2">
-            <div class="flex items-center min-w-max">
-                <div class="shrink-0 rounded-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    Start
-                </div>
-                {#each steps as step, idx}
-                    <div class="mx-2 w-12 flex items-center justify-center" aria-hidden="true">
-                        <div class="relative h-[2px] w-10 bg-slate-300 dark:bg-slate-700">
-                            <span class="absolute -right-1 -top-[3px] h-0 w-0 border-y-[4px] border-y-transparent border-l-[6px] border-l-slate-400 dark:border-l-slate-500"></span>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/25 p-3">
+            <div class="relative w-full" bind:this={host}>
+                {#if connectorPaths.length > 0}
+                    <svg class="pointer-events-none absolute inset-0 h-full w-full" style={`color:${accent};`} aria-hidden="true">
+                        {#each connectorPaths as path}
+                            <path d={path} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.42"></path>
+                        {/each}
+                    </svg>
+                {/if}
+
+                <div class="grid w-full items-stretch" style={gridStyle}>
+                    {#each positionedNodes as node (node.key)}
+                        <div
+                            class="min-w-0 rounded-xl border px-3 py-3 transition-all {nodeClasses(node.kind, node.state)}"
+                            style={nodeStyle(node)}
+                            data-logical-index={node.logicalIndex}
+                        >
+                            {#if node.kind === "terminal"}
+                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-center">{node.label}</p>
+                            {:else}
+                                <p class="text-[9px] font-black uppercase tracking-[0.18em] opacity-80">Step {node.stepNumber}</p>
+                                <p class="mt-1 text-[11px] font-bold uppercase tracking-wide">{node.label}</p>
+                                <span class="mt-2 inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider {badgeClasses(node.state)}">
+                                    {statusLabel(node.state)}
+                                </span>
+                            {/if}
                         </div>
-                    </div>
-                    <div
-                        class="min-w-[164px] rounded-xl border px-3 py-3 transition-all {nodeClasses(step.state)}"
-                        style={step.state === "active" ? `background:${accent};` : ""}
-                    >
-                        <p class="text-[9px] font-black uppercase tracking-[0.18em] opacity-80">Step {idx + 1}</p>
-                        <p class="mt-1 text-[11px] font-bold uppercase tracking-wide">{step.label}</p>
-                        <span class="mt-2 inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider {badgeClasses(step.state)}">
-                            {statusLabel(step.state)}
-                        </span>
-                    </div>
-                {/each}
-                <div class="mx-2 w-12 flex items-center justify-center" aria-hidden="true">
-                    <div class="relative h-[2px] w-10 bg-slate-300 dark:bg-slate-700">
-                        <span class="absolute -right-1 -top-[3px] h-0 w-0 border-y-[4px] border-y-transparent border-l-[6px] border-l-slate-400 dark:border-l-slate-500"></span>
-                    </div>
-                </div>
-                <div class="shrink-0 rounded-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    End
+                    {/each}
                 </div>
             </div>
         </div>
