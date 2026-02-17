@@ -11,8 +11,13 @@
         gotifyToken: "",
         portainerUrl: "",
         portainerApiKey: "",
+        aiProvider: "",
         openaiKey: "",
         openaiModel: "",
+        anthropicKey: "",
+        anthropicModel: "",
+        geminiKey: "",
+        geminiModel: "",
         instanceUrl: "",
         validateUrlPattern: "",
         environmentOverrides: {}
@@ -163,6 +168,29 @@
                 <div class="space-y-10">
                     <div class="space-y-6">
                         <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+                            <div class="w-8 h-8 rounded-lg bg-brand-500/10 flex items-center justify-center text-brand-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <h3 class="font-black text-slate-900 dark:text-white uppercase tracking-wider text-sm">AI Provider Selection</h3>
+                        </div>
+                        <div class="space-y-2">
+                            <label for="ai-provider" class="text-[10px] font-black uppercase text-slate-400 ml-1">Preferred Provider</label>
+                            <div class="relative flex items-center">
+                                <select id="ai-provider" bind:value={settings.aiProvider} disabled={isLocked('aiProvider')} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all disabled:opacity-60">
+                                    <option value="">Auto (first configured)</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic (Claude)</option>
+                                    <option value="gemini">Google Gemini</option>
+                                </select>
+                                {#if isLocked('aiProvider')}
+                                    <div class="absolute right-4 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">ENV</div>
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
                             <div class="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                             </div>
@@ -183,6 +211,64 @@
                                 <div class="relative flex items-center">
                                     <input id="openai-model" bind:value={settings.openaiModel} disabled={isLocked('openaiModel')} placeholder="gpt-4o-mini" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all disabled:opacity-60" />
                                     {#if isLocked('openaiModel')}
+                                        <div class="absolute right-4 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">ENV</div>
+                                    {/if}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+                            <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.341A8 8 0 118.659 4.572" /></svg>
+                            </div>
+                            <h3 class="font-black text-slate-900 dark:text-white uppercase tracking-wider text-sm">Anthropic (Claude)</h3>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2 md:col-span-2">
+                                <label for="anthropic-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">API Key</label>
+                                <div class="relative flex items-center">
+                                    <input id="anthropic-key" type="password" bind:value={settings.anthropicKey} disabled={isLocked('anthropicKey')} placeholder="sk-ant-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all disabled:opacity-60 font-mono" />
+                                    {#if isLocked('anthropicKey')}
+                                        <div class="absolute right-4 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">ENV</div>
+                                    {/if}
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <label for="anthropic-model" class="text-[10px] font-black uppercase text-slate-400 ml-1">Model</label>
+                                <div class="relative flex items-center">
+                                    <input id="anthropic-model" bind:value={settings.anthropicModel} disabled={isLocked('anthropicModel')} placeholder="claude-sonnet-4-20250514" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all disabled:opacity-60" />
+                                    {#if isLocked('anthropicModel')}
+                                        <div class="absolute right-4 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">ENV</div>
+                                    {/if}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2l2.5 7.5H22l-6 4.5L18.5 22 12 17.5 5.5 22 8 14 2 9.5h7.5L12 2z" /></svg>
+                            </div>
+                            <h3 class="font-black text-slate-900 dark:text-white uppercase tracking-wider text-sm">Google Gemini</h3>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2 md:col-span-2">
+                                <label for="gemini-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">API Key</label>
+                                <div class="relative flex items-center">
+                                    <input id="gemini-key" type="password" bind:value={settings.geminiKey} disabled={isLocked('geminiKey')} placeholder="AIza..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all disabled:opacity-60 font-mono" />
+                                    {#if isLocked('geminiKey')}
+                                        <div class="absolute right-4 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">ENV</div>
+                                    {/if}
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <label for="gemini-model" class="text-[10px] font-black uppercase text-slate-400 ml-1">Model</label>
+                                <div class="relative flex items-center">
+                                    <input id="gemini-model" bind:value={settings.geminiModel} disabled={isLocked('geminiModel')} placeholder="gemini-2.5-flash" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all disabled:opacity-60" />
+                                    {#if isLocked('geminiModel')}
                                         <div class="absolute right-4 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded text-[8px] font-black uppercase tracking-tighter">ENV</div>
                                     {/if}
                                 </div>

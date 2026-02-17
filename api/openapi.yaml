@@ -854,8 +854,15 @@ components:
         gotifyToken: { type: string }
         portainerUrl: { type: string }
         portainerApiKey: { type: string }
+        aiProvider:
+          type: string
+          enum: [openai, anthropic, gemini]
         openaiKey: { type: string }
         openaiModel: { type: string }
+        anthropicKey: { type: string }
+        anthropicModel: { type: string }
+        geminiKey: { type: string }
+        geminiModel: { type: string }
         instanceUrl: { type: string }
         validateUrlPattern: { type: string }
         environmentOverrides:

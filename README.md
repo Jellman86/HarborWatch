@@ -28,6 +28,13 @@ HarborWatch is a professional, local-first container maintenance and security ap
   - `GET /api/diagnostics/snapshot` (aggregated diagnostics bundle for autonomous investigation)
   - `GET /api/diagnostics/containers/{id}/logs` (container logs through diagnostics namespace)
 
+## Robustness Notes (v0.7.3)
+
+- **Container Manage Fix:** Docker inspect parsing now correctly handles `State` object payloads, resolving the `cannot unmarshal ... State of type string` detail-page failure.
+- **Metrics Recovery:** Scheduler now auto-normalizes legacy 5-field cron entries to 6-field format (`cron.WithSeconds`), restoring `metrics_collector` execution on upgraded installs.
+- **Layout Stability:** Main shell offset/centering uses deterministic sidebar-width CSS variables for correct desktop/mobile behavior without sidebar overlap.
+- **AI Providers:** OpenAI, Anthropic (Claude), and Gemini are now supported with provider selection.
+
 ## Diagnostics API
 
 - `GET /api/system/logs` now supports filters:
@@ -50,6 +57,13 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - `HW_TRIVY_SCAN_TIMEOUT` sets overall vulnerability scan job timeout (default `15m`).
 - `HW_TRIVY_INTERNAL_TIMEOUT` sets Trivy CLI timeout argument (default `10m`).
 - `HW_CLAMAV_SCAN_TIMEOUT` sets malware scan job timeout (default `15m`).
+
+## AI Provider Configuration
+
+- `AI_PROVIDER`: `openai` | `anthropic` | `gemini` (optional; defaults to first configured provider)
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`
+- Anthropic: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`
+- Gemini: `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), `GEMINI_MODEL`
 
 ## Technology Stack
 

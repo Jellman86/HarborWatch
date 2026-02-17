@@ -183,7 +183,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	scanService := scanning.NewService(scanning.NewTrivyScanner(), scanning.NewClamAVScanner(), scanStore, diagService)
 
 	releaseService := releases.NewService()
-	aiService := ai.NewService(ai.NewProviderFromEnv())
+	aiService := ai.NewService(nil)
 	notificationService := notifications.NewService()
 
 	var portainerService *portainer.Client
@@ -192,6 +192,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		if diagService != nil {
 			diagService.Log("ERROR", "Settings", fmt.Sprintf("Failed to load settings on startup: %v", err))
 		}
+		aiService.SetProvider(ai.NewProviderFromEnv())
 	} else {
 		if st.DiscordWebhookURL != "" {
 			notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
@@ -199,6 +200,15 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		if st.PortainerURL != "" {
 			portainerService = portainer.NewClient(st.PortainerURL, st.PortainerApiKey)
 		}
+		aiService.SetProvider(ai.NewProviderFromConfig(ai.ProviderConfig{
+			Preferred:      st.AIProvider,
+			OpenAIKey:      st.OpenAIKey,
+			OpenAIModel:    st.OpenAIModel,
+			AnthropicKey:   st.AnthropicKey,
+			AnthropicModel: st.AnthropicModel,
+			GeminiKey:      st.GeminiKey,
+			GeminiModel:    st.GeminiModel,
+		}))
 	}
 
 	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService)
@@ -266,6 +276,12 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				if err := schedSvc.AddTask("0 * * * * *", metricService.GetCollectorTask(), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task metrics_collector: %v", err))
 				}
+
+				// Seed initial datapoints shortly after boot so dashboards don't stay empty until next cron boundary.
+				go func() {
+					time.Sleep(15 * time.Second)
+					_ = schedSvc.RunTask(context.Background(), "metrics_collector")
+				}()
 
 				schedSvc.RegisterTask("metrics_prune", func() scheduler.Task {
 					return metricService.GetPruneTask()
@@ -1184,6 +1200,24 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					default:
 						notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
 					}
+				}
+
+				if setter, ok := aiService.(interface{ SetProvider(ai.Provider) }); ok {
+					fresh := st
+					if settingsService != nil {
+						if loaded, err := settingsService.Get(r.Context()); err == nil {
+							fresh = loaded
+						}
+					}
+					setter.SetProvider(ai.NewProviderFromConfig(ai.ProviderConfig{
+						Preferred:      fresh.AIProvider,
+						OpenAIKey:      fresh.OpenAIKey,
+						OpenAIModel:    fresh.OpenAIModel,
+						AnthropicKey:   fresh.AnthropicKey,
+						AnthropicModel: fresh.AnthropicModel,
+						GeminiKey:      fresh.GeminiKey,
+						GeminiModel:    fresh.GeminiModel,
+					}))
 				}
 
 				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

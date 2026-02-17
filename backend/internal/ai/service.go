@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,11 +21,11 @@ const (
 
 // AnalysisResult is the structured output from an AI analysis.
 type AnalysisResult struct {
-	RiskScore       int      `json:"risk_score"`
+	RiskScore       int       `json:"risk_score"`
 	RiskLevel       RiskLevel `json:"risk_level"`
-	Summary         string   `json:"summary"`
-	BreakingChanges []string `json:"breaking_changes"`
-	ActionRequired  bool     `json:"action_required"`
+	Summary         string    `json:"summary"`
+	BreakingChanges []string  `json:"breaking_changes"`
+	ActionRequired  bool      `json:"action_required"`
 }
 
 // Provider defines the interface for different AI models (OpenAI, Anthropic, etc).
@@ -37,6 +38,7 @@ type Provider interface {
 
 // Service coordinates AI operations.
 type Service struct {
+	mu       sync.RWMutex
 	provider Provider
 }
 
@@ -45,18 +47,34 @@ func NewService(p Provider) *Service {
 }
 
 func (s *Service) HasProvider() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.provider != nil
 }
 
+func (s *Service) SetProvider(p Provider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.provider = p
+}
+
+func (s *Service) currentProvider() Provider {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.provider
+}
+
 func (s *Service) AnalyzeReleaseNotes(ctx context.Context, notes string) (AnalysisResult, error) {
-	if s.provider == nil {
+	provider := s.currentProvider()
+	if provider == nil {
 		return AnalysisResult{}, errors.New("no AI provider configured")
 	}
-	return s.provider.AnalyzeReleaseNotes(ctx, notes)
+	return provider.AnalyzeReleaseNotes(ctx, notes)
 }
 
 func (s *Service) AuditCompose(ctx context.Context, yamlStr string) (string, error) {
-	if s.provider == nil {
+	provider := s.currentProvider()
+	if provider == nil {
 		return "", errors.New("no AI provider configured")
 	}
 
@@ -66,12 +84,13 @@ func (s *Service) AuditCompose(ctx context.Context, yamlStr string) (string, err
 		return "", fmt.Errorf("invalid YAML syntax: %w", err)
 	}
 
-	return s.provider.AuditCompose(ctx, yamlStr)
+	return provider.AuditCompose(ctx, yamlStr)
 }
 
 func (s *Service) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
-	if s.provider == nil {
+	provider := s.currentProvider()
+	if provider == nil {
 		return "", errors.New("no AI provider configured")
 	}
-	return s.provider.AnalyzeMetrics(ctx, id, metrics)
+	return provider.AnalyzeMetrics(ctx, id, metrics)
 }

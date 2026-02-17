@@ -11,14 +11,19 @@ import (
 type Settings struct {
 	// Notifications
 	DiscordWebhookURL string `json:"discordWebhookUrl"`
-	GotifyURL          string `json:"gotifyUrl"`
-	GotifyToken        string `json:"gotifyToken"`
+	GotifyURL         string `json:"gotifyUrl"`
+	GotifyToken       string `json:"gotifyToken"`
 
 	// API Keys / Integrations
 	PortainerURL    string `json:"portainerUrl"`
 	PortainerApiKey string `json:"portainerApiKey"`
+	AIProvider      string `json:"aiProvider"`
 	OpenAIKey       string `json:"openaiKey"`
 	OpenAIModel     string `json:"openaiModel"`
+	AnthropicKey    string `json:"anthropicKey"`
+	AnthropicModel  string `json:"anthropicModel"`
+	GeminiKey       string `json:"geminiKey"`
+	GeminiModel     string `json:"geminiModel"`
 
 	// System
 	InstanceURL        string `json:"instanceUrl"`
@@ -82,6 +87,16 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.OpenAIKey = value
 		case "openai_model":
 			st.OpenAIModel = value
+		case "ai_provider":
+			st.AIProvider = value
+		case "anthropic_key":
+			st.AnthropicKey = value
+		case "anthropic_model":
+			st.AnthropicModel = value
+		case "gemini_key":
+			st.GeminiKey = value
+		case "gemini_model":
+			st.GeminiModel = value
 		case "instance_url":
 			st.InstanceURL = value
 		case "validate_url_pattern":
@@ -99,8 +114,13 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		"gotifyToken":        {&st.GotifyToken, "GOTIFY_TOKEN"},
 		"portainerUrl":       {&st.PortainerURL, "PORTAINER_URL"},
 		"portainerApiKey":    {&st.PortainerApiKey, "PORTAINER_API_KEY"},
+		"aiProvider":         {&st.AIProvider, "AI_PROVIDER"},
 		"openaiKey":          {&st.OpenAIKey, "OPENAI_API_KEY"},
 		"openaiModel":        {&st.OpenAIModel, "OPENAI_MODEL"},
+		"anthropicKey":       {&st.AnthropicKey, "ANTHROPIC_API_KEY"},
+		"anthropicModel":     {&st.AnthropicModel, "ANTHROPIC_MODEL"},
+		"geminiKey":          {&st.GeminiKey, "GEMINI_API_KEY"},
+		"geminiModel":        {&st.GeminiModel, "GEMINI_MODEL"},
 		"instanceUrl":        {&st.InstanceURL, "HW_INSTANCE_URL"},
 		"validateUrlPattern": {&st.ValidateURLPattern, "HW_VALIDATE_PATTERN"},
 	}
@@ -109,6 +129,12 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		if val := os.Getenv(mapping.envKey); val != "" {
 			*mapping.ptr = val
 			st.EnvironmentOverrides[jsonKey] = true
+		}
+	}
+	if !st.EnvironmentOverrides["geminiKey"] {
+		if val := os.Getenv("GOOGLE_API_KEY"); val != "" {
+			st.GeminiKey = val
+			st.EnvironmentOverrides["geminiKey"] = true
 		}
 	}
 
@@ -132,8 +158,13 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"gotify_token":         st.GotifyToken,
 		"portainer_url":        st.PortainerURL,
 		"portainer_api_key":    st.PortainerApiKey,
+		"ai_provider":          st.AIProvider,
 		"openai_key":           st.OpenAIKey,
 		"openai_model":         st.OpenAIModel,
+		"anthropic_key":        st.AnthropicKey,
+		"anthropic_model":      st.AnthropicModel,
+		"gemini_key":           st.GeminiKey,
+		"gemini_model":         st.GeminiModel,
 		"instance_url":         st.InstanceURL,
 		"validate_url_pattern": st.ValidateURLPattern,
 	}
@@ -144,14 +175,19 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"gotifyToken":        "gotify_token",
 		"portainerUrl":       "portainer_url",
 		"portainerApiKey":    "portainer_api_key",
+		"aiProvider":         "ai_provider",
 		"openaiKey":          "openai_key",
 		"openaiModel":        "openai_model",
+		"anthropicKey":       "anthropic_key",
+		"anthropicModel":     "anthropic_model",
+		"geminiKey":          "gemini_key",
+		"geminiModel":        "gemini_model",
 		"instanceUrl":        "instance_url",
 		"validateUrlPattern": "validate_url_pattern",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {
-		// If it's overridden by ENV, we don't allow saving to DB for that key 
+		// If it's overridden by ENV, we don't allow saving to DB for that key
 		// (or we can save it but ENV will still win on next Get)
 		// For clarity, we'll only save if NOT overridden.
 		if current.EnvironmentOverrides[jsonKey] {

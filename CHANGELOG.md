@@ -2,6 +2,28 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.3] - 2026-02-17
+
+### Fixed
+- **Container Detail API:**
+  - Fixed Docker inspect decoding in `GET /api/docker/{id}` by handling inspect-style `State` objects instead of list-style `State` strings.
+  - Resolves runtime error: `json: cannot unmarshal object into ... containerJSON.State of type string`.
+- **Metrics Collection Reliability:**
+  - Added scheduler cron-spec normalization for legacy persisted 5-field entries.
+  - Auto-upgrades old schedule specs (e.g., `* * * * *`) to 6-field (`0 * * * * *`) to match `cron.WithSeconds`.
+  - Added startup seed run for `metrics_collector` so dashboards populate shortly after boot.
+- **Layout & Navigation UX:**
+  - Reworked app shell/main spacing to use explicit sidebar width offsets, preventing expanded-sidebar overlap and improving centering on desktop/mobile.
+
+### Added
+- **AI Provider Support:**
+  - Added Anthropic (Claude) provider integration.
+  - Added Gemini provider integration.
+  - Added provider selection logic (`AI_PROVIDER`) with automatic fallback across configured providers.
+  - Added settings fields for provider selection and keys/models across OpenAI, Anthropic, and Gemini.
+- **Scheduler Tests:**
+  - Added regression tests for cron-spec normalization and legacy schedule upgrade behavior.
+
 ## [0.7.2] - 2026-02-17
 
 ### Added

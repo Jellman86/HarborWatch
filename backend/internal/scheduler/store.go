@@ -47,7 +47,7 @@ func (s *Store) SaveSchedule(ctx context.Context, entry ScheduleEntry) error {
 	if entry.Enabled {
 		val = 1
 	}
-	// We use INSERT OR IGNORE to ensure we don't overwrite user-toggled states 
+	// We use INSERT OR IGNORE to ensure we don't overwrite user-toggled states
 	// during the boot-time task registration.
 	_, err := s.db.ExecContext(ctx, `
 INSERT OR IGNORE INTO schedules(id, cron_spec, enabled)
@@ -62,6 +62,11 @@ func (s *Store) ToggleSchedule(ctx context.Context, id string, enabled bool) err
 		val = 1
 	}
 	_, err := s.db.ExecContext(ctx, "UPDATE schedules SET enabled=? WHERE id=?", val, id)
+	return err
+}
+
+func (s *Store) UpdateScheduleSpec(ctx context.Context, id, cronSpec string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE schedules SET cron_spec=? WHERE id=?", cronSpec, id)
 	return err
 }
 

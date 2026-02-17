@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,6 +71,16 @@ func (s *Service) AddTask(spec string, task Task, enabled bool) error {
 			Enabled:  enabled,
 		})
 
+		// Keep cron specs up to date for existing installations that persisted older 5-field specs.
+		entry, err := s.store.GetSchedule(ctx, taskName)
+		if err == nil {
+			targetSpec := normalizeCronSpec(spec)
+			if entry.CronSpec != targetSpec && targetSpec != "" {
+				log.Printf("Updating cron spec for %s: %q -> %q", taskName, entry.CronSpec, targetSpec)
+				_ = s.store.UpdateScheduleSpec(ctx, taskName, targetSpec)
+			}
+		}
+
 		// 3. Fixup: If enabled requested, but DB has it disabled and it never ran (likely due to previous bug), enable it.
 		if enabled {
 			entry, err := s.store.GetSchedule(ctx, taskName)
@@ -98,6 +109,11 @@ func (s *Service) LoadSchedules(ctx context.Context) error {
 			continue
 		}
 
+		spec := normalizeCronSpec(entry.CronSpec)
+		if spec != entry.CronSpec && s.store != nil {
+			_ = s.store.UpdateScheduleSpec(ctx, entry.ID, spec)
+		}
+
 		s.mu.RLock()
 		factory, ok := s.registry[entry.ID]
 		s.mu.RUnlock()
@@ -105,7 +121,7 @@ func (s *Service) LoadSchedules(ctx context.Context) error {
 		if ok {
 			task := factory()
 			// We use a simplified internal add that doesn't re-save to DB to avoid loops
-			id, err := s.cron.AddFunc(entry.CronSpec, func() {
+			id, err := s.cron.AddFunc(spec, func() {
 				log.Printf("Executing scheduled task: %s", entry.ID)
 				if err := task.Run(context.Background()); err != nil {
 					log.Printf("Error executing task %s: %v", entry.ID, err)
@@ -123,6 +139,19 @@ func (s *Service) LoadSchedules(ctx context.Context) error {
 	return nil
 }
 
+func normalizeCronSpec(spec string) string {
+	fields := strings.Fields(spec)
+	switch len(fields) {
+	case 5:
+		// Existing installs may have persisted 5-field cron specs from pre-`cron.WithSeconds` versions.
+		return "0 " + strings.Join(fields, " ")
+	case 6:
+		return strings.Join(fields, " ")
+	default:
+		return spec
+	}
+}
+
 func (s *Service) RemoveTask(name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,7 +160,7 @@ func (s *Service) RemoveTask(name string) {
 		s.cron.Remove(id)
 		delete(s.tasks, name)
 	}
-	
+
 	if s.store != nil {
 		_ = s.store.DeleteSchedule(context.Background(), name)
 	}

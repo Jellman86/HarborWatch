@@ -53,8 +53,8 @@ Release Notes:
 		return AnalysisResult{}, fmt.Errorf("openai completion failed: %w", err)
 	}
 
-	var result AnalysisResult
-	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &result); err != nil {
+	result, err := parseAnalysisResult(resp.Choices[0].Message.Content)
+	if err != nil {
 		return AnalysisResult{}, fmt.Errorf("failed to parse AI response: %w", err)
 	}
 

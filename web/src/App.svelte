@@ -81,7 +81,7 @@
   });
 </script>
 
-<div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 bg-grain">
+<div class="app-shell min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 bg-grain">
   <!-- Mobile Header -->
   <header class="md:hidden flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40">
     <div class="flex items-center gap-3">
@@ -114,8 +114,11 @@
 
   <Sidebar {currentRoute} onNavigate={navigate} />
 
-  <main class="transition-all duration-300 md:{layoutStore.sidebarCollapsed ? 'pl-20' : 'pl-64'} pl-0 min-h-screen">
-    <div class="max-w-7xl mx-auto p-4 md:p-8">
+  <main
+    class="app-main min-h-screen transition-[padding-left] duration-300"
+    style={`--sidebar-offset:${layoutStore.sidebarCollapsed ? '5rem' : '16rem'}`}
+  >
+    <div class="content-shell mx-auto w-full px-4 py-4 md:px-8 md:py-8">
       {#if error}
         <div class="mb-6 p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-sm font-bold flex items-center gap-3 animate-pulse">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -187,5 +190,19 @@
 <style>
   :global(body) {
     @apply antialiased overflow-x-hidden;
+  }
+
+  .content-shell {
+    max-width: 120rem;
+  }
+
+  .app-main {
+    padding-left: 0;
+  }
+
+  @media (min-width: 768px) {
+    .app-main {
+      padding-left: var(--sidebar-offset, 16rem);
+    }
   }
 </style>

@@ -99,19 +99,44 @@ func (c *Client) ListContainers(ctx context.Context) ([]gen.ContainerSummary, er
 }
 
 func (c *Client) GetContainer(ctx context.Context, id string) (gen.ContainerSummary, error) {
-	var item containerJSON
+	var item containerInspectJSON
 	if err := c.getJSON(ctx, "/containers/"+id+"/json", &item); err != nil {
 		return gen.ContainerSummary{}, err
 	}
 
+	name := strings.TrimPrefix(item.Name, "/")
+	state := strings.TrimSpace(item.State.Status)
+	if state == "" {
+		switch {
+		case item.State.Running:
+			state = "running"
+		case item.State.Dead:
+			state = "dead"
+		default:
+			state = "unknown"
+		}
+	}
+	status := strings.TrimSpace(item.State.Status)
+	if status == "" {
+		status = state
+	}
+	names := []string{}
+	if name != "" {
+		names = append(names, "/"+name)
+	}
+	labels := item.Config.Labels
+	if labels == nil {
+		labels = map[string]string{}
+	}
+
 	return gen.ContainerSummary{
 		ID:              item.ID,
-		Names:           item.Names,
-		Image:           item.Image,
-		State:           item.State,
-		Status:          item.Status,
-		Labels:          item.Labels,
-		UpdateAvailable: globalUpdateStore.Get(item.Image),
+		Names:           names,
+		Image:           item.Config.Image,
+		State:           state,
+		Status:          status,
+		Labels:          labels,
+		UpdateAvailable: globalUpdateStore.Get(item.Config.Image),
 	}, nil
 }
 
@@ -409,6 +434,20 @@ type containerJSON struct {
 	State  string            `json:"State"`
 	Status string            `json:"Status"`
 	Labels map[string]string `json:"Labels"`
+}
+
+type containerInspectJSON struct {
+	ID    string `json:"Id"`
+	Name  string `json:"Name"`
+	State struct {
+		Status  string `json:"Status"`
+		Running bool   `json:"Running"`
+		Dead    bool   `json:"Dead"`
+	} `json:"State"`
+	Config struct {
+		Image  string            `json:"Image"`
+		Labels map[string]string `json:"Labels"`
+	} `json:"Config"`
 }
 
 type imageJSON struct {
