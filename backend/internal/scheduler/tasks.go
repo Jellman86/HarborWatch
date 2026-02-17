@@ -18,6 +18,8 @@ type ScannerService interface {
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
 }
 
+type ContainerAutomationPolicy func(ctx context.Context, containerID string) bool
+
 // DockerPruneTask cleans up dangling images and stopped containers.
 type DockerPruneTask struct {
 	docker *client.Client
@@ -53,10 +55,15 @@ func (t *DockerPruneTask) Run(ctx context.Context) error {
 type TrivySweepTask struct {
 	docker  *client.Client
 	scanner ScannerService
+	allow   ContainerAutomationPolicy
 }
 
-func NewTrivySweepTask(cli *client.Client, s ScannerService) *TrivySweepTask {
-	return &TrivySweepTask{docker: cli, scanner: s}
+func NewTrivySweepTask(cli *client.Client, s ScannerService, allow ...ContainerAutomationPolicy) *TrivySweepTask {
+	task := &TrivySweepTask{docker: cli, scanner: s}
+	if len(allow) > 0 {
+		task.allow = allow[0]
+	}
+	return task
 }
 
 func (t *TrivySweepTask) Name() string { return "security_sweep_trivy" }
@@ -69,6 +76,9 @@ func (t *TrivySweepTask) Run(ctx context.Context) error {
 
 	seenImages := make(map[string]struct{}, len(containers))
 	for _, c := range containers {
+		if t.allow != nil && !t.allow(ctx, c.ID) {
+			continue
+		}
 		image := strings.TrimSpace(c.Image)
 		if image == "" {
 			continue
@@ -90,10 +100,15 @@ func (t *TrivySweepTask) Run(ctx context.Context) error {
 type ClamAVSweepTask struct {
 	docker  *client.Client
 	scanner ScannerService
+	allow   ContainerAutomationPolicy
 }
 
-func NewClamAVSweepTask(cli *client.Client, s ScannerService) *ClamAVSweepTask {
-	return &ClamAVSweepTask{docker: cli, scanner: s}
+func NewClamAVSweepTask(cli *client.Client, s ScannerService, allow ...ContainerAutomationPolicy) *ClamAVSweepTask {
+	task := &ClamAVSweepTask{docker: cli, scanner: s}
+	if len(allow) > 0 {
+		task.allow = allow[0]
+	}
+	return task
 }
 
 func (t *ClamAVSweepTask) Name() string { return "malware_sweep_clamav" }
@@ -108,6 +123,9 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 	seenPaths := make(map[string]bool)
 
 	for _, c := range containers {
+		if t.allow != nil && !t.allow(ctx, c.ID) {
+			continue
+		}
 		inspect, err := t.docker.ContainerInspect(ctx, c.ID)
 		if err != nil {
 			continue

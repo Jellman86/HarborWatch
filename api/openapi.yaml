@@ -697,6 +697,10 @@ components:
         validateIntervalSec: { type: integer }
         aiValidateLogs: { type: boolean }
         autoRollback: { type: boolean }
+        inheritAutomation: { type: boolean }
+        upgradesAutomation: { type: boolean }
+        maintenanceAutomation: { type: boolean }
+        securityAutomation: { type: boolean }
     Metric:
       type: object
       required: [containerId, timestamp, cpuPercent, memoryUsage, memoryLimit, pids]

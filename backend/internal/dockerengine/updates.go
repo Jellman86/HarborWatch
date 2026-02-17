@@ -63,11 +63,11 @@ func CheckImageUpdate(ctx context.Context, cli *client.Client, imageName string)
 	dist, err := cli.DistributionInspect(ctx, imageName, "")
 	if err != nil {
 		// If registry doesn't support DistributionInspect or auth fails, we can't be sure.
-		return false, nil 
+		return false, nil
 	}
 
 	remoteDigest := string(dist.Descriptor.Digest)
-	
+
 	// If we have a local digest, compare it.
 	// RepoDigests usually looks like "repo/image@sha256:..."
 	if localDigest != "" {
@@ -114,17 +114,22 @@ func byteIndex(s string, b byte) int {
 // UpdateCheckTask is a scheduler task to refresh update information.
 type UpdateCheckTask struct {
 	docker *client.Client
+	allow  func(ctx context.Context, containerID string) bool
 }
 
-func NewUpdateCheckTask(cli *client.Client) *UpdateCheckTask {
-	return &UpdateCheckTask{docker: cli}
+func NewUpdateCheckTask(cli *client.Client, allow ...func(ctx context.Context, containerID string) bool) *UpdateCheckTask {
+	task := &UpdateCheckTask{docker: cli}
+	if len(allow) > 0 {
+		task.allow = allow[0]
+	}
+	return task
 }
 
 func (t *UpdateCheckTask) Name() string { return "container_update_check" }
 
 func (t *UpdateCheckTask) Run(ctx context.Context) error {
 	log.Println("Starting automated update check for containers...")
-	
+
 	// Get all images from running containers
 	containers, err := t.docker.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
@@ -133,6 +138,9 @@ func (t *UpdateCheckTask) Run(ctx context.Context) error {
 
 	images := make(map[string]bool)
 	for _, c := range containers {
+		if t.allow != nil && !t.allow(ctx, c.ID) {
+			continue
+		}
 		images[c.Image] = true
 	}
 

@@ -32,6 +32,14 @@ func effectiveContainerRules(ctx context.Context, summary gen.ContainerSummary, 
 	if out.ValidateIntervalSec <= 0 {
 		out.ValidateIntervalSec = 2
 	}
+	if !out.InheritAutomation && !out.UpgradesAutomation && !out.MaintenanceAutomation && !out.SecurityAutomation {
+		out.InheritAutomation = true
+	}
+	if out.InheritAutomation {
+		out.UpgradesAutomation = true
+		out.MaintenanceAutomation = true
+		out.SecurityAutomation = true
+	}
 	if strings.TrimSpace(out.ValidateURL) != "" {
 		return out
 	}

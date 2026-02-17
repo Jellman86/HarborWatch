@@ -10,14 +10,18 @@ import (
 )
 
 type ContainerRules struct {
-	ContainerID       string `json:"containerId"`
-	UpdatePolicy      string `json:"updatePolicy"` // auto, manual, locked
-	ValidateURL       string `json:"validateUrl"`
-	ValidateMode      string `json:"validateMode"` // http, docker, both
-	ValidateTimeoutSec int   `json:"validateTimeoutSec"`
-	ValidateIntervalSec int  `json:"validateIntervalSec"`
-	AIValidateLogs    bool   `json:"aiValidateLogs"`
-	AutoRollback      bool   `json:"autoRollback"`
+	ContainerID           string `json:"containerId"`
+	UpdatePolicy          string `json:"updatePolicy"` // auto, manual, locked
+	ValidateURL           string `json:"validateUrl"`
+	ValidateMode          string `json:"validateMode"` // http, docker, both
+	ValidateTimeoutSec    int    `json:"validateTimeoutSec"`
+	ValidateIntervalSec   int    `json:"validateIntervalSec"`
+	AIValidateLogs        bool   `json:"aiValidateLogs"`
+	AutoRollback          bool   `json:"autoRollback"`
+	InheritAutomation     bool   `json:"inheritAutomation"`
+	UpgradesAutomation    bool   `json:"upgradesAutomation"`
+	MaintenanceAutomation bool   `json:"maintenanceAutomation"`
+	SecurityAutomation    bool   `json:"securityAutomation"`
 }
 
 type Store struct {
@@ -40,7 +44,11 @@ CREATE TABLE IF NOT EXISTS container_rules (
     validate_timeout_sec INTEGER DEFAULT 45,
     validate_interval_sec INTEGER DEFAULT 2,
     ai_validate_logs INTEGER DEFAULT 0,
-    auto_rollback INTEGER DEFAULT 1
+    auto_rollback INTEGER DEFAULT 1,
+    inherit_automation INTEGER DEFAULT 1,
+    upgrades_automation INTEGER DEFAULT 1,
+    maintenance_automation INTEGER DEFAULT 1,
+    security_automation INTEGER DEFAULT 1
 );
 `)
 	if err != nil {
@@ -58,34 +66,54 @@ CREATE TABLE IF NOT EXISTS container_rules (
 	if err := s.ensureColumn(ctx, "ai_validate_logs", "INTEGER DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "inherit_automation", "INTEGER DEFAULT 1"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "upgrades_automation", "INTEGER DEFAULT 1"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "maintenance_automation", "INTEGER DEFAULT 1"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "security_automation", "INTEGER DEFAULT 1"); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (s *Store) Get(ctx context.Context, id string) (ContainerRules, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, ai_validate_logs, auto_rollback 
+SELECT container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation 
 FROM container_rules WHERE container_id = ?
 `, id)
 
 	var r ContainerRules
-	var rollback int
-	var aiValidateLogs int
-	if err := row.Scan(&r.ContainerID, &r.UpdatePolicy, &r.ValidateURL, &r.ValidateMode, &r.ValidateTimeoutSec, &r.ValidateIntervalSec, &aiValidateLogs, &rollback); err != nil {
+	var rollback, aiValidateLogs int
+	var inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation int
+	if err := row.Scan(&r.ContainerID, &r.UpdatePolicy, &r.ValidateURL, &r.ValidateMode, &r.ValidateTimeoutSec, &r.ValidateIntervalSec, &aiValidateLogs, &rollback, &inheritAutomation, &upgradesAutomation, &maintenanceAutomation, &securityAutomation); err != nil {
 		if err == sql.ErrNoRows {
 			return ContainerRules{
-				ContainerID:        id,
-				UpdatePolicy:       "manual",
-				ValidateMode:       "both",
-				ValidateTimeoutSec: 45,
-				ValidateIntervalSec: 2,
-				AIValidateLogs:     false,
-				AutoRollback:       true,
+				ContainerID:           id,
+				UpdatePolicy:          "manual",
+				ValidateMode:          "both",
+				ValidateTimeoutSec:    45,
+				ValidateIntervalSec:   2,
+				AIValidateLogs:        false,
+				AutoRollback:          true,
+				InheritAutomation:     true,
+				UpgradesAutomation:    true,
+				MaintenanceAutomation: true,
+				SecurityAutomation:    true,
 			}, nil
 		}
 		return r, err
 	}
 	r.AIValidateLogs = aiValidateLogs == 1
 	r.AutoRollback = rollback == 1
+	r.InheritAutomation = inheritAutomation == 1
+	r.UpgradesAutomation = upgradesAutomation == 1
+	r.MaintenanceAutomation = maintenanceAutomation == 1
+	r.SecurityAutomation = securityAutomation == 1
 	if strings.TrimSpace(r.ValidateMode) == "" {
 		r.ValidateMode = "both"
 	}
@@ -95,6 +123,7 @@ FROM container_rules WHERE container_id = ?
 	if r.ValidateIntervalSec <= 0 {
 		r.ValidateIntervalSec = 2
 	}
+	normalizeAutomationDefaults(&r)
 	return r, nil
 }
 
@@ -116,9 +145,26 @@ func (s *Store) Save(ctx context.Context, r ContainerRules) error {
 	if r.ValidateIntervalSec <= 0 {
 		r.ValidateIntervalSec = 2
 	}
+	normalizeAutomationDefaults(&r)
+	inheritAutomation := 0
+	if r.InheritAutomation {
+		inheritAutomation = 1
+	}
+	upgradesAutomation := 0
+	if r.UpgradesAutomation {
+		upgradesAutomation = 1
+	}
+	maintenanceAutomation := 0
+	if r.MaintenanceAutomation {
+		maintenanceAutomation = 1
+	}
+	securityAutomation := 0
+	if r.SecurityAutomation {
+		securityAutomation = 1
+	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO container_rules (container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, ai_validate_logs, auto_rollback)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO container_rules (container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(container_id) DO UPDATE SET
     update_policy = excluded.update_policy,
     validate_url = excluded.validate_url,
@@ -126,9 +172,31 @@ ON CONFLICT(container_id) DO UPDATE SET
     validate_timeout_sec = excluded.validate_timeout_sec,
     validate_interval_sec = excluded.validate_interval_sec,
     ai_validate_logs = excluded.ai_validate_logs,
-    auto_rollback = excluded.auto_rollback
-`, r.ContainerID, r.UpdatePolicy, r.ValidateURL, r.ValidateMode, r.ValidateTimeoutSec, r.ValidateIntervalSec, aiValidateLogs, rollback)
+    auto_rollback = excluded.auto_rollback,
+    inherit_automation = excluded.inherit_automation,
+    upgrades_automation = excluded.upgrades_automation,
+    maintenance_automation = excluded.maintenance_automation,
+    security_automation = excluded.security_automation
+`, r.ContainerID, r.UpdatePolicy, r.ValidateURL, r.ValidateMode, r.ValidateTimeoutSec, r.ValidateIntervalSec, aiValidateLogs, rollback, inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation)
 	return err
+}
+
+func normalizeAutomationDefaults(r *ContainerRules) {
+	if !r.InheritAutomation && !r.UpgradesAutomation && !r.MaintenanceAutomation && !r.SecurityAutomation {
+		// Treat all-false payloads as unset/legacy and fall back to safe defaults.
+		r.InheritAutomation = true
+	}
+	if r.InheritAutomation {
+		if !r.UpgradesAutomation {
+			r.UpgradesAutomation = true
+		}
+		if !r.MaintenanceAutomation {
+			r.MaintenanceAutomation = true
+		}
+		if !r.SecurityAutomation {
+			r.SecurityAutomation = true
+		}
+	}
 }
 
 func (s *Store) ensureColumn(ctx context.Context, columnName, columnDDL string) error {

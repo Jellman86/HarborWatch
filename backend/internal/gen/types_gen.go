@@ -52,14 +52,18 @@ type ContainerDiskUsage struct {
 	HostUsedBytes      int64 `json:"hostUsedBytes,omitempty"`
 }
 type ContainerRules struct {
-	ContainerID         string `json:"containerId"`
-	UpdatePolicy        string `json:"updatePolicy"`
-	ValidateURL         string `json:"validateUrl"`
-	ValidateMode        string `json:"validateMode"`
-	ValidateTimeoutSec  int    `json:"validateTimeoutSec"`
-	ValidateIntervalSec int    `json:"validateIntervalSec"`
-	AIValidateLogs      bool   `json:"aiValidateLogs"`
-	AutoRollback        bool   `json:"autoRollback"`
+	ContainerID           string `json:"containerId"`
+	UpdatePolicy          string `json:"updatePolicy"`
+	ValidateURL           string `json:"validateUrl"`
+	ValidateMode          string `json:"validateMode"`
+	ValidateTimeoutSec    int    `json:"validateTimeoutSec"`
+	ValidateIntervalSec   int    `json:"validateIntervalSec"`
+	AIValidateLogs        bool   `json:"aiValidateLogs"`
+	AutoRollback          bool   `json:"autoRollback"`
+	InheritAutomation     bool   `json:"inheritAutomation"`
+	UpgradesAutomation    bool   `json:"upgradesAutomation"`
+	MaintenanceAutomation bool   `json:"maintenanceAutomation"`
+	SecurityAutomation    bool   `json:"securityAutomation"`
 }
 type ImageSummary struct {
 	ID       string   `json:"id"`

@@ -244,6 +244,64 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	}
 	schedSvc := scheduler.NewService(schedStore)
 
+	isTaskGloballyEnabled := func(ctx context.Context, taskID string) bool {
+		if schedSvc == nil || strings.TrimSpace(taskID) == "" {
+			return true
+		}
+		entries, err := schedSvc.ListSchedules(ctx)
+		if err != nil {
+			return true
+		}
+		for _, entry := range entries {
+			if entry.ID == taskID {
+				return entry.Enabled
+			}
+		}
+		return true
+	}
+
+	containerAutomationEnabled := func(ctx context.Context, containerID, domain string) bool {
+		taskID := ""
+		switch strings.ToLower(strings.TrimSpace(domain)) {
+		case "upgrades":
+			taskID = "container_update_check"
+		case "maintenance":
+			taskID = "docker_system_prune"
+		case "security":
+			// Security domain controls both Trivy and ClamAV sweeps.
+			taskID = "security_sweep_trivy"
+		default:
+			return true
+		}
+
+		globalEnabled := isTaskGloballyEnabled(ctx, taskID)
+		if rulesStore == nil {
+			return globalEnabled
+		}
+		rulesCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		rule, err := rulesStore.Get(rulesCtx, containerID)
+		if err != nil {
+			return globalEnabled
+		}
+		if !rule.InheritAutomation && !rule.UpgradesAutomation && !rule.MaintenanceAutomation && !rule.SecurityAutomation {
+			rule.InheritAutomation = true
+		}
+		if rule.InheritAutomation {
+			return globalEnabled
+		}
+		switch strings.ToLower(strings.TrimSpace(domain)) {
+		case "upgrades":
+			return rule.UpgradesAutomation
+		case "maintenance":
+			return rule.MaintenanceAutomation
+		case "security":
+			return rule.SecurityAutomation
+		default:
+			return globalEnabled
+		}
+	}
+
 	// 6. Register automated tasks
 	if dockerClient != nil {
 		rawDocker, err := dockerengine.NewRawClient()
@@ -261,9 +319,13 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			}
 
 			schedSvc.RegisterTask("container_update_check", func() scheduler.Task {
-				return dockerengine.NewUpdateCheckTask(rawDocker)
+				return dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
+					return containerAutomationEnabled(ctx, containerID, "upgrades")
+				})
 			})
-			if err := schedSvc.AddTask("0 0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker), true); err != nil && diagService != nil {
+			if err := schedSvc.AddTask("0 0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
+				return containerAutomationEnabled(ctx, containerID, "upgrades")
+			}), true); err != nil && diagService != nil {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_check: %v", err))
 			}
 
@@ -299,16 +361,24 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			// Security: Scheduled Sweeps
 			if scanService != nil {
 				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
-					return scheduler.NewTrivySweepTask(rawDocker, scanService)
+					return scheduler.NewTrivySweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
+						return containerAutomationEnabled(ctx, containerID, "security")
+					})
 				})
-				if err := schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService), true); err != nil && diagService != nil {
+				if err := schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
+					return containerAutomationEnabled(ctx, containerID, "security")
+				}), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task security_sweep_trivy: %v", err))
 				}
 
 				schedSvc.RegisterTask("malware_sweep_clamav", func() scheduler.Task {
-					return scheduler.NewClamAVSweepTask(rawDocker, scanService)
+					return scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
+						return containerAutomationEnabled(ctx, containerID, "security")
+					})
 				})
-				if err := schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService), true); err != nil && diagService != nil {
+				if err := schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
+					return containerAutomationEnabled(ctx, containerID, "security")
+				}), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task malware_sweep_clamav: %v", err))
 				}
 			}
@@ -551,14 +621,18 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					if r, err := rulesService.Get(ctx, id); err == nil {
 						r = effectiveContainerRules(ctx, summary, r, settingsService, diagService)
 						detail.Rules = &gen.ContainerRules{
-							ContainerID:         r.ContainerID,
-							UpdatePolicy:        r.UpdatePolicy,
-							ValidateURL:         r.ValidateURL,
-							ValidateMode:        r.ValidateMode,
-							ValidateTimeoutSec:  r.ValidateTimeoutSec,
-							ValidateIntervalSec: r.ValidateIntervalSec,
-							AIValidateLogs:      r.AIValidateLogs,
-							AutoRollback:        r.AutoRollback,
+							ContainerID:           r.ContainerID,
+							UpdatePolicy:          r.UpdatePolicy,
+							ValidateURL:           r.ValidateURL,
+							ValidateMode:          r.ValidateMode,
+							ValidateTimeoutSec:    r.ValidateTimeoutSec,
+							ValidateIntervalSec:   r.ValidateIntervalSec,
+							AIValidateLogs:        r.AIValidateLogs,
+							AutoRollback:          r.AutoRollback,
+							InheritAutomation:     r.InheritAutomation,
+							UpgradesAutomation:    r.UpgradesAutomation,
+							MaintenanceAutomation: r.MaintenanceAutomation,
+							SecurityAutomation:    r.SecurityAutomation,
 						}
 					}
 				}
@@ -865,13 +939,17 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				}
 
 				effectiveRules := rules.ContainerRules{
-					ContainerID:         req.ContainerID,
-					UpdatePolicy:        "manual",
-					ValidateMode:        "both",
-					ValidateTimeoutSec:  45,
-					ValidateIntervalSec: 2,
-					AIValidateLogs:      false,
-					AutoRollback:        true,
+					ContainerID:           req.ContainerID,
+					UpdatePolicy:          "manual",
+					ValidateMode:          "both",
+					ValidateTimeoutSec:    45,
+					ValidateIntervalSec:   2,
+					AIValidateLogs:        false,
+					AutoRollback:          true,
+					InheritAutomation:     true,
+					UpgradesAutomation:    true,
+					MaintenanceAutomation: true,
+					SecurityAutomation:    true,
 				}
 				if rulesService != nil {
 					rulesCtx, rulesCancel := context.WithTimeout(r.Context(), 3*time.Second)
