@@ -320,6 +320,41 @@ paths:
                 type: object
                 properties:
                   enabled: { type: boolean }
+  /api/ai/models:
+    get:
+      operationId: getAIModels
+      parameters:
+        - in: query
+          name: provider
+          required: false
+          schema: { type: string, enum: [openai, anthropic, gemini] }
+      responses:
+        '200':
+          description: Provider model catalog
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/ai/test:
+    post:
+      operationId: testAIProviderModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider: { type: string, enum: [openai, anthropic, gemini] }
+                model: { type: string }
+              required: [provider]
+      responses:
+        '200':
+          description: AI test result
+          content:
+            application/json:
+              schema:
+                type: object
   /api/ai/fleet-advice:
     post:
       operationId: getFleetAdvice
@@ -629,6 +664,10 @@ components:
         containerId: { type: string }
         updatePolicy: { type: string, enum: [auto, manual, locked] }
         validateUrl: { type: string }
+        validateMode: { type: string, enum: [http, docker, both] }
+        validateTimeoutSec: { type: integer }
+        validateIntervalSec: { type: integer }
+        aiValidateLogs: { type: boolean }
         autoRollback: { type: boolean }
     Metric:
       type: object

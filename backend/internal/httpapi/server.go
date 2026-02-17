@@ -49,6 +49,7 @@ type ScanService interface {
 	Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
 	LatestSummary(ctx context.Context) (*gen.ScanSummary, error)
 	LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error)
+	LatestDetailsForTarget(ctx context.Context, target string) (*gen.TrivyScanDetails, error)
 	MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error)
 	MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error)
 }
@@ -548,10 +549,14 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					if r, err := rulesService.Get(ctx, id); err == nil {
 						r = effectiveContainerRules(ctx, summary, r, settingsService, diagService)
 						detail.Rules = &gen.ContainerRules{
-							ContainerID:  r.ContainerID,
-							UpdatePolicy: r.UpdatePolicy,
-							ValidateURL:  r.ValidateURL,
-							AutoRollback: r.AutoRollback,
+							ContainerID:         r.ContainerID,
+							UpdatePolicy:        r.UpdatePolicy,
+							ValidateURL:         r.ValidateURL,
+							ValidateMode:        r.ValidateMode,
+							ValidateTimeoutSec:  r.ValidateTimeoutSec,
+							ValidateIntervalSec: r.ValidateIntervalSec,
+							AIValidateLogs:      r.AIValidateLogs,
+							AutoRollback:        r.AutoRollback,
 						}
 					}
 				}
@@ -753,6 +758,22 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				writeJSON(w, http.StatusOK, summary)
 			})
 
+			r.Get("/details", func(w http.ResponseWriter, r *http.Request) {
+				if scanService == nil {
+					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+					return
+				}
+				target := strings.TrimSpace(r.URL.Query().Get("target"))
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				details, err := scanService.LatestDetailsForTarget(ctx, target)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "scan_read_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, details)
+			})
+
 			r.Get("/malware/summary", func(w http.ResponseWriter, r *http.Request) {
 				if scanService == nil {
 					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
@@ -817,8 +838,27 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				if req.TargetImage == "" {
 					req.TargetImage = strings.TrimSpace(summary.Image)
 				}
+
+				effectiveRules := rules.ContainerRules{
+					ContainerID:         req.ContainerID,
+					UpdatePolicy:        "manual",
+					ValidateMode:        "both",
+					ValidateTimeoutSec:  45,
+					ValidateIntervalSec: 2,
+					AIValidateLogs:      false,
+					AutoRollback:        true,
+				}
+				if rulesService != nil {
+					rulesCtx, rulesCancel := context.WithTimeout(r.Context(), 3*time.Second)
+					if loaded, err := rulesService.Get(rulesCtx, req.ContainerID); err == nil {
+						effectiveRules = loaded
+					}
+					rulesCancel()
+				}
+				effectiveRules = effectiveContainerRules(r.Context(), summary, effectiveRules, settingsService, diagService)
+
 				if req.ValidateURL == "" {
-					req.ValidateURL = deriveValidationURL(r.Context(), summary, settingsService, diagService)
+					req.ValidateURL = strings.TrimSpace(effectiveRules.ValidateURL)
 				}
 				if req.TargetImage == "" || req.ValidateURL == "" {
 					writeError(w, http.StatusBadRequest, "invalid_request", "targetImage and validateUrl could not be auto-derived; provide explicit values")
@@ -842,14 +882,18 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				}
 
 				resp, err := updateService.StartUpdate(updates.Request{
-					ContainerID:    req.ContainerID,
-					TargetImage:    req.TargetImage,
-					ValidateURL:    req.ValidateURL,
-					CurrentImage:   strings.TrimSpace(summary.Image),
-					ContainerName:  trimContainerName(summary.Names),
-					Labels:         summary.Labels,
-					RepositoryURL:  repoURL,
-					ReleaseContext: releaseContext,
+					ContainerID:         req.ContainerID,
+					TargetImage:         req.TargetImage,
+					ValidateURL:         req.ValidateURL,
+					CurrentImage:        strings.TrimSpace(summary.Image),
+					ContainerName:       trimContainerName(summary.Names),
+					Labels:              summary.Labels,
+					RepositoryURL:       repoURL,
+					ReleaseContext:      releaseContext,
+					ValidateMode:        effectiveRules.ValidateMode,
+					ValidateTimeoutSec:  effectiveRules.ValidateTimeoutSec,
+					ValidateIntervalSec: effectiveRules.ValidateIntervalSec,
+					AIValidateLogs:      effectiveRules.AIValidateLogs,
 				})
 				if err != nil {
 					writeError(w, http.StatusBadRequest, "update_start_failed", err.Error())
@@ -954,6 +998,62 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					enabled = aiService.HasProvider()
 				}
 				writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+			})
+
+			r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
+				if settingsService == nil {
+					writeError(w, http.StatusServiceUnavailable, "settings_unavailable", "Settings service not initialized")
+					return
+				}
+				st, err := settingsService.Get(r.Context())
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "settings_get_failed", err.Error())
+					return
+				}
+				catalogCtx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+				defer cancel()
+				provider := strings.TrimSpace(r.URL.Query().Get("provider"))
+				catalog := loadProviderModelCatalog(catalogCtx, st, provider)
+				writeJSON(w, http.StatusOK, catalog)
+			})
+
+			r.Post("/test", func(w http.ResponseWriter, r *http.Request) {
+				if settingsService == nil {
+					writeError(w, http.StatusServiceUnavailable, "settings_unavailable", "Settings service not initialized")
+					return
+				}
+				var req struct {
+					Provider string `json:"provider"`
+					Model    string `json:"model"`
+				}
+				if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+					return
+				}
+				req.Provider = strings.ToLower(strings.TrimSpace(req.Provider))
+				if req.Provider == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "provider is required")
+					return
+				}
+
+				st, err := settingsService.Get(r.Context())
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "settings_get_failed", err.Error())
+					return
+				}
+				testCtx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+				defer cancel()
+				provider, model, summary, err := testProviderModel(testCtx, req.Provider, req.Model, st)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "ai_test_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{
+					"status":   "ok",
+					"provider": provider,
+					"model":    model,
+					"summary":  summary,
+				})
 			})
 
 			r.Post("/audit-compose", func(w http.ResponseWriter, r *http.Request) {

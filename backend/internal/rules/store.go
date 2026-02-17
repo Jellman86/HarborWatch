@@ -3,15 +3,21 @@ package rules
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
 
 type ContainerRules struct {
-	ContainerID  string `json:"containerId"`
-	UpdatePolicy string `json:"updatePolicy"` // auto, manual, locked
-	ValidateURL  string `json:"validateUrl"`
-	AutoRollback bool   `json:"autoRollback"`
+	ContainerID       string `json:"containerId"`
+	UpdatePolicy      string `json:"updatePolicy"` // auto, manual, locked
+	ValidateURL       string `json:"validateUrl"`
+	ValidateMode      string `json:"validateMode"` // http, docker, both
+	ValidateTimeoutSec int   `json:"validateTimeoutSec"`
+	ValidateIntervalSec int  `json:"validateIntervalSec"`
+	AIValidateLogs    bool   `json:"aiValidateLogs"`
+	AutoRollback      bool   `json:"autoRollback"`
 }
 
 type Store struct {
@@ -30,27 +36,65 @@ CREATE TABLE IF NOT EXISTS container_rules (
     container_id TEXT PRIMARY KEY,
     update_policy TEXT DEFAULT 'manual',
     validate_url TEXT DEFAULT '',
+    validate_mode TEXT DEFAULT 'both',
+    validate_timeout_sec INTEGER DEFAULT 45,
+    validate_interval_sec INTEGER DEFAULT 2,
+    ai_validate_logs INTEGER DEFAULT 0,
     auto_rollback INTEGER DEFAULT 1
 );
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "validate_mode", "TEXT DEFAULT 'both'"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "validate_timeout_sec", "INTEGER DEFAULT 45"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "validate_interval_sec", "INTEGER DEFAULT 2"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "ai_validate_logs", "INTEGER DEFAULT 0"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Store) Get(ctx context.Context, id string) (ContainerRules, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT container_id, update_policy, validate_url, auto_rollback 
+SELECT container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, ai_validate_logs, auto_rollback 
 FROM container_rules WHERE container_id = ?
 `, id)
 
 	var r ContainerRules
 	var rollback int
-	if err := row.Scan(&r.ContainerID, &r.UpdatePolicy, &r.ValidateURL, &rollback); err != nil {
+	var aiValidateLogs int
+	if err := row.Scan(&r.ContainerID, &r.UpdatePolicy, &r.ValidateURL, &r.ValidateMode, &r.ValidateTimeoutSec, &r.ValidateIntervalSec, &aiValidateLogs, &rollback); err != nil {
 		if err == sql.ErrNoRows {
-			return ContainerRules{ContainerID: id, UpdatePolicy: "manual", AutoRollback: true}, nil
+			return ContainerRules{
+				ContainerID:        id,
+				UpdatePolicy:       "manual",
+				ValidateMode:       "both",
+				ValidateTimeoutSec: 45,
+				ValidateIntervalSec: 2,
+				AIValidateLogs:     false,
+				AutoRollback:       true,
+			}, nil
 		}
 		return r, err
 	}
+	r.AIValidateLogs = aiValidateLogs == 1
 	r.AutoRollback = rollback == 1
+	if strings.TrimSpace(r.ValidateMode) == "" {
+		r.ValidateMode = "both"
+	}
+	if r.ValidateTimeoutSec <= 0 {
+		r.ValidateTimeoutSec = 45
+	}
+	if r.ValidateIntervalSec <= 0 {
+		r.ValidateIntervalSec = 2
+	}
 	return r, nil
 }
 
@@ -59,13 +103,59 @@ func (s *Store) Save(ctx context.Context, r ContainerRules) error {
 	if r.AutoRollback {
 		rollback = 1
 	}
+	aiValidateLogs := 0
+	if r.AIValidateLogs {
+		aiValidateLogs = 1
+	}
+	if strings.TrimSpace(r.ValidateMode) == "" {
+		r.ValidateMode = "both"
+	}
+	if r.ValidateTimeoutSec <= 0 {
+		r.ValidateTimeoutSec = 45
+	}
+	if r.ValidateIntervalSec <= 0 {
+		r.ValidateIntervalSec = 2
+	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO container_rules (container_id, update_policy, validate_url, auto_rollback)
-VALUES (?, ?, ?, ?)
+INSERT INTO container_rules (container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, ai_validate_logs, auto_rollback)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(container_id) DO UPDATE SET
     update_policy = excluded.update_policy,
     validate_url = excluded.validate_url,
+    validate_mode = excluded.validate_mode,
+    validate_timeout_sec = excluded.validate_timeout_sec,
+    validate_interval_sec = excluded.validate_interval_sec,
+    ai_validate_logs = excluded.ai_validate_logs,
     auto_rollback = excluded.auto_rollback
-`, r.ContainerID, r.UpdatePolicy, r.ValidateURL, rollback)
+`, r.ContainerID, r.UpdatePolicy, r.ValidateURL, r.ValidateMode, r.ValidateTimeoutSec, r.ValidateIntervalSec, aiValidateLogs, rollback)
+	return err
+}
+
+func (s *Store) ensureColumn(ctx context.Context, columnName, columnDDL string) error {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(container_rules)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if strings.EqualFold(name, columnName) {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE container_rules ADD COLUMN %s %s", columnName, columnDDL))
 	return err
 }

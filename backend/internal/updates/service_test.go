@@ -32,6 +32,9 @@ func (f fakeAIProvider) AuditCompose(ctx context.Context, yaml string) (string, 
 func (f fakeAIProvider) AnalyzeMetrics(ctx context.Context, containerID string, metrics []any) (string, error) {
 	return "ok", nil
 }
+func (f fakeAIProvider) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (ai.HealthAssessment, error) {
+	return ai.HealthAssessment{Healthy: true, Confidence: 80, Summary: "healthy"}, nil
+}
 
 func (f fakeExecutor) Preflight(ctx context.Context, req Request) error {
 	if f.failStep == "preflight" {

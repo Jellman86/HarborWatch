@@ -22,6 +22,16 @@ func effectiveContainerRules(ctx context.Context, summary gen.ContainerSummary, 
 	if out.UpdatePolicy == "" {
 		out.UpdatePolicy = "manual"
 	}
+	out.ValidateMode = normalizeValidateMode(out.ValidateMode)
+	if out.ValidateMode == "" {
+		out.ValidateMode = "both"
+	}
+	if out.ValidateTimeoutSec <= 0 {
+		out.ValidateTimeoutSec = 45
+	}
+	if out.ValidateIntervalSec <= 0 {
+		out.ValidateIntervalSec = 2
+	}
 	if strings.TrimSpace(out.ValidateURL) != "" {
 		return out
 	}
@@ -37,6 +47,19 @@ func normalizeUpdatePolicy(policy string) string {
 		return "manual"
 	case "locked":
 		return "locked"
+	default:
+		return ""
+	}
+}
+
+func normalizeValidateMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "http":
+		return "http"
+	case "docker":
+		return "docker"
+	case "both":
+		return "both"
 	default:
 		return ""
 	}

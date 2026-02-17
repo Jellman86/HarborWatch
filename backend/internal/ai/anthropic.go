@@ -81,6 +81,32 @@ Metrics JSON:
 	return p.generate(ctx, prompt)
 }
 
+func (p *anthropicProvider) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error) {
+	prompt := `Assess runtime health from container logs.
+Return ONLY valid JSON:
+{
+  "healthy": (boolean),
+  "confidence": (int 0-100),
+  "summary": (string),
+  "concerns": [string],
+  "recommendation": (string)
+}
+
+Container ID: ` + containerID + `
+
+Recent logs:
+` + logs
+	text, err := p.generate(ctx, prompt)
+	if err != nil {
+		return HealthAssessment{}, err
+	}
+	result, err := parseHealthAssessment(text)
+	if err != nil {
+		return HealthAssessment{}, fmt.Errorf("failed to parse anthropic health response: %w", err)
+	}
+	return result, nil
+}
+
 func (p *anthropicProvider) generate(ctx context.Context, prompt string) (string, error) {
 	body := map[string]any{
 		"model":       p.model,

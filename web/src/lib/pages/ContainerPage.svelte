@@ -1,7 +1,8 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ContainerDetail } from "../api-types";
+    import type { ContainerDetail, TrivyScanDetails } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
+    import TrivyFindingsPanel from "../components/TrivyFindingsPanel.svelte";
     import { toasts } from "../stores/ToastStore";
 
     let { id, onNavigate } = $props<{
@@ -21,6 +22,8 @@
     let error = $state("");
     let scanMessage = $state("");
     let lifecycleMessage = $state("");
+    let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
+    let loadingVulnerabilityDetails = $state(false);
 
     async function loadDetail(silent = false) {
         if (!silent) {
@@ -36,20 +39,44 @@
                 data.actionHistory = data.actionHistory || [];
                 data.recentMetrics = data.recentMetrics || [];
                 detail = data;
+                await loadVulnerabilityDetails(data?.summary?.image || "");
             } else {
                 const body = await res.json().catch(() => ({}));
                 if (!silent) {
                     error = body?.message || `Container lookup failed (${res.status})`;
                 }
+                vulnerabilityDetails = null;
             }
         } catch (e) {
             if (!silent) {
                 error = "Failed to load container data";
             }
+            vulnerabilityDetails = null;
         } finally {
             if (!silent) {
                 loading = false;
             }
+        }
+    }
+
+    async function loadVulnerabilityDetails(target: string) {
+        const normalized = target?.trim();
+        if (!normalized) {
+            vulnerabilityDetails = null;
+            return;
+        }
+        loadingVulnerabilityDetails = true;
+        try {
+            const res = await fetch(`/api/scans/details?target=${encodeURIComponent(normalized)}`);
+            if (!res.ok) {
+                vulnerabilityDetails = null;
+                return;
+            }
+            vulnerabilityDetails = await res.json();
+        } catch (e) {
+            vulnerabilityDetails = null;
+        } finally {
+            loadingVulnerabilityDetails = false;
         }
     }
 
@@ -324,11 +351,11 @@
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/30 p-6 rounded-3xl">
                             <span class="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400">Critical Risks</span>
-                            <div class="text-4xl font-black text-rose-700 dark:text-rose-300 mt-2">{detail.vulnerabilitySummary?.critical ?? 0}</div>
+                            <div class="text-4xl font-black text-rose-700 dark:text-rose-300 mt-2">{vulnerabilityDetails?.summary.critical ?? detail.vulnerabilitySummary?.critical ?? 0}</div>
                         </div>
                         <div class="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 p-6 rounded-3xl">
                             <span class="text-[10px] font-black uppercase text-orange-600 dark:text-orange-400">High Risks</span>
-                            <div class="text-4xl font-black text-orange-700 dark:text-orange-300 mt-2">{detail.vulnerabilitySummary?.high ?? 0}</div>
+                            <div class="text-4xl font-black text-orange-700 dark:text-orange-300 mt-2">{vulnerabilityDetails?.summary.high ?? detail.vulnerabilitySummary?.high ?? 0}</div>
                         </div>
                         <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-3xl flex flex-col justify-center items-center gap-3">
                             <button
@@ -354,36 +381,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
                             <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Vulnerability details</h3>
-                            {#if detail.vulnerabilitySummary}
-                                <div class="grid grid-cols-2 gap-3 text-xs">
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Source</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.source}</p>
-                                    </div>
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Scanned</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{new Date(detail.vulnerabilitySummary.scannedAt * 1000).toLocaleString()}</p>
-                                    </div>
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Total</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.total}</p>
-                                    </div>
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Risk Score</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.riskScore}/100</p>
-                                    </div>
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Medium</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.medium}</p>
-                                    </div>
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Low / Unknown</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.low} / {detail.vulnerabilitySummary.unknown}</p>
-                                    </div>
-                                </div>
-                            {:else}
-                                <p class="text-slate-400 italic text-sm">No Trivy results recorded yet for this image.</p>
-                            {/if}
+                            <TrivyFindingsPanel details={vulnerabilityDetails} loading={loadingVulnerabilityDetails} />
                         </div>
 
                         <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
@@ -491,6 +489,44 @@
                                     </p>
                                 </div>
 
+                                <div class="space-y-2">
+                                    <label for="val-mode" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation Mode</label>
+                                    <select
+                                        id="val-mode"
+                                        bind:value={detail.rules.validateMode}
+                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-bold appearance-none cursor-pointer"
+                                    >
+                                        <option value="both">Both (HTTP + Docker)</option>
+                                        <option value="docker">Docker Health Only</option>
+                                        <option value="http">HTTP URL Only</option>
+                                    </select>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <label for="val-timeout" class="text-[10px] font-black uppercase text-slate-400 ml-1">Timeout (sec)</label>
+                                        <input
+                                            id="val-timeout"
+                                            type="number"
+                                            min="5"
+                                            max="600"
+                                            bind:value={detail.rules.validateTimeoutSec}
+                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-mono"
+                                        />
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label for="val-interval" class="text-[10px] font-black uppercase text-slate-400 ml-1">Interval (sec)</label>
+                                        <input
+                                            id="val-interval"
+                                            type="number"
+                                            min="1"
+                                            max="30"
+                                            bind:value={detail.rules.validateIntervalSec}
+                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-mono"
+                                        />
+                                    </div>
+                                </div>
+
                                 <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
                                     <div>
                                         <span class="text-sm font-bold text-slate-700 dark:text-slate-300">Auto-Rollback</span>
@@ -502,6 +538,20 @@
                                         aria-label="Toggle Auto-Rollback"
                                     >
                                         <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {detail.rules.autoRollback ? 'right-1' : 'left-1'}"></div>
+                                    </button>
+                                </div>
+
+                                <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                    <div>
+                                        <span class="text-sm font-bold text-slate-700 dark:text-slate-300">AI Log Health Assessment</span>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">After validation, send recent container logs to AI and fail update if unhealthy.</p>
+                                    </div>
+                                    <button
+                                        onclick={() => detail!.rules!.aiValidateLogs = !detail!.rules!.aiValidateLogs}
+                                        class="w-10 h-5 rounded-full relative transition-colors {detail.rules.aiValidateLogs ? 'bg-brand-500' : 'bg-slate-300'}"
+                                        aria-label="Toggle AI Log Health Assessment"
+                                    >
+                                        <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {detail.rules.aiValidateLogs ? 'right-1' : 'left-1'}"></div>
                                     </button>
                                 </div>
 

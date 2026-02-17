@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +27,10 @@ type Request struct {
 	Labels         map[string]string
 	RepositoryURL  string
 	ReleaseContext string
+	ValidateMode   string
+	ValidateTimeoutSec int
+	ValidateIntervalSec int
+	AIValidateLogs bool
 }
 
 type DiagService interface {
@@ -53,8 +60,18 @@ func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notif
 }
 
 func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
-	if req.ContainerID == "" || req.TargetImage == "" || req.ValidateURL == "" {
-		return gen.UpdateStartResponse{}, errors.New("containerId, targetImage and validateUrl are required")
+	req.ValidateMode = normalizeValidateMode(req.ValidateMode)
+	if req.ValidateTimeoutSec <= 0 {
+		req.ValidateTimeoutSec = 45
+	}
+	if req.ValidateIntervalSec <= 0 {
+		req.ValidateIntervalSec = 2
+	}
+	if req.ContainerID == "" || req.TargetImage == "" {
+		return gen.UpdateStartResponse{}, errors.New("containerId and targetImage are required")
+	}
+	if (req.ValidateMode == "http" || req.ValidateMode == "both") && strings.TrimSpace(req.ValidateURL) == "" {
+		return gen.UpdateStartResponse{}, errors.New("validateUrl is required for http or both validation mode")
 	}
 	jobID, err := newID()
 	if err != nil {
@@ -162,6 +179,26 @@ func (s *Service) execute(jobID string, req Request) {
 	if err := s.runStep(ctx, jobID, "validate", func(ctx context.Context) error { return s.executor.Validate(ctx, req) }); err != nil {
 		s.rollback(jobID, req, err)
 		return
+	}
+	if req.AIValidateLogs && s.ai != nil && s.ai.HasProvider() {
+		if err := s.runStep(ctx, jobID, "ai_health_assessment", func(ctx context.Context) error {
+			logTail := envInt("HW_AI_HEALTH_LOG_TAIL", 300, 50, 2000)
+			logs, err := collectContainerLogsForAI(ctx, req.ContainerID, logTail)
+			if err != nil {
+				return fmt.Errorf("collect container logs for AI: %w", err)
+			}
+			assessment, err := s.ai.AnalyzeHealthLogs(ctx, req.ContainerID, logs)
+			if err != nil {
+				return fmt.Errorf("AI health assessment failed: %w", err)
+			}
+			if !assessment.Healthy {
+				return fmt.Errorf("AI health assessment marked container unhealthy (confidence %d): %s", assessment.Confidence, assessment.Summary)
+			}
+			return nil
+		}); err != nil {
+			s.rollback(jobID, req, err)
+			return
+		}
 	}
 
 	s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "success", Status: "completed", Message: "Update pipeline completed", Timestamp: time.Now().UTC().Unix()})
@@ -271,4 +308,37 @@ func extractImageTag(image string) string {
 		}
 	}
 	return "latest"
+}
+
+func collectContainerLogsForAI(ctx context.Context, containerID string, tail int) (string, error) {
+	if strings.TrimSpace(containerID) == "" {
+		return "", errors.New("containerId is required")
+	}
+	if tail <= 0 {
+		tail = 300
+	}
+	cmd := exec.CommandContext(ctx, "docker", "logs", "--tail", strconv.Itoa(tail), containerID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("docker logs failed: %w (%s)", err, truncate(string(out), 300))
+	}
+	return string(out), nil
+}
+
+func envInt(key string, fallback, minValue, maxValue int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	if parsed < minValue {
+		return minValue
+	}
+	if parsed > maxValue {
+		return maxValue
+	}
+	return parsed
 }

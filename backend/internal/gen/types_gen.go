@@ -49,10 +49,14 @@ type ContainerDiskUsage struct {
 	MountCount    int   `json:"mountCount,omitempty"`
 }
 type ContainerRules struct {
-	ContainerID  string `json:"containerId"`
-	UpdatePolicy string `json:"updatePolicy"`
-	ValidateURL  string `json:"validateUrl"`
-	AutoRollback bool   `json:"autoRollback"`
+	ContainerID         string `json:"containerId"`
+	UpdatePolicy        string `json:"updatePolicy"`
+	ValidateURL         string `json:"validateUrl"`
+	ValidateMode        string `json:"validateMode"`
+	ValidateTimeoutSec  int    `json:"validateTimeoutSec"`
+	ValidateIntervalSec int    `json:"validateIntervalSec"`
+	AIValidateLogs      bool   `json:"aiValidateLogs"`
+	AutoRollback        bool   `json:"autoRollback"`
 }
 type ImageSummary struct {
 	ID       string   `json:"id"`
@@ -97,6 +101,36 @@ type ScanSummary struct {
 	Unknown   int    `json:"unknown"`
 	Total     int    `json:"total"`
 	RiskScore int    `json:"riskScore"`
+}
+type TrivyVulnerability struct {
+	ID               string   `json:"id"`
+	PkgName          string   `json:"pkgName"`
+	InstalledVersion string   `json:"installedVersion,omitempty"`
+	FixedVersion     string   `json:"fixedVersion,omitempty"`
+	Severity         string   `json:"severity"`
+	Title            string   `json:"title,omitempty"`
+	Description      string   `json:"description,omitempty"`
+	PrimaryURL       string   `json:"primaryUrl,omitempty"`
+	CVSSScore        float64  `json:"cvssScore,omitempty"`
+	CVSSSource       string   `json:"cvssSource,omitempty"`
+	PublishedDate    string   `json:"publishedDate,omitempty"`
+	LastModifiedDate string   `json:"lastModifiedDate,omitempty"`
+	References       []string `json:"references,omitempty"`
+}
+type TrivyResultGroup struct {
+	Type            string               `json:"type,omitempty"`
+	Target          string               `json:"target,omitempty"`
+	Class           string               `json:"class,omitempty"`
+	Vulnerabilities []TrivyVulnerability `json:"vulnerabilities,omitempty"`
+}
+type TrivyScanDetails struct {
+	Target     string             `json:"target"`
+	Source     string             `json:"source"`
+	ScannedAt  int64              `json:"scannedAt"`
+	Summary    ScanSummary        `json:"summary"`
+	Results    []TrivyResultGroup `json:"results,omitempty"`
+	RawJSON    string             `json:"rawJson,omitempty"`
+	ParseError string             `json:"parseError,omitempty"`
 }
 type MalwareScanSummary struct {
 	Target       string   `json:"target"`

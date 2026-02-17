@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	_ "modernc.org/sqlite"
@@ -231,6 +232,154 @@ FROM scan_results
 	summary.Total = summary.Critical + summary.High + summary.Medium + summary.Low + summary.Unknown
 	summary.RiskScore = riskScore(summary)
 	return &summary, nil
+}
+
+func (s *Store) LatestDetailsForTarget(ctx context.Context, target string) (*gen.TrivyScanDetails, error) {
+	query := `
+SELECT target, source, scanned_at, critical, high, medium, low, unknown, raw_json
+FROM scan_results
+`
+	var args []any
+	if target != "" {
+		query += " WHERE target = ?"
+		args = append(args, target)
+	}
+	query += " ORDER BY scanned_at DESC, id DESC LIMIT 1"
+
+	row := s.db.QueryRowContext(ctx, query, args...)
+	var (
+		resTarget string
+		source    string
+		scannedAt int64
+		critical  int
+		high      int
+		medium    int
+		low       int
+		unknown   int
+		rawJSON   string
+	)
+	if err := row.Scan(&resTarget, &source, &scannedAt, &critical, &high, &medium, &low, &unknown, &rawJSON); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("load latest details: %w", err)
+	}
+
+	summary := gen.ScanSummary{
+		Target:    resTarget,
+		Source:    source,
+		ScannedAt: scannedAt,
+		Critical:  critical,
+		High:      high,
+		Medium:    medium,
+		Low:       low,
+		Unknown:   unknown,
+	}
+	summary.Total = summary.Critical + summary.High + summary.Medium + summary.Low + summary.Unknown
+	summary.RiskScore = riskScore(summary)
+
+	details := &gen.TrivyScanDetails{
+		Target:    resTarget,
+		Source:    source,
+		ScannedAt: scannedAt,
+		Summary:   summary,
+		RawJSON:   rawJSON,
+		Results:   []gen.TrivyResultGroup{},
+	}
+	if strings.TrimSpace(rawJSON) == "" {
+		details.ParseError = "raw Trivy JSON was empty"
+		return details, nil
+	}
+
+	var report trivyRawReport
+	if err := json.Unmarshal([]byte(rawJSON), &report); err != nil {
+		details.ParseError = fmt.Sprintf("parse raw Trivy JSON: %v", err)
+		return details, nil
+	}
+
+	for _, result := range report.Results {
+		group := gen.TrivyResultGroup{
+			Type:            result.Type,
+			Target:          result.Target,
+			Class:           result.Class,
+			Vulnerabilities: []gen.TrivyVulnerability{},
+		}
+		for _, vuln := range result.Vulnerabilities {
+			score, source := trivyBestCVSS(vuln.CVSS)
+			refs := make([]string, 0, len(vuln.References))
+			for _, ref := range vuln.References {
+				ref = strings.TrimSpace(ref)
+				if ref != "" {
+					refs = append(refs, ref)
+				}
+			}
+			group.Vulnerabilities = append(group.Vulnerabilities, gen.TrivyVulnerability{
+				ID:               vuln.VulnerabilityID,
+				PkgName:          vuln.PkgName,
+				InstalledVersion: vuln.InstalledVersion,
+				FixedVersion:     vuln.FixedVersion,
+				Severity:         vuln.Severity,
+				Title:            vuln.Title,
+				Description:      vuln.Description,
+				PrimaryURL:       vuln.PrimaryURL,
+				CVSSScore:        score,
+				CVSSSource:       source,
+				PublishedDate:    vuln.PublishedDate,
+				LastModifiedDate: vuln.LastModifiedDate,
+				References:       refs,
+			})
+		}
+		details.Results = append(details.Results, group)
+	}
+
+	return details, nil
+}
+
+type trivyRawReport struct {
+	Results []trivyRawResult `json:"Results"`
+}
+
+type trivyRawResult struct {
+	Type            string                  `json:"Type"`
+	Target          string                  `json:"Target"`
+	Class           string                  `json:"Class"`
+	Vulnerabilities []trivyRawVulnerability `json:"Vulnerabilities"`
+}
+
+type trivyRawVulnerability struct {
+	VulnerabilityID  string                  `json:"VulnerabilityID"`
+	PkgName          string                  `json:"PkgName"`
+	InstalledVersion string                  `json:"InstalledVersion"`
+	FixedVersion     string                  `json:"FixedVersion"`
+	Severity         string                  `json:"Severity"`
+	Title            string                  `json:"Title"`
+	Description      string                  `json:"Description"`
+	PrimaryURL       string                  `json:"PrimaryURL"`
+	PublishedDate    string                  `json:"PublishedDate"`
+	LastModifiedDate string                  `json:"LastModifiedDate"`
+	References       []string                `json:"References"`
+	CVSS             map[string]trivyRawCVSS `json:"CVSS"`
+}
+
+type trivyRawCVSS struct {
+	V3Score float64 `json:"V3Score"`
+	V2Score float64 `json:"V2Score"`
+}
+
+func trivyBestCVSS(cvss map[string]trivyRawCVSS) (float64, string) {
+	bestScore := 0.0
+	bestSource := ""
+	for source, score := range cvss {
+		candidate := score.V3Score
+		if candidate <= 0 {
+			candidate = score.V2Score
+		}
+		if candidate > bestScore {
+			bestScore = candidate
+			bestSource = source
+		}
+	}
+	return bestScore, bestSource
 }
 
 func riskScore(s gen.ScanSummary) int {

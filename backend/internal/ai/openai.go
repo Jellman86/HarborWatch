@@ -102,3 +102,39 @@ Metrics Data (JSON):
 
 	return resp.Choices[0].Message.Content, nil
 }
+
+func (p *openAIProvider) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error) {
+	prompt := `Assess runtime health from container logs.
+Return ONLY valid JSON with this schema:
+{
+  "healthy": (boolean),
+  "confidence": (int 0-100),
+  "summary": (string),
+  "concerns": [string],
+  "recommendation": (string)
+}
+
+Container ID: ` + containerID + `
+
+Recent logs:
+` + logs
+
+	resp, err := p.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: p.model,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleUser, Content: prompt},
+		},
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
+		},
+	})
+	if err != nil {
+		return HealthAssessment{}, fmt.Errorf("openai completion failed: %w", err)
+	}
+
+	result, err := parseHealthAssessment(resp.Choices[0].Message.Content)
+	if err != nil {
+		return HealthAssessment{}, fmt.Errorf("failed to parse AI health response: %w", err)
+	}
+	return result, nil
+}

@@ -92,6 +92,9 @@ func (f fakeScanService) LatestSummary(ctx context.Context) (*gen.ScanSummary, e
 func (f fakeScanService) LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error) {
 	return f.summary, nil
 }
+func (f fakeScanService) LatestDetailsForTarget(ctx context.Context, target string) (*gen.TrivyScanDetails, error) {
+	return nil, nil
+}
 func (f fakeScanService) MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error) {
 	return nil, nil
 }
@@ -130,6 +133,9 @@ func (f fakeAIService) AuditCompose(ctx context.Context, yaml string) (string, e
 }
 func (f fakeAIService) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
 	return "ok", nil
+}
+func (f fakeAIService) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (ai.HealthAssessment, error) {
+	return ai.HealthAssessment{Healthy: true, Confidence: 80, Summary: "healthy"}, nil
 }
 
 type fakeSchedulerService struct{}

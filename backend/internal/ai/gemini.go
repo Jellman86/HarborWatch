@@ -81,6 +81,32 @@ Metrics JSON:
 	return p.generate(ctx, prompt)
 }
 
+func (p *geminiProvider) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error) {
+	prompt := `Assess runtime health from container logs.
+Return ONLY valid JSON:
+{
+  "healthy": (boolean),
+  "confidence": (int 0-100),
+  "summary": (string),
+  "concerns": [string],
+  "recommendation": (string)
+}
+
+Container ID: ` + containerID + `
+
+Recent logs:
+` + logs
+	text, err := p.generate(ctx, prompt)
+	if err != nil {
+		return HealthAssessment{}, err
+	}
+	result, err := parseHealthAssessment(text)
+	if err != nil {
+		return HealthAssessment{}, fmt.Errorf("failed to parse gemini health response: %w", err)
+	}
+	return result, nil
+}
+
 func (p *geminiProvider) generate(ctx context.Context, prompt string) (string, error) {
 	endpoint := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", url.PathEscape(p.model), url.QueryEscape(p.apiKey))
 	body := map[string]any{

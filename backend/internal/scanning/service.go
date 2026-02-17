@@ -224,6 +224,10 @@ func (s *Service) LatestSummaryForTarget(ctx context.Context, target string) (*g
 	return s.store.LatestSummaryForTarget(ctx, target)
 }
 
+func (s *Service) LatestDetailsForTarget(ctx context.Context, target string) (*gen.TrivyScanDetails, error) {
+	return s.store.LatestDetailsForTarget(ctx, target)
+}
+
 func (s *Service) MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error) {
 	return s.store.MalwareSummaries(ctx, target)
 }

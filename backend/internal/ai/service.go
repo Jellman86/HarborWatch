@@ -28,12 +28,21 @@ type AnalysisResult struct {
 	ActionRequired  bool      `json:"action_required"`
 }
 
+type HealthAssessment struct {
+	Healthy       bool     `json:"healthy"`
+	Confidence    int      `json:"confidence"`
+	Summary       string   `json:"summary"`
+	Concerns      []string `json:"concerns"`
+	Recommendation string  `json:"recommendation"`
+}
+
 // Provider defines the interface for different AI models (OpenAI, Anthropic, etc).
 type Provider interface {
 	Name() string
 	AnalyzeReleaseNotes(ctx context.Context, notes string) (AnalysisResult, error)
 	AuditCompose(ctx context.Context, yaml string) (string, error)
 	AnalyzeMetrics(ctx context.Context, containerID string, metrics []any) (string, error)
+	AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error)
 }
 
 // Service coordinates AI operations.
@@ -93,4 +102,12 @@ func (s *Service) AnalyzeMetrics(ctx context.Context, id string, metrics []any) 
 		return "", errors.New("no AI provider configured")
 	}
 	return provider.AnalyzeMetrics(ctx, id, metrics)
+}
+
+func (s *Service) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error) {
+	provider := s.currentProvider()
+	if provider == nil {
+		return HealthAssessment{}, errors.New("no AI provider configured")
+	}
+	return provider.AnalyzeHealthLogs(ctx, containerID, logs)
 }

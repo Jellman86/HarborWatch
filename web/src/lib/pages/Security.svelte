@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ScanSummary, MalwareScanSummary, ScanJobStatus, ScanStartResponse } from "../api-types";
+    import type { ScanSummary, MalwareScanSummary, ScanJobStatus, ScanStartResponse, TrivyScanDetails } from "../api-types";
+    import TrivyFindingsPanel from "../components/TrivyFindingsPanel.svelte";
 
     let { params } = $props<{
         params?: { target: string };
@@ -14,6 +15,8 @@
     let target = $state("nginx:latest");
     let malwareTarget = $state("/var/lib/docker");
     let pollTimer: number | null = null;
+    let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
+    let loadingVulnerabilityDetails = $state(false);
 
     $effect(() => {
         if (params?.target) {
@@ -37,8 +40,33 @@
             ]);
             summary = vuln;
             malwareSummaries = (mal || []).map((m: any) => ({ ...m, threatsFound: m.threatsFound || [] }));
+            await loadVulnerabilityDetails(target);
+            if (vulnerabilityDetails?.summary) {
+                summary = vulnerabilityDetails.summary;
+            }
         } catch (e) {
             console.error("Failed to load security data", e);
+        }
+    }
+
+    async function loadVulnerabilityDetails(scanTarget: string) {
+        const normalized = scanTarget.trim();
+        if (!normalized) {
+            vulnerabilityDetails = null;
+            return;
+        }
+        loadingVulnerabilityDetails = true;
+        try {
+            const res = await fetch(`/api/scans/details?target=${encodeURIComponent(normalized)}`);
+            if (!res.ok) {
+                vulnerabilityDetails = null;
+                return;
+            }
+            vulnerabilityDetails = await res.json();
+        } catch (e) {
+            vulnerabilityDetails = null;
+        } finally {
+            loadingVulnerabilityDetails = false;
         }
     }
 
@@ -158,22 +186,6 @@
                             <span class="text-sm font-medium text-slate-500 italic truncate max-w-[250px]">{summary.target}</span>
                             <span class="px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-[10px] font-bold uppercase">{riskBand(summary.riskScore)} Risk</span>
                         </div>
-                        
-                        <div class="grid grid-cols-3 gap-2">
-                            <div class="p-3 bg-rose-50 dark:bg-rose-900/10 rounded-xl text-center">
-                                <div class="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase">Critical</div>
-                                <div class="text-xl font-black text-rose-700 dark:text-rose-300">{summary.critical}</div>
-                            </div>
-                            <div class="p-3 bg-orange-50 dark:bg-orange-900/10 rounded-xl text-center">
-                                <div class="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase">High</div>
-                                <div class="text-xl font-black text-orange-700 dark:text-orange-300">{summary.high}</div>
-                            </div>
-                            <div class="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-xl text-center">
-                                <div class="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase">Medium</div>
-                                <div class="text-xl font-black text-amber-700 dark:text-amber-300">{summary.medium}</div>
-                            </div>
-                        </div>
-
                         <div class="pt-4 border-t border-slate-50 dark:border-slate-700 flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
                             <span>Last Scan: {new Date(summary.scannedAt * 1000).toLocaleString()}</span>
                             <span>Score: {summary.riskScore}/100</span>
@@ -182,6 +194,10 @@
                 {:else}
                     <div class="py-8 text-center text-slate-400 italic text-sm">No vulnerability data for this target</div>
                 {/if}
+
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
+                    <TrivyFindingsPanel details={vulnerabilityDetails} loading={loadingVulnerabilityDetails} />
+                </div>
             </div>
         </section>
 

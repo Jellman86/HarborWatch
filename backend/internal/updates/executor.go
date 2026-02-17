@@ -124,16 +124,26 @@ func (CommandExecutor) Recreate(ctx context.Context, req Request) error {
 }
 
 func (CommandExecutor) Validate(ctx context.Context, req Request) error {
-	if req.ValidateURL == "" {
-		return errors.New("validateUrl is required")
+	mode := normalizeValidateMode(req.ValidateMode)
+	timeout := validationTimeout(req.ValidateTimeoutSec)
+	interval := validationInterval(req.ValidateIntervalSec)
+	if (mode == "http" || mode == "both") && strings.TrimSpace(req.ValidateURL) == "" {
+		return errors.New("validateUrl is required for http or both validation mode")
 	}
 
 	hc := &http.Client{Timeout: 5 * time.Second}
+	var dockerClient *client.Client
+	if mode == "docker" || mode == "both" {
+		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+		if err != nil {
+			return fmt.Errorf("init docker client for validation: %w", err)
+		}
+		dockerClient = cli
+		defer dockerClient.Close()
+	}
 
-	// Retry loop for up to 30 seconds
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(timeout)
 	var lastErr error
-
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
@@ -141,26 +151,33 @@ func (CommandExecutor) Validate(ctx context.Context, req Request) error {
 		default:
 		}
 
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, req.ValidateURL, nil)
-		if err != nil {
-			return err
-		}
+		httpOK := mode == "docker"
+		dockerOK := mode == "http"
 
-		resp, err := hc.Do(request)
-		if err == nil {
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				resp.Body.Close()
-				return nil // Success!
+		if mode == "http" || mode == "both" {
+			ok, err := validateHTTP(ctx, hc, req.ValidateURL)
+			if err != nil {
+				lastErr = err
 			}
-			lastErr = fmt.Errorf("health check status %d", resp.StatusCode)
-			resp.Body.Close()
-		} else {
-			lastErr = err
+			httpOK = ok
+		}
+		if mode == "docker" || mode == "both" {
+			ok, err := validateDockerState(ctx, dockerClient, req.ContainerID)
+			if err != nil {
+				lastErr = err
+			}
+			dockerOK = ok
 		}
 
-		time.Sleep(2 * time.Second)
+		if httpOK && dockerOK {
+			return nil
+		}
+		time.Sleep(interval)
 	}
 
+	if lastErr == nil {
+		lastErr = errors.New("health checks did not reach healthy state before timeout")
+	}
 	return fmt.Errorf("validation timed out: %w", lastErr)
 }
 
@@ -238,4 +255,80 @@ func newestBackupName(backups []string, containerID string) (string, error) {
 	}
 
 	return "", errors.New("no valid backup names found")
+}
+
+func normalizeValidateMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "http":
+		return "http"
+	case "docker":
+		return "docker"
+	case "both":
+		return "both"
+	default:
+		return "both"
+	}
+}
+
+func validationTimeout(seconds int) time.Duration {
+	if seconds <= 0 {
+		return 45 * time.Second
+	}
+	if seconds > 600 {
+		seconds = 600
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func validationInterval(seconds int) time.Duration {
+	if seconds <= 0 {
+		return 2 * time.Second
+	}
+	if seconds > 30 {
+		seconds = 30
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func validateHTTP(ctx context.Context, hc *http.Client, validateURL string) (bool, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, validateURL, nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := hc.Do(request)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return true, nil
+	}
+	return false, fmt.Errorf("http health check status %d", resp.StatusCode)
+}
+
+func validateDockerState(ctx context.Context, cli *client.Client, containerID string) (bool, error) {
+	inspect, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return false, err
+	}
+	if inspect.State == nil {
+		return false, errors.New("container state is unavailable")
+	}
+	// If Docker healthcheck exists, require "healthy".
+	if inspect.State.Health != nil {
+		status := strings.ToLower(strings.TrimSpace(inspect.State.Health.Status))
+		switch status {
+		case "healthy":
+			return true, nil
+		case "unhealthy":
+			return false, errors.New("docker healthcheck reports unhealthy")
+		default:
+			return false, fmt.Errorf("docker healthcheck status=%s", status)
+		}
+	}
+	// Fallback when no explicit Docker healthcheck is configured.
+	if inspect.State.Running {
+		return true, nil
+	}
+	return false, fmt.Errorf("container is not running (status=%s)", inspect.State.Status)
 }

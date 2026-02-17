@@ -12,7 +12,7 @@ type AuditJobSummary struct { ID string `json:"id"`; Type string `json:"type"`; 
 type ContainerSummary struct { ID string `json:"id"`; Names []string `json:"names"`; Image string `json:"image"`; State string `json:"state"`; Status string `json:"status"`; Labels map[string]string `json:"labels"`; UpdateAvailable bool `json:"updateAvailable"` }
 type ContainerDetail struct { Summary ContainerSummary `json:"summary"`; DiskUsage *ContainerDiskUsage `json:"diskUsage,omitempty"`; VulnerabilitySummary *ScanSummary `json:"vulnerabilitySummary,omitempty"`; MalwareSummary []MalwareScanSummary `json:"malwareSummary,omitempty"`; RecentMetrics []Metric `json:"recentMetrics,omitempty"`; ActionHistory []AuditJobSummary `json:"actionHistory,omitempty"`; Rules *ContainerRules `json:"rules,omitempty"` }
 type ContainerDiskUsage struct { WritableBytes int64 `json:"writableBytes,omitempty"`; RootFsBytes int64 `json:"rootFsBytes,omitempty"`; MountCount int `json:"mountCount,omitempty"` }
-type ContainerRules struct { ContainerID string `json:"containerId"`; UpdatePolicy string `json:"updatePolicy"`; ValidateURL string `json:"validateUrl"`; AutoRollback bool `json:"autoRollback"` }
+type ContainerRules struct { ContainerID string `json:"containerId"`; UpdatePolicy string `json:"updatePolicy"`; ValidateURL string `json:"validateUrl"`; ValidateMode string `json:"validateMode"`; ValidateTimeoutSec int `json:"validateTimeoutSec"`; ValidateIntervalSec int `json:"validateIntervalSec"`; AIValidateLogs bool `json:"aiValidateLogs"`; AutoRollback bool `json:"autoRollback"` }
 type ImageSummary struct { ID string `json:"id"`; RepoTags []string `json:"repoTags"`; Size int64 `json:"size"` }
 type DockerEvent struct { Type string `json:"type"`; Action string `json:"action"`; ID string `json:"id"`; From string `json:"from"`; Attributes map[string]string `json:"attributes,omitempty"`; Time int64 `json:"time"` }
 type ScanRunRequest struct { Target string `json:"target"` }
@@ -20,6 +20,9 @@ type MalwareScanRequest struct { Target string `json:"target"` }
 type ScanStartResponse struct { JobID string `json:"jobId"`; Status string `json:"status"` }
 type ScanJobStatus struct { JobID string `json:"jobId"`; Target string `json:"target"`; Status string `json:"status"`; Source string `json:"source"`; Error string `json:"error,omitempty"`; StartedAt int64 `json:"startedAt"`; CompletedAt int64 `json:"completedAt,omitempty"` }
 type ScanSummary struct { Target string `json:"target"`; Source string `json:"source"`; ScannedAt int64 `json:"scannedAt"`; Critical int `json:"critical"`; High int `json:"high"`; Medium int `json:"medium"`; Low int `json:"low"`; Unknown int `json:"unknown"`; Total int `json:"total"`; RiskScore int `json:"riskScore"` }
+type TrivyVulnerability struct { ID string `json:"id"`; PkgName string `json:"pkgName"`; InstalledVersion string `json:"installedVersion,omitempty"`; FixedVersion string `json:"fixedVersion,omitempty"`; Severity string `json:"severity"`; Title string `json:"title,omitempty"`; Description string `json:"description,omitempty"`; PrimaryURL string `json:"primaryUrl,omitempty"`; CVSSScore float64 `json:"cvssScore,omitempty"`; CVSSSource string `json:"cvssSource,omitempty"`; PublishedDate string `json:"publishedDate,omitempty"`; LastModifiedDate string `json:"lastModifiedDate,omitempty"`; References []string `json:"references,omitempty"` }
+type TrivyResultGroup struct { Type string `json:"type,omitempty"`; Target string `json:"target,omitempty"`; Class string `json:"class,omitempty"`; Vulnerabilities []TrivyVulnerability `json:"vulnerabilities,omitempty"` }
+type TrivyScanDetails struct { Target string `json:"target"`; Source string `json:"source"`; ScannedAt int64 `json:"scannedAt"`; Summary ScanSummary `json:"summary"`; Results []TrivyResultGroup `json:"results,omitempty"`; RawJSON string `json:"rawJson,omitempty"`; ParseError string `json:"parseError,omitempty"` }
 type MalwareScanSummary struct { Target string `json:"target"`; Source string `json:"source"`; ScannedAt int64 `json:"scannedAt"`; Infected bool `json:"infected"`; ThreatsFound []string `json:"threatsFound"` }
 type ReleaseExcerpt struct { Tag string `json:"tag"`; Text string `json:"text"`; Weight int `json:"weight"` }
 type ReleaseRiskSummary struct { Repo string `json:"repo"`; LatestTag string `json:"latestTag"`; LatestPublishedAt int64 `json:"latestPublishedAt"`; ReleasesAnalyzed int `json:"releasesAnalyzed"`; TotalRisk int `json:"totalRisk"`; BreakingChangeLikely bool `json:"breakingChangeLikely"`; HighlightedExcerpts []ReleaseExcerpt `json:"highlightedExcerpts"`; GeneratedAt int64 `json:"generatedAt"` }
@@ -40,7 +43,7 @@ export type AuditJobSummary = { id: string; type: string; target: string; contai
 export type ContainerSummary = { id: string; names: string[]; image: string; state: string; status: string; labels: Record<string, string>; updateAvailable: boolean };
 export type ContainerDetail = { summary: ContainerSummary; diskUsage?: ContainerDiskUsage; vulnerabilitySummary?: ScanSummary; malwareSummary?: MalwareScanSummary[]; recentMetrics?: Metric[]; actionHistory?: AuditJobSummary[]; rules?: ContainerRules };
 export type ContainerDiskUsage = { writableBytes?: number; rootFsBytes?: number; mountCount?: number };
-export type ContainerRules = { containerId: string; updatePolicy: 'auto' | 'manual' | 'locked'; validateUrl?: string; autoRollback: boolean };
+export type ContainerRules = { containerId: string; updatePolicy: 'auto' | 'manual' | 'locked'; validateUrl?: string; validateMode?: 'http' | 'docker' | 'both'; validateTimeoutSec?: number; validateIntervalSec?: number; aiValidateLogs?: boolean; autoRollback: boolean };
 export type ImageSummary = { id: string; repoTags: string[]; size: number };
 export type DockerEvent = { type: string; action: string; id: string; from: string; attributes?: Record<string, string>; time: number };
 export type ScanRunRequest = { target: string };
@@ -48,6 +51,9 @@ export type MalwareScanRequest = { target: string };
 export type ScanStartResponse = { jobId: string; status: string };
 export type ScanJobStatus = { jobId: string; target: string; status: string; source: string; error?: string; startedAt: number; completedAt?: number };
 export type ScanSummary = { target: string; source: string; scannedAt: number; critical: number; high: number; medium: number; low: number; unknown: number; total: number; riskScore: number };
+export type TrivyVulnerability = { id: string; pkgName: string; installedVersion?: string; fixedVersion?: string; severity: string; title?: string; description?: string; primaryUrl?: string; cvssScore?: number; cvssSource?: string; publishedDate?: string; lastModifiedDate?: string; references?: string[] };
+export type TrivyResultGroup = { type?: string; target?: string; class?: string; vulnerabilities?: TrivyVulnerability[] };
+export type TrivyScanDetails = { target: string; source: string; scannedAt: number; summary: ScanSummary; results?: TrivyResultGroup[]; rawJson?: string; parseError?: string };
 export type MalwareScanSummary = { target: string; source: string; scannedAt: number; infected: boolean; threatsFound: string[] };
 export type ReleaseExcerpt = { tag: string; text: string; weight: number };
 export type ReleaseRiskSummary = { repo: string; latestTag: string; latestPublishedAt: number; releasesAnalyzed: number; totalRisk: number; breakingChangeLikely: boolean; highlightedExcerpts: ReleaseExcerpt[]; generatedAt: number };
