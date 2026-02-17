@@ -11,6 +11,7 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - **Automated Compose Doctor:** Zero-config security auditing. HarborWatch automatically retrieves or reconstructs your `docker-compose.yml` for AI-powered security analysis.
 - **Per-Container Lifecycle Policies:** Fine-grained control over updates. Set "Auto", "Manual", or "Locked" policies per asset with custom health check validation.
 - **Dual-Engine Security Scanning:** Integrated vulnerability (Trivy) and malware (ClamAV) scanning with shared database persistence.
+- **In-Container ClamAV Signature Management:** HarborWatch now manages `freshclam` updates internally, exposes signature status in Settings, and supports scheduled signature refresh automation.
 - **High-Resolution Performance Profiling:** Real-time sparklines and detailed historical charts for CPU and Memory utilization.
 - **Unified Configuration:** Seamlessly merge `docker-compose` environment variables with persistent database settings.
 - **Automated Lifecycle Inputs:** Validation URLs and update form defaults are auto-derived from container metadata, health checks, exposed ports, settings patterns, and repo-aware release context, while remaining fully user-editable.
@@ -63,6 +64,15 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - `HW_TRIVY_MAX_CONCURRENCY` limits parallel Trivy jobs (default `2`).
 - `HW_CLAMAV_MAX_CONCURRENCY` limits parallel ClamAV jobs (default `1`).
 - `HW_CLAMAV_SNAPSHOT_MAX_BYTES` caps container snapshot size for ClamAV container scans (default `2147483648`).
+- `HW_CLAMAV_UPDATE_TIMEOUT` sets max runtime for manual/scheduled signature updates (default `10m`).
+- `HW_CLAMAV_STATUS_TIMEOUT` sets signature status query timeout (default `10s`).
+- `HW_CLAMAV_MAX_FILE_MB` caps individual file size scanned by ClamAV (default `32`).
+- `HW_CLAMAV_MAX_SCAN_MB` caps aggregate scan size per scan invocation (default `512`).
+- `HW_CLAMAV_MAX_FILES` caps files scanned per invocation (default `12000`).
+- `HW_CLAMAV_MAX_RECURSION` caps directory recursion depth for ClamAV scans (default `16`).
+- `HW_CLAMAV_SCAN_ARCHIVES` toggles archive scanning (`true`/`false`, default `false`).
+- `HW_CLAMAV_FRESHCLAM_CHECKS` controls `freshclam --checks` value during updates (default `2`).
+- `HW_CLAMAV_DB_PATH` controls ClamAV signature database directory path (default `/var/lib/clamav` in container).
 
 ## Validation URL Automation
 
@@ -106,6 +116,8 @@ scripts/dev.sh
 ## Architecture Note
 
 HarborWatch is designed as a **single monolithic container**. It serves the REST API, background jobs, and the built Svelte static assets from a single Go binary. No Node.js or complex sidecars are required in production.
+
+ClamAV signature updates are also managed inside the HarborWatch container. Persist signature files by bind-mounting `/var/lib/clamav` (compose defaults now include `${HW_CLAMAV_DB_PATH:-./clamav-db}:/var/lib/clamav`).
 
 ## Environment Overrides
 

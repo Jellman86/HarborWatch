@@ -14,6 +14,8 @@ This document outlines the technical specification for transforming HarborWatch 
   - batched metrics endpoint for inventory sparklines
   - expanded diagnostics API (snapshot bundle + container log retrieval)
   - API-level 4xx/5xx telemetry logging into internal diagnostics logs
+  - in-container ClamAV signature lifecycle management (status/update endpoints + scheduled updates)
+  - automation safety exclusions for container/mount ignore policies with self-protection defaults
 - Remaining roadmap items are primarily deeper optimization and feature expansion tracks.
 
 ## Core Philosophy: "AI Advises, Policy Enforces"

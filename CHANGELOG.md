@@ -2,6 +2,29 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.5] - 2026-02-17
+
+### Added
+- **In-Container ClamAV Signature Lifecycle:**
+  - Added `GET /api/scans/malware/signatures/status` for ClamAV engine/database metadata.
+  - Added `POST /api/scans/malware/signatures/update` to run `freshclam` updates directly from HarborWatch.
+  - Added a dedicated ClamAV signatures panel in Settings -> System with status refresh, manual update action, and scheduler toggle.
+  - Added scheduler task `clamav_signature_update` (default cadence `Daily 02:30`) and exposed it through automation schedule controls.
+- **Automation Safety Exclusions:**
+  - Added global settings for ignored automation containers and ignored malware mount paths.
+  - HarborWatch self-protection is now enforced by default via persistent auto-population of `harborwatch` in ignored containers.
+
+### Changed
+- **Runtime Architecture (Compose):**
+  - Removed external `clamav` sidecar service from `docker-compose.yml`, `docker-compose.dev.yml`, and `docker-compose.prod.yml`.
+  - HarborWatch now manages signatures internally and persists ClamAV DB files through a direct bind mount: `${HW_CLAMAV_DB_PATH:-./clamav-db}:/var/lib/clamav`.
+- **ClamAV Scan Guardrails:**
+  - Added bounded default scan limits (`--max-filesize`, `--max-scansize`, `--max-files`, `--max-recursion`) and disabled archive scanning by default to reduce runaway CPU/IO on large media trees.
+
+### Fixed
+- **Settings UX Feedback:**
+  - Added explicit toast feedback for automation domain enable/disable actions, including no-op messaging when already in the requested state.
+
 ## [0.7.4] - 2026-02-17
 
 ### Added
