@@ -13,11 +13,12 @@
     const MIN_CHART_WIDTH = 80;
 
     const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 B';
+        const safe = Number.isFinite(bytes) ? Math.max(bytes, 0) : 0;
+        if (safe === 0) return '0 B';
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        const i = Math.floor(Math.log(safe) / Math.log(k));
+        return parseFloat((safe / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
     const toFinite = (value: unknown): number | null => {
@@ -76,13 +77,17 @@
         }
     ]);
 
-    let canRenderChart = $derived(hostWidth >= MIN_CHART_WIDTH && safeMetrics.length > 0);
+    let chartWidth = $derived(
+        Number.isFinite(hostWidth) ? Math.max(Math.floor(hostWidth), MIN_CHART_WIDTH) : MIN_CHART_WIDTH
+    );
+
+    let canRenderChart = $derived(chartWidth >= MIN_CHART_WIDTH && safeMetrics.length > 0);
 
     let options = $derived({
         series: series,
         chart: {
             type: 'area',
-            width: Math.max(hostWidth, MIN_CHART_WIDTH),
+            width: chartWidth,
             height: CHART_HEIGHT,
             animations: { enabled: true },
             toolbar: { show: false },

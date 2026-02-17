@@ -4,10 +4,22 @@
 
     let { metrics = [] } = $props<{ metrics?: Metric[] }>();
 
+    const toFinite = (value: unknown): number | null => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+    };
+
+    let safeData = $derived(
+        metrics
+            .map((m) => toFinite(m?.cpuPercent))
+            .filter((v): v is number => v !== null)
+            .map((v) => Math.max(0, v))
+    );
+
     let series = $derived([
         {
             name: 'CPU',
-            data: metrics.map(m => m.cpuPercent)
+            data: safeData
         }
     ]);
 
@@ -38,8 +50,8 @@
     });
 </script>
 
-{#if metrics.length > 0}
-    {#key metrics.length}
+{#if safeData.length > 0}
+    {#key `${safeData.length}:${safeData[0] ?? 0}:${safeData[safeData.length - 1] ?? 0}`}
         <div class="w-[100px] h-[30px]" use:chart={options}></div>
     {/key}
 {:else}

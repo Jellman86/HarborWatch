@@ -17,12 +17,17 @@
         return `${size.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`;
     };
 
-    let writable = $derived(Math.max(0, Number(diskUsage?.writableBytes || 0)));
-    let rootFs = $derived(Math.max(0, Number(diskUsage?.rootFsBytes || 0)));
-    let mounts = $derived(Math.max(0, Number(diskUsage?.mountCount || 0)));
-    let hostTotal = $derived(Math.max(0, Number(diskUsage?.hostTotalBytes || 0)));
-    let hostAvailable = $derived(Math.max(0, Number(diskUsage?.hostAvailableBytes || 0)));
-    let hostUsed = $derived(Math.max(0, Number(diskUsage?.hostUsedBytes || 0)));
+    const nonNegativeFinite = (value: unknown): number => {
+        const n = Number(value);
+        return Number.isFinite(n) ? Math.max(0, n) : 0;
+    };
+
+    let writable = $derived(nonNegativeFinite(diskUsage?.writableBytes));
+    let rootFs = $derived(nonNegativeFinite(diskUsage?.rootFsBytes));
+    let mounts = $derived(nonNegativeFinite(diskUsage?.mountCount));
+    let hostTotal = $derived(nonNegativeFinite(diskUsage?.hostTotalBytes));
+    let hostAvailable = $derived(nonNegativeFinite(diskUsage?.hostAvailableBytes));
+    let hostUsed = $derived(nonNegativeFinite(diskUsage?.hostUsedBytes));
 
     let rootShare = $derived(hostTotal > 0 ? Math.min(rootFs, hostTotal) : rootFs);
     let writableShare = $derived(hostTotal > 0 ? Math.min(writable, hostTotal) : writable);

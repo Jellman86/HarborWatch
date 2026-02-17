@@ -38,7 +38,7 @@
     }>();
 
     const NODE_MIN_WIDTH = 164;
-    const GRID_COL_GAP = 14;
+    const GRID_COL_GAP = 75;
     const GRID_ROW_GAP = 26;
     const MAX_SINGLE_ROW_NODES = 6;
     const CONNECTOR_GAP_X = 10;
