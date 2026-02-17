@@ -22,10 +22,13 @@
 
     const defaultSettings: Settings = {
         discordWebhookUrl: "",
+        discordEnabled: true,
         gotifyUrl: "",
         gotifyToken: "",
         portainerUrl: "",
         portainerApiKey: "",
+        portainerEnabled: true,
+        aiEnabled: true,
         aiProvider: "",
         openaiKey: "",
         openaiModel: "",
@@ -35,6 +38,7 @@
         geminiModel: "",
         instanceUrl: "",
         validateUrlPattern: "",
+        uiAnimationsEnabled: true,
         environmentOverrides: {}
     };
 
@@ -116,6 +120,38 @@
         return scoped.length > 0 && scoped.some((s) => s.enabled);
     }
 
+    async function setScheduleEnabled(id: string, enabled: boolean) {
+        const current = scheduleById(id);
+        if (!current || current.enabled === enabled) return;
+        const res = await fetch("/api/scheduler/toggle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, enabled })
+        });
+        if (!res.ok) throw new Error(`toggle failed (${res.status})`);
+        schedules = schedules.map((s) => (s.id === id ? { ...s, enabled } : s));
+    }
+
+    async function setDomainEnabled(domain: AutomationDomain, enabled: boolean) {
+        const scoped = schedulesForDomain(domain);
+        try {
+            for (const task of scoped) {
+                await setScheduleEnabled(task.id, enabled);
+            }
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "Failed to toggle automation domain");
+        }
+    }
+
+    async function toggleMetricsCollector() {
+        const enabled = !(scheduleById("metrics_collector")?.enabled ?? false);
+        try {
+            await setScheduleEnabled("metrics_collector", enabled);
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "Failed to toggle metrics collection");
+        }
+    }
+
     function flowSteps(domain: AutomationDomain): Array<{ label: string; state: "active" | "idle" | "warning" }> {
         const scoped = schedulesForDomain(domain);
         const total = Math.max(scoped.length, 1);
@@ -173,13 +209,7 @@
 
     async function toggleTask(id: string, enabled: boolean) {
         try {
-            const res = await fetch("/api/scheduler/toggle", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id, enabled: !enabled })
-            });
-            if (!res.ok) throw new Error(`toggle failed (${res.status})`);
-            schedules = schedules.map((s) => (s.id === id ? { ...s, enabled: !enabled } : s));
+            await setScheduleEnabled(id, !enabled);
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to toggle automation task");
         }
@@ -261,6 +291,11 @@
         settings.geminiModel = normalizeModel("gemini", settings.geminiModel);
     });
 
+    $effect(() => {
+        if (typeof document === "undefined") return;
+        document.documentElement.classList.toggle("no-motion", !settings.uiAnimationsEnabled);
+    });
+
     onMount(() => {
         loadAll();
     });
@@ -318,6 +353,29 @@
                     {/each}
                 </div>
 
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">{automationConfig[activeAutomationTab].title}</p>
+                        <p class="text-[11px] text-slate-500 mt-1">
+                            Domain status: <span class="font-bold">{domainEnabled(activeAutomationTab) ? "Enabled" : "Disabled"}</span>
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button
+                            onclick={() => setDomainEnabled(activeAutomationTab, true)}
+                            class="px-3 py-2 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-900/40 text-[10px] font-black uppercase tracking-widest"
+                        >
+                            Enable Domain
+                        </button>
+                        <button
+                            onclick={() => setDomainEnabled(activeAutomationTab, false)}
+                            class="px-3 py-2 rounded-xl border border-rose-200 text-rose-700 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-900/40 text-[10px] font-black uppercase tracking-widest"
+                        >
+                            Disable Domain
+                        </button>
+                    </div>
+                </div>
+
                 <div class="space-y-6">
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40">
                         <AutomationFlowChart
@@ -362,18 +420,29 @@
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-brand-200 dark:border-brand-900/40 bg-brand-50 dark:bg-brand-900/10 p-4 text-xs text-brand-800 dark:text-brand-300">
-                    Domain status: <strong>{domainEnabled(activeAutomationTab) ? "Enabled" : "Disabled"}</strong>
-                    : If disabled, inherited container policies in this domain do not run.
-                </div>
             </div>
 
         {:else if activeTab === "ai"}
             <div class="p-6 md:p-8 space-y-8">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Features</p>
+                        <p class="text-[11px] text-slate-500 mt-1">Disable this to fully turn off AI analysis and provider usage.</p>
+                    </div>
+                    <button
+                        onclick={() => settings.aiEnabled = !settings.aiEnabled}
+                        disabled={isLocked("aiEnabled")}
+                        class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.aiEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                        aria-label="Toggle AI features"
+                    >
+                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.aiEnabled ? 'right-1' : 'left-1'}"></div>
+                    </button>
+                </div>
+
                 <div class="flex flex-wrap items-end gap-4">
                     <div class="space-y-2 min-w-[260px]">
                         <label for="ai-provider" class="text-[10px] font-black uppercase text-slate-400 ml-1">Preferred Provider</label>
-                        <select id="ai-provider" bind:value={settings.aiProvider} disabled={isLocked("aiProvider")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <select id="ai-provider" bind:value={settings.aiProvider} disabled={isLocked("aiProvider") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             <option value="">Auto (first configured)</option>
                             <option value="openai">OpenAI</option>
                             <option value="anthropic">Anthropic</option>
@@ -385,45 +454,77 @@
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">OpenAI</h3>
-                        <input type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey")} placeholder="sk-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <select bind:value={settings.openaiModel} disabled={isLocked("openaiModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <input type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey") || !settings.aiEnabled} placeholder="sk-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <select bind:value={settings.openaiModel} disabled={isLocked("openaiModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("openai") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
                         </select>
-                        <button onclick={() => testProvider("openai", settings.openaiModel || "")} disabled={testingProvider === "openai"} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "openai" ? "Testing..." : "Test OpenAI"}</button>
+                        <button onclick={() => testProvider("openai", settings.openaiModel || "")} disabled={testingProvider === "openai" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "openai" ? "Testing..." : "Test OpenAI"}</button>
                     </div>
 
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Anthropic</h3>
-                        <input type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey")} placeholder="sk-ant-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <select bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <input type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey") || !settings.aiEnabled} placeholder="sk-ant-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <select bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("anthropic") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
                         </select>
-                        <button onclick={() => testProvider("anthropic", settings.anthropicModel || "")} disabled={testingProvider === "anthropic"} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "anthropic" ? "Testing..." : "Test Anthropic"}</button>
+                        <button onclick={() => testProvider("anthropic", settings.anthropicModel || "")} disabled={testingProvider === "anthropic" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "anthropic" ? "Testing..." : "Test Anthropic"}</button>
                     </div>
 
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Gemini</h3>
-                        <input type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey")} placeholder="AIza..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <select bind:value={settings.geminiModel} disabled={isLocked("geminiModel")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <input type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey") || !settings.aiEnabled} placeholder="AIza..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <select bind:value={settings.geminiModel} disabled={isLocked("geminiModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("gemini") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
                         </select>
-                        <button onclick={() => testProvider("gemini", settings.geminiModel || "")} disabled={testingProvider === "gemini"} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "gemini" ? "Testing..." : "Test Gemini"}</button>
+                        <button onclick={() => testProvider("gemini", settings.geminiModel || "")} disabled={testingProvider === "gemini" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "gemini" ? "Testing..." : "Test Gemini"}</button>
                     </div>
                 </div>
             </div>
 
         {:else if activeTab === "integrations"}
             <div class="p-6 md:p-8 space-y-8">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Discord Notifications</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Enable or disable outbound Discord alerts without deleting credentials.</p>
+                        </div>
+                        <button
+                            onclick={() => settings.discordEnabled = !settings.discordEnabled}
+                            disabled={isLocked("discordEnabled")}
+                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.discordEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                            aria-label="Toggle Discord notifications"
+                        >
+                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.discordEnabled ? 'right-1' : 'left-1'}"></div>
+                        </button>
+                    </div>
+
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Portainer Integration</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Control whether HarborWatch should query Portainer APIs.</p>
+                        </div>
+                        <button
+                            onclick={() => settings.portainerEnabled = !settings.portainerEnabled}
+                            disabled={isLocked("portainerEnabled")}
+                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.portainerEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                            aria-label="Toggle Portainer integration"
+                        >
+                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.portainerEnabled ? 'right-1' : 'left-1'}"></div>
+                        </button>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
                     <div class="space-y-2">
                         <label for="discord-webhook" class="text-[10px] font-black uppercase text-slate-400 ml-1">Discord Webhook</label>
-                        <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl")} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl") || !settings.discordEnabled} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                     </div>
                     <div class="space-y-2">
                         <label for="gotify-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Gotify URL</label>
@@ -435,31 +536,62 @@
                     </div>
                     <div class="space-y-2">
                         <label for="portainer-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer URL</label>
-                        <input id="portainer-url" bind:value={settings.portainerUrl} disabled={isLocked("portainerUrl")} placeholder="https://portainer.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <input id="portainer-url" bind:value={settings.portainerUrl} disabled={isLocked("portainerUrl") || !settings.portainerEnabled} placeholder="https://portainer.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                     </div>
                     <div class="space-y-2 xl:col-span-2">
                         <label for="portainer-api-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer API Key</label>
-                        <input id="portainer-api-key" type="password" bind:value={settings.portainerApiKey} disabled={isLocked("portainerApiKey")} placeholder="ptr_..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <input id="portainer-api-key" type="password" bind:value={settings.portainerApiKey} disabled={isLocked("portainerApiKey") || !settings.portainerEnabled} placeholder="ptr_..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                     </div>
                 </div>
             </div>
 
         {:else if activeTab === "system"}
-            <div class="p-6 md:p-8 grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <div class="space-y-2">
-                    <label for="instance-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Instance URL</label>
-                    <input id="instance-url" bind:value={settings.instanceUrl} disabled={isLocked("instanceUrl")} placeholder="https://harborwatch.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                    <p class="text-[11px] text-slate-500">Used for webhook callbacks and external links.</p>
+            <div class="p-6 md:p-8 space-y-6">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">Metrics Collection</p>
+                        <p class="text-[11px] text-slate-500 mt-1">Control background `metrics_collector` scheduler activity.</p>
+                    </div>
+                    <button
+                        onclick={toggleMetricsCollector}
+                        disabled={!scheduleById("metrics_collector")}
+                        class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {(scheduleById('metrics_collector')?.enabled ?? false) ? 'bg-brand-600' : 'bg-slate-300'}"
+                        aria-label="Toggle metrics collector"
+                    >
+                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {(scheduleById('metrics_collector')?.enabled ?? false) ? 'right-1' : 'left-1'}"></div>
+                    </button>
                 </div>
-                <div class="space-y-2">
-                    <label for="validate-pattern" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation URL Pattern</label>
-                    <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked("validateUrlPattern")} placeholder={"http://localhost:{{PORT}}/health"} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                    <p class="text-[11px] text-slate-500">Template for deriving per-container validation URLs.</p>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                        <label for="instance-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Instance URL</label>
+                        <input id="instance-url" bind:value={settings.instanceUrl} disabled={isLocked("instanceUrl")} placeholder="https://harborwatch.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <p class="text-[11px] text-slate-500">Used for webhook callbacks and external links.</p>
+                    </div>
+                    <div class="space-y-2">
+                        <label for="validate-pattern" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation URL Pattern</label>
+                        <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked("validateUrlPattern")} placeholder={"http://localhost:{{PORT}}/health"} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <p class="text-[11px] text-slate-500">Template for deriving per-container validation URLs.</p>
+                    </div>
                 </div>
             </div>
 
         {:else if activeTab === "appearance"}
-            <div class="p-6 md:p-8">
+            <div class="p-6 md:p-8 space-y-6">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">UI Animations</p>
+                        <p class="text-[11px] text-slate-500 mt-1">Turn off transitions and motion effects for reduced visual movement.</p>
+                    </div>
+                    <button
+                        onclick={() => settings.uiAnimationsEnabled = !settings.uiAnimationsEnabled}
+                        disabled={isLocked("uiAnimationsEnabled")}
+                        class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.uiAnimationsEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                        aria-label="Toggle UI animations"
+                    >
+                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.uiAnimationsEnabled ? 'right-1' : 'left-1'}"></div>
+                    </button>
+                </div>
                 <ThemeSwitcher />
             </div>
         {/if}

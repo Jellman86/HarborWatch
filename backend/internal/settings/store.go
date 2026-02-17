@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -11,23 +12,27 @@ import (
 type Settings struct {
 	// Notifications
 	DiscordWebhookURL string `json:"discordWebhookUrl"`
+	DiscordEnabled    bool   `json:"discordEnabled"`
 	GotifyURL         string `json:"gotifyUrl"`
 	GotifyToken       string `json:"gotifyToken"`
 
 	// API Keys / Integrations
-	PortainerURL    string `json:"portainerUrl"`
-	PortainerApiKey string `json:"portainerApiKey"`
-	AIProvider      string `json:"aiProvider"`
-	OpenAIKey       string `json:"openaiKey"`
-	OpenAIModel     string `json:"openaiModel"`
-	AnthropicKey    string `json:"anthropicKey"`
-	AnthropicModel  string `json:"anthropicModel"`
-	GeminiKey       string `json:"geminiKey"`
-	GeminiModel     string `json:"geminiModel"`
+	PortainerURL     string `json:"portainerUrl"`
+	PortainerApiKey  string `json:"portainerApiKey"`
+	PortainerEnabled bool   `json:"portainerEnabled"`
+	AIEnabled        bool   `json:"aiEnabled"`
+	AIProvider       string `json:"aiProvider"`
+	OpenAIKey        string `json:"openaiKey"`
+	OpenAIModel      string `json:"openaiModel"`
+	AnthropicKey     string `json:"anthropicKey"`
+	AnthropicModel   string `json:"anthropicModel"`
+	GeminiKey        string `json:"geminiKey"`
+	GeminiModel      string `json:"geminiModel"`
 
 	// System
-	InstanceURL        string `json:"instanceUrl"`
-	ValidateURLPattern string `json:"validateUrlPattern"`
+	InstanceURL         string `json:"instanceUrl"`
+	ValidateURLPattern  string `json:"validateUrlPattern"`
+	UIAnimationsEnabled bool   `json:"uiAnimationsEnabled"`
 
 	// Metadata (read-only info for UI)
 	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
@@ -57,6 +62,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 func (s *Store) Get(ctx context.Context) (Settings, error) {
 	st := Settings{
+		AIEnabled:            true,
+		DiscordEnabled:       true,
+		PortainerEnabled:     true,
+		UIAnimationsEnabled:  true,
 		EnvironmentOverrides: make(map[string]bool),
 	}
 
@@ -75,6 +84,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		switch key {
 		case "discord_webhook_url":
 			st.DiscordWebhookURL = value
+		case "discord_enabled":
+			st.DiscordEnabled = parseStoredBool(value, st.DiscordEnabled)
 		case "gotify_url":
 			st.GotifyURL = value
 		case "gotify_token":
@@ -83,6 +94,10 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.PortainerURL = value
 		case "portainer_api_key":
 			st.PortainerApiKey = value
+		case "portainer_enabled":
+			st.PortainerEnabled = parseStoredBool(value, st.PortainerEnabled)
+		case "ai_enabled":
+			st.AIEnabled = parseStoredBool(value, st.AIEnabled)
 		case "openai_key":
 			st.OpenAIKey = value
 		case "openai_model":
@@ -101,6 +116,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.InstanceURL = value
 		case "validate_url_pattern":
 			st.ValidateURLPattern = value
+		case "ui_animations_enabled":
+			st.UIAnimationsEnabled = parseStoredBool(value, st.UIAnimationsEnabled)
 		}
 	}
 
@@ -138,6 +155,22 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		}
 	}
 
+	boolEnvMap := map[string]struct {
+		ptr    *bool
+		envKey string
+	}{
+		"aiEnabled":           {&st.AIEnabled, "HW_AI_ENABLED"},
+		"discordEnabled":      {&st.DiscordEnabled, "HW_DISCORD_ENABLED"},
+		"portainerEnabled":    {&st.PortainerEnabled, "HW_PORTAINER_ENABLED"},
+		"uiAnimationsEnabled": {&st.UIAnimationsEnabled, "HW_UI_ANIMATIONS_ENABLED"},
+	}
+	for jsonKey, mapping := range boolEnvMap {
+		if val := strings.TrimSpace(os.Getenv(mapping.envKey)); val != "" {
+			*mapping.ptr = parseStoredBool(val, *mapping.ptr)
+			st.EnvironmentOverrides[jsonKey] = true
+		}
+	}
+
 	return st, nil
 }
 
@@ -153,37 +186,45 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	defer tx.Rollback()
 
 	keys := map[string]string{
-		"discord_webhook_url":  st.DiscordWebhookURL,
-		"gotify_url":           st.GotifyURL,
-		"gotify_token":         st.GotifyToken,
-		"portainer_url":        st.PortainerURL,
-		"portainer_api_key":    st.PortainerApiKey,
-		"ai_provider":          st.AIProvider,
-		"openai_key":           st.OpenAIKey,
-		"openai_model":         st.OpenAIModel,
-		"anthropic_key":        st.AnthropicKey,
-		"anthropic_model":      st.AnthropicModel,
-		"gemini_key":           st.GeminiKey,
-		"gemini_model":         st.GeminiModel,
-		"instance_url":         st.InstanceURL,
-		"validate_url_pattern": st.ValidateURLPattern,
+		"discord_webhook_url":   st.DiscordWebhookURL,
+		"discord_enabled":       boolString(st.DiscordEnabled),
+		"gotify_url":            st.GotifyURL,
+		"gotify_token":          st.GotifyToken,
+		"portainer_url":         st.PortainerURL,
+		"portainer_api_key":     st.PortainerApiKey,
+		"portainer_enabled":     boolString(st.PortainerEnabled),
+		"ai_enabled":            boolString(st.AIEnabled),
+		"ai_provider":           st.AIProvider,
+		"openai_key":            st.OpenAIKey,
+		"openai_model":          st.OpenAIModel,
+		"anthropic_key":         st.AnthropicKey,
+		"anthropic_model":       st.AnthropicModel,
+		"gemini_key":            st.GeminiKey,
+		"gemini_model":          st.GeminiModel,
+		"instance_url":          st.InstanceURL,
+		"validate_url_pattern":  st.ValidateURLPattern,
+		"ui_animations_enabled": boolString(st.UIAnimationsEnabled),
 	}
 
 	jsonToDbKey := map[string]string{
-		"discordWebhookUrl":  "discord_webhook_url",
-		"gotifyUrl":          "gotify_url",
-		"gotifyToken":        "gotify_token",
-		"portainerUrl":       "portainer_url",
-		"portainerApiKey":    "portainer_api_key",
-		"aiProvider":         "ai_provider",
-		"openaiKey":          "openai_key",
-		"openaiModel":        "openai_model",
-		"anthropicKey":       "anthropic_key",
-		"anthropicModel":     "anthropic_model",
-		"geminiKey":          "gemini_key",
-		"geminiModel":        "gemini_model",
-		"instanceUrl":        "instance_url",
-		"validateUrlPattern": "validate_url_pattern",
+		"discordWebhookUrl":   "discord_webhook_url",
+		"discordEnabled":      "discord_enabled",
+		"gotifyUrl":           "gotify_url",
+		"gotifyToken":         "gotify_token",
+		"portainerUrl":        "portainer_url",
+		"portainerApiKey":     "portainer_api_key",
+		"portainerEnabled":    "portainer_enabled",
+		"aiEnabled":           "ai_enabled",
+		"aiProvider":          "ai_provider",
+		"openaiKey":           "openai_key",
+		"openaiModel":         "openai_model",
+		"anthropicKey":        "anthropic_key",
+		"anthropicModel":      "anthropic_model",
+		"geminiKey":           "gemini_key",
+		"geminiModel":         "gemini_model",
+		"instanceUrl":         "instance_url",
+		"validateUrlPattern":  "validate_url_pattern",
+		"uiAnimationsEnabled": "ui_animations_enabled",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {
@@ -205,4 +246,22 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value
 	}
 
 	return tx.Commit()
+}
+
+func parseStoredBool(value string, defaultValue bool) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return defaultValue
+	}
+}
+
+func boolString(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }

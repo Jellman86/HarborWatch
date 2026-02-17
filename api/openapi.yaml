@@ -965,10 +965,13 @@ components:
       type: object
       properties:
         discordWebhookUrl: { type: string }
+        discordEnabled: { type: boolean }
         gotifyUrl: { type: string }
         gotifyToken: { type: string }
         portainerUrl: { type: string }
         portainerApiKey: { type: string }
+        portainerEnabled: { type: boolean }
+        aiEnabled: { type: boolean }
         aiProvider:
           type: string
           enum: [openai, anthropic, gemini]
@@ -980,6 +983,7 @@ components:
         geminiModel: { type: string }
         instanceUrl: { type: string }
         validateUrlPattern: { type: string }
+        uiAnimationsEnabled: { type: boolean }
         environmentOverrides:
           type: object
           additionalProperties: { type: boolean }

@@ -332,3 +332,12 @@
 .animate-reveal {
   animation: reveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Accessibility/comfort: disable motion when configured in Settings. */
+.no-motion *,
+.no-motion *::before,
+.no-motion *::after {
+  animation: none !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}

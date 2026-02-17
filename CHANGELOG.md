@@ -18,6 +18,10 @@ All notable changes to HarborWatch are documented in this file.
 - **Update Pipeline Input Automation:**
   - `POST /api/updates/run` now auto-derives `targetImage` and `validateUrl` when omitted, using container context.
   - Update AI analysis now includes container context and repository intelligence grounded on release notes in the detected current->target version range (with fallback heuristics).
+- **Settings Control Plane Toggles:**
+  - Added persisted on/off controls for AI (`aiEnabled`), Discord notifications (`discordEnabled`), Portainer integration (`portainerEnabled`), and UI motion (`uiAnimationsEnabled`).
+  - Added per-domain automation master controls (enable/disable all tasks in upgrades, maintenance, or security domains).
+  - Added system-level metrics collector toggle in Settings.
 
 ### Fixed
 - **ClamAV Container Scan Build/Runtime Stability:**

@@ -211,10 +211,13 @@ type UpdateJobStatus struct {
 }
 type Settings struct {
 	DiscordWebhookURL    string          `json:"discordWebhookUrl"`
+	DiscordEnabled       bool            `json:"discordEnabled"`
 	GotifyURL            string          `json:"gotifyUrl"`
 	GotifyToken          string          `json:"gotifyToken"`
 	PortainerURL         string          `json:"portainerUrl"`
 	PortainerApiKey      string          `json:"portainerApiKey"`
+	PortainerEnabled     bool            `json:"portainerEnabled"`
+	AIEnabled            bool            `json:"aiEnabled"`
 	AIProvider           string          `json:"aiProvider"`
 	OpenAIKey            string          `json:"openaiKey"`
 	OpenAIModel          string          `json:"openaiModel"`
@@ -224,5 +227,6 @@ type Settings struct {
 	GeminiModel          string          `json:"geminiModel"`
 	InstanceURL          string          `json:"instanceUrl"`
 	ValidateURLPattern   string          `json:"validateUrlPattern"`
+	UIAnimationsEnabled  bool            `json:"uiAnimationsEnabled"`
 	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
 }

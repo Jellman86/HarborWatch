@@ -199,21 +199,25 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		}
 		aiService.SetProvider(ai.NewProviderFromEnv())
 	} else {
-		if st.DiscordWebhookURL != "" {
+		if st.DiscordEnabled && st.DiscordWebhookURL != "" {
 			notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
 		}
-		if st.PortainerURL != "" {
+		if st.PortainerEnabled && st.PortainerURL != "" {
 			portainerService = portainer.NewClient(st.PortainerURL, st.PortainerApiKey)
 		}
-		aiService.SetProvider(ai.NewProviderFromConfig(ai.ProviderConfig{
-			Preferred:      st.AIProvider,
-			OpenAIKey:      st.OpenAIKey,
-			OpenAIModel:    st.OpenAIModel,
-			AnthropicKey:   st.AnthropicKey,
-			AnthropicModel: st.AnthropicModel,
-			GeminiKey:      st.GeminiKey,
-			GeminiModel:    st.GeminiModel,
-		}))
+		if st.AIEnabled {
+			aiService.SetProvider(ai.NewProviderFromConfig(ai.ProviderConfig{
+				Preferred:      st.AIProvider,
+				OpenAIKey:      st.OpenAIKey,
+				OpenAIModel:    st.OpenAIModel,
+				AnthropicKey:   st.AnthropicKey,
+				AnthropicModel: st.AnthropicModel,
+				GeminiKey:      st.GeminiKey,
+				GeminiModel:    st.GeminiModel,
+			}))
+		} else {
+			aiService.SetProvider(nil)
+		}
 	}
 
 	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService)
@@ -428,6 +432,7 @@ func newDegradedMux(initErr error) http.Handler {
 
 func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService) http.Handler {
 	r := chi.NewRouter()
+	currentPortainerService := portainerService
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -1192,7 +1197,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 				defer cancel()
 
-				config, err := dockerClient.GetContainerComposeConfig(ctx, id, portainerService)
+				config, err := dockerClient.GetContainerComposeConfig(ctx, id, currentPortainerService)
 				if err != nil {
 					writeError(w, http.StatusNotFound, "config_not_found", err.Error())
 					return
@@ -1495,31 +1500,41 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 
-				if notificationService != nil {
-					switch {
-					case st.DiscordWebhookURL == "":
-						notificationService.RemoveDispatcher("discord")
-					default:
-						notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
+				fresh := st
+				if settingsService != nil {
+					if loaded, err := settingsService.Get(r.Context()); err == nil {
+						fresh = loaded
 					}
 				}
 
-				if setter, ok := aiService.(interface{ SetProvider(ai.Provider) }); ok {
-					fresh := st
-					if settingsService != nil {
-						if loaded, err := settingsService.Get(r.Context()); err == nil {
-							fresh = loaded
-						}
+				if notificationService != nil {
+					if !fresh.DiscordEnabled || strings.TrimSpace(fresh.DiscordWebhookURL) == "" {
+						notificationService.RemoveDispatcher("discord")
+					} else {
+						notificationService.AddDispatcher(notifications.NewDiscordDispatcher(fresh.DiscordWebhookURL))
 					}
-					setter.SetProvider(ai.NewProviderFromConfig(ai.ProviderConfig{
-						Preferred:      fresh.AIProvider,
-						OpenAIKey:      fresh.OpenAIKey,
-						OpenAIModel:    fresh.OpenAIModel,
-						AnthropicKey:   fresh.AnthropicKey,
-						AnthropicModel: fresh.AnthropicModel,
-						GeminiKey:      fresh.GeminiKey,
-						GeminiModel:    fresh.GeminiModel,
-					}))
+				}
+
+				if fresh.PortainerEnabled && strings.TrimSpace(fresh.PortainerURL) != "" {
+					currentPortainerService = portainer.NewClient(fresh.PortainerURL, fresh.PortainerApiKey)
+				} else {
+					currentPortainerService = nil
+				}
+
+				if setter, ok := aiService.(interface{ SetProvider(ai.Provider) }); ok {
+					if fresh.AIEnabled {
+						setter.SetProvider(ai.NewProviderFromConfig(ai.ProviderConfig{
+							Preferred:      fresh.AIProvider,
+							OpenAIKey:      fresh.OpenAIKey,
+							OpenAIModel:    fresh.OpenAIModel,
+							AnthropicKey:   fresh.AnthropicKey,
+							AnthropicModel: fresh.AnthropicModel,
+							GeminiKey:      fresh.GeminiKey,
+							GeminiModel:    fresh.GeminiModel,
+						}))
+					} else {
+						setter.SetProvider(nil)
+					}
 				}
 
 				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -1527,11 +1542,11 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 		})
 
 		r.Get("/portainer/stacks", func(w http.ResponseWriter, r *http.Request) {
-			if portainerService == nil {
+			if currentPortainerService == nil {
 				writeError(w, http.StatusServiceUnavailable, "portainer_unavailable", "Portainer integration not configured")
 				return
 			}
-			stacks, err := portainerService.ListStacks(r.Context())
+			stacks, err := currentPortainerService.ListStacks(r.Context())
 			if err != nil {
 				writeError(w, http.StatusBadGateway, "portainer_error", err.Error())
 				return
