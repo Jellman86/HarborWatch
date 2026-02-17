@@ -13,6 +13,18 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - **High-Resolution Performance Profiling:** Real-time sparklines and detailed historical charts for CPU and Memory utilization.
 - **Unified Configuration:** Seamlessly merge `docker-compose` environment variables with persistent database settings.
 
+## Reliability & Performance Notes (v0.7.1)
+
+- **Safer Startup:** strict initialization path now fails fast on critical DB/bootstrap errors (`NewMuxWithSchedulerE`).
+- **Safer Updates:** AI high-risk updates are blocked before execution; rollback selection is deterministic.
+- **SSE Stability:** Docker event streaming now uses independent heartbeat + scanner channels, and is no longer constrained by a global timeout middleware.
+- **Notification Hygiene:** Discord dispatchers are replaced/removed cleanly on settings changes to prevent duplicate alerts.
+- **Lower Metrics Overhead:** Container list sparklines now use batched metrics API calls via `POST /api/metrics/batch`.
+- **New API endpoints:**
+  - `POST /api/docker/prune` (trigger scheduled prune task)
+  - `POST /api/ai/fleet-advice` (fleet-level advisory summary)
+  - `POST /api/metrics/batch` (multi-container metrics retrieval)
+
 ## Technology Stack
 
 - **Backend:** Go 1.26 with `go-chi` router and official Moby Docker SDK.

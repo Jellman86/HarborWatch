@@ -14,7 +14,10 @@ func main() {
 	// Fix permissions before starting
 	fixPermissions()
 
-	mux, schedSvc := httpapi.NewMuxWithScheduler()
+	mux, schedSvc, err := httpapi.NewMuxWithSchedulerE()
+	if err != nil {
+		log.Fatalf("failed to initialize services: %v", err)
+	}
 	if schedSvc != nil {
 		schedSvc.Start()
 		defer schedSvc.Stop()

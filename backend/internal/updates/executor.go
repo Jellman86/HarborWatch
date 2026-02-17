@@ -6,9 +6,15 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
+	"github.com/moby/moby/client"
+	"os/exec"
 )
 
 type Executor interface {
@@ -62,6 +68,19 @@ func (CommandExecutor) Pull(ctx context.Context, req Request) error {
 
 func (CommandExecutor) Recreate(ctx context.Context, req Request) error {
 	backupName := fmt.Sprintf("%s_backup_%d", req.ContainerID, time.Now().Unix())
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("failed to create docker client: %w", err)
+	}
+	defer cli.Close()
+
+	inspect, err := cli.ContainerInspect(ctx, req.ContainerID)
+	if err != nil {
+		return fmt.Errorf("failed to inspect existing container: %w", err)
+	}
+	if inspect.Config == nil {
+		return errors.New("container inspect missing config")
+	}
 
 	// 1. Stop the current container
 	stopCmd := exec.CommandContext(ctx, "docker", "stop", req.ContainerID)
@@ -75,14 +94,30 @@ func (CommandExecutor) Recreate(ctx context.Context, req Request) error {
 		return fmt.Errorf("failed to rename container to backup: %w (%s)", err, truncate(string(out), 100))
 	}
 
-	// 3. Create and start the new container
-	// Note: In a production scenario, we'd extract the config from 'inspect' 
-	// and apply it here. For Milestone 4 hardening, we use the new image.
-	runCmd := exec.CommandContext(ctx, "docker", "run", "-d", "--name", req.ContainerID, req.TargetImage)
-	if out, err := runCmd.CombinedOutput(); err != nil {
-		// If recreation fails, we don't rollback automatically here; 
-		// the state machine in service.go will trigger Rollback()
-		return fmt.Errorf("failed to start new container: %w (%s)", err, truncate(string(out), 100))
+	// 3. Create and start a replacement container while preserving runtime configuration.
+	newConfig := inspect.Config
+	newConfig.Image = req.TargetImage
+
+	hostConfig := inspect.HostConfig
+	if hostConfig == nil {
+		hostConfig = &container.HostConfig{}
+	}
+
+	networkingConfig := &network.NetworkingConfig{}
+	if inspect.NetworkSettings != nil && len(inspect.NetworkSettings.Networks) > 0 {
+		endpoints := make(map[string]*network.EndpointSettings, len(inspect.NetworkSettings.Networks))
+		for name, endpoint := range inspect.NetworkSettings.Networks {
+			endpoints[name] = endpoint
+		}
+		networkingConfig.EndpointsConfig = endpoints
+	}
+
+	created, err := cli.ContainerCreate(ctx, newConfig, hostConfig, networkingConfig, nil, req.ContainerID)
+	if err != nil {
+		return fmt.Errorf("failed to create replacement container: %w", err)
+	}
+	if err := cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+		return fmt.Errorf("failed to start replacement container: %w", err)
 	}
 
 	return nil
@@ -92,9 +127,9 @@ func (CommandExecutor) Validate(ctx context.Context, req Request) error {
 	if req.ValidateURL == "" {
 		return errors.New("validateUrl is required")
 	}
-	
+
 	hc := &http.Client{Timeout: 5 * time.Second}
-	
+
 	// Retry loop for up to 30 seconds
 	deadline := time.Now().Add(30 * time.Second)
 	var lastErr error
@@ -110,14 +145,15 @@ func (CommandExecutor) Validate(ctx context.Context, req Request) error {
 		if err != nil {
 			return err
 		}
-		
+
 		resp, err := hc.Do(request)
 		if err == nil {
-			defer resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				resp.Body.Close()
 				return nil // Success!
 			}
 			lastErr = fmt.Errorf("health check status %d", resp.StatusCode)
+			resp.Body.Close()
 		} else {
 			lastErr = err
 		}
@@ -141,8 +177,10 @@ func (CommandExecutor) Rollback(ctx context.Context, req Request, cause error) e
 	}
 
 	backups := strings.Split(strings.TrimSpace(string(out)), "\n")
-	// Heuristic: newest first. In real-world, we might want to sort by timestamp in the name.
-	latestBackup := backups[0]
+	latestBackup, err := newestBackupName(backups, req.ContainerID)
+	if err != nil {
+		return fmt.Errorf("rollback failed: could not determine latest backup: %w", err)
+	}
 
 	// 3. Restore backup
 	renameCmd := exec.CommandContext(ctx, "docker", "rename", latestBackup, req.ContainerID)
@@ -163,4 +201,41 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-3] + "..."
+}
+
+func newestBackupName(backups []string, containerID string) (string, error) {
+	prefix := containerID + "_backup_"
+	latestTS := int64(-1)
+	latestName := ""
+	fallback := make([]string, 0, len(backups))
+
+	for _, raw := range backups {
+		name := strings.TrimSpace(raw)
+		if name == "" || !strings.HasPrefix(name, prefix) {
+			continue
+		}
+
+		tsPart := strings.TrimPrefix(name, prefix)
+		ts, err := strconv.ParseInt(tsPart, 10, 64)
+		if err != nil {
+			fallback = append(fallback, name)
+			continue
+		}
+
+		if ts > latestTS {
+			latestTS = ts
+			latestName = name
+		}
+	}
+
+	if latestName != "" {
+		return latestName, nil
+	}
+
+	if len(fallback) > 0 {
+		sort.Strings(fallback)
+		return fallback[len(fallback)-1], nil
+	}
+
+	return "", errors.New("no valid backup names found")
 }

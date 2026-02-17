@@ -2,6 +2,52 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.1] - 2026-02-17
+
+### Fixed
+- **Startup & Robustness:**
+  - Added strict startup initialization path (`NewMuxWithSchedulerE`) and removed fatal constructor behavior from the router bootstrap.
+  - Upgraded store/service initialization to fail fast on critical DB init errors instead of silently ignoring them.
+  - Added degraded startup fallback router for non-strict initialization paths.
+- **Update Engine Safety:**
+  - Enforced AI risk-gate behavior so high-risk release analysis blocks the update pipeline before destructive steps.
+  - Replaced unsafe container recreation logic with Docker inspect/create/start flow to preserve runtime configuration.
+  - Fixed validation retry response-body handling to avoid delayed connection cleanup.
+  - Made rollback backup selection deterministic using timestamp-aware backup name parsing.
+- **API & Routing Correctness:**
+  - Added missing `POST /api/docker/prune` endpoint.
+  - Added missing `POST /api/ai/fleet-advice` endpoint.
+  - Added backward-compatible rules route alias (`/api/docker/containers/{id}/rules`) while standardizing `/api/docker/{id}/rules`.
+  - Added Docker availability guard for `/api/ai/audit-compose/{id}` to prevent nil dereference panic.
+  - Fixed audit query logic to remove invalid dependency on a non-existent `containers` SQL table.
+- **Notifications:**
+  - Added thread-safe dispatcher mutation/iteration.
+  - Added dispatcher replacement/removal semantics so Discord webhook updates do not accumulate duplicate dispatchers.
+  - Fixed ignored request construction errors in Discord notifier.
+- **SSE & Scheduler Reliability:**
+  - Removed global request timeout middleware that could terminate long-lived SSE streams.
+  - Reworked Docker event streaming loop so heartbeat and event reads are independent.
+  - Normalized scheduler cron expressions to 6-field format for `cron.WithSeconds`.
+- **UI Correctness:**
+  - Fixed container rules save path mismatch.
+  - Fixed diagnostics schema mismatch (`numGoroutine`).
+
+### Performance
+- Added `POST /api/metrics/batch` to reduce per-container network fan-out for sparkline data.
+- Updated container inventory UI to fetch sparkline metrics in batched requests.
+- Switched route views in `App.svelte` to dynamic imports to improve frontend code-splitting.
+
+### Tests
+- Added API regression coverage for:
+  - Docker-unavailable compose audit route behavior.
+  - Rules compatibility route behavior.
+  - Fleet advice endpoint.
+  - Docker prune endpoint trigger behavior.
+  - Metrics batch endpoint behavior.
+- Added update-engine regression coverage for:
+  - AI high-risk gate enforcement.
+  - Deterministic backup selection helper.
+
 ## [0.7.0] - 2026-02-16
 
 ### Added

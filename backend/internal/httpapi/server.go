@@ -10,23 +10,23 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/audit"
+	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
-	"github.com/Jellman86/HarborWatch/backend/internal/audit"
-	"github.com/Jellman86/HarborWatch/backend/internal/ai"
-	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
-	"github.com/Jellman86/HarborWatch/backend/internal/settings"
-	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
-	"github.com/Jellman86/HarborWatch/backend/internal/rules"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
+	"github.com/Jellman86/HarborWatch/backend/internal/rules"
 	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
+	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
+	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -70,6 +70,7 @@ type DiagService interface {
 type NotificationService interface {
 	Dispatch(ctx context.Context, msg notifications.Message)
 	AddDispatcher(d notifications.Dispatcher)
+	RemoveDispatcher(name string)
 }
 
 type SettingsService interface {
@@ -114,6 +115,15 @@ func NewMux() http.Handler {
 }
 
 func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
+	mux, schedSvc, err := NewMuxWithSchedulerE()
+	if err != nil {
+		log.Printf("failed to initialize harborwatch services: %v", err)
+		return newDegradedMux(err), nil
+	}
+	return mux, schedSvc
+}
+
+func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	dbPath := os.Getenv("HARBORWATCH_DB_PATH")
 	if dbPath == "" {
 		dbPath = "/tmp/harborwatch.db"
@@ -122,7 +132,7 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	// Unified Database Connection
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
+		return nil, nil, fmt.Errorf("open database: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;`); err != nil {
@@ -132,44 +142,55 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	// 1. Diagnostics Setup
 	diagService := diag.NewService(db)
 	if diagService != nil {
-		_ = diagService.Init(context.Background())
+		if err := diagService.Init(context.Background()); err != nil {
+			return nil, nil, fmt.Errorf("init diagnostics service: %w", err)
+		}
 		diagService.Log("INFO", "System", "HarborWatch initializing...")
 	}
 
 	dockerClient, err := dockerengine.NewFromEnv()
-	if err != nil && diagService != nil {
-		diagService.Log("ERROR", "Docker", fmt.Sprintf("Failed to init docker client: %v", err))
+	if err != nil {
+		if diagService != nil {
+			diagService.Log("ERROR", "Docker", fmt.Sprintf("Failed to init docker client: %v", err))
+		}
+		dockerClient = nil
 	}
-	
+
 	// 2. Open Stores
 	updatesStore := updates.NewStore(db)
-	if updatesStore != nil {
-		_ = updatesStore.Init(context.Background())
+	if err := updatesStore.Init(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("init updates store: %w", err)
 	}
-	
+
 	settingsStore := settings.NewStore(db)
-	if settingsStore != nil {
-		_ = settingsStore.Init(context.Background())
+	if err := settingsStore.Init(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("init settings store: %w", err)
 	}
 
 	rulesStore := rules.NewStore(db)
-	if rulesStore != nil {
-		_ = rulesStore.Init(context.Background())
+	if err := rulesStore.Init(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("init rules store: %w", err)
 	}
 
 	// 3. Initialize Domain Services
 	// Use shared store for scanning
 	scanStore := scanning.NewStore(db)
-	_ = scanStore.Init(context.Background())
+	if err := scanStore.Init(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("init scanning store: %w", err)
+	}
 	scanService := scanning.NewService(scanning.NewTrivyScanner(), scanning.NewClamAVScanner(), scanStore, diagService)
-	
+
 	releaseService := releases.NewService()
 	aiService := ai.NewService(ai.NewProviderFromEnv())
 	notificationService := notifications.NewService()
-	
+
 	var portainerService *portainer.Client
-	if settingsStore != nil {
-		st, _ := settingsStore.Get(context.Background())
+	st, err := settingsStore.Get(context.Background())
+	if err != nil {
+		if diagService != nil {
+			diagService.Log("ERROR", "Settings", fmt.Sprintf("Failed to load settings on startup: %v", err))
+		}
+	} else {
 		if st.DiscordWebhookURL != "" {
 			notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
 		}
@@ -179,41 +200,55 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 	}
 
 	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService)
-	
+
 	auditService := audit.NewService(db)
 
 	// 4. Metrics Setup
 	var metricService *metrics.Service
 	if dockerClient != nil {
-		rawDocker, _ := dockerengine.NewRawClient()
-		if rawDocker != nil {
+		rawDocker, err := dockerengine.NewRawClient()
+		if err != nil {
+			if diagService != nil {
+				diagService.Log("ERROR", "Metrics", fmt.Sprintf("Failed to init raw docker client for metrics: %v", err))
+			}
+		} else if rawDocker != nil {
 			metricStore := metrics.NewStore(db)
-			_ = metricStore.Init(context.Background())
+			if err := metricStore.Init(context.Background()); err != nil {
+				return nil, nil, fmt.Errorf("init metrics store: %w", err)
+			}
 			metricService = metrics.NewService(metricStore, rawDocker)
 		}
 	}
 
 	// 5. Scheduler Setup
 	schedStore := scheduler.NewStore(db)
-	if schedStore != nil {
-		_ = schedStore.Init(context.Background())
+	if err := schedStore.Init(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("init scheduler store: %w", err)
 	}
 	schedSvc := scheduler.NewService(schedStore)
 
 	// 6. Register automated tasks
 	if dockerClient != nil {
-		rawDocker, _ := dockerengine.NewRawClient() 
-		if rawDocker != nil {
+		rawDocker, err := dockerengine.NewRawClient()
+		if err != nil {
+			if diagService != nil {
+				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to init raw docker client for scheduled tasks: %v", err))
+			}
+		} else if rawDocker != nil {
 			// Maintenance: Weekly Prune
 			schedSvc.RegisterTask("docker_system_prune", func() scheduler.Task {
 				return scheduler.NewDockerPruneTask(rawDocker)
 			})
-			_ = schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker), false) // Destructive: Off by default
+			if err := schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker), false); err != nil && diagService != nil {
+				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task docker_system_prune: %v", err))
+			}
 
 			schedSvc.RegisterTask("container_update_check", func() scheduler.Task {
 				return dockerengine.NewUpdateCheckTask(rawDocker)
 			})
-			_ = schedSvc.AddTask("0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker), true)
+			if err := schedSvc.AddTask("0 0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker), true); err != nil && diagService != nil {
+				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_check: %v", err))
+			}
 
 			// Trigger immediate update check on boot
 			go func() {
@@ -226,12 +261,16 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 				schedSvc.RegisterTask("metrics_collector", func() scheduler.Task {
 					return metricService.GetCollectorTask()
 				})
-				_ = schedSvc.AddTask("* * * * *", metricService.GetCollectorTask(), true)
+				if err := schedSvc.AddTask("0 * * * * *", metricService.GetCollectorTask(), true); err != nil && diagService != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task metrics_collector: %v", err))
+				}
 
 				schedSvc.RegisterTask("metrics_prune", func() scheduler.Task {
 					return metricService.GetPruneTask()
 				})
-				_ = schedSvc.AddTask("0 0 0 * * *", metricService.GetPruneTask(), true)
+				if err := schedSvc.AddTask("0 0 0 * * *", metricService.GetPruneTask(), true); err != nil && diagService != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task metrics_prune: %v", err))
+				}
 			}
 
 			// Security: Scheduled Sweeps
@@ -239,12 +278,16 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
 					return scheduler.NewTrivySweepTask(rawDocker, scanService)
 				})
-				_ = schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService), true)
+				if err := schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService), true); err != nil && diagService != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task security_sweep_trivy: %v", err))
+				}
 
 				schedSvc.RegisterTask("malware_sweep_clamav", func() scheduler.Task {
 					return scheduler.NewClamAVSweepTask(rawDocker, scanService)
 				})
-				_ = schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService), true)
+				if err := schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService), true); err != nil && diagService != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task malware_sweep_clamav: %v", err))
+				}
 			}
 		}
 	}
@@ -258,17 +301,36 @@ func NewMuxWithScheduler() (http.Handler, *scheduler.Service) {
 				return err
 			})
 		})
-		_ = schedSvc.AddTask("0 0 1 * * *", scheduler.NewGenericTask("diag_log_prune", func(ctx context.Context) error {
+		if err := schedSvc.AddTask("0 0 1 * * *", scheduler.NewGenericTask("diag_log_prune", func(ctx context.Context) error {
 			olderThan := time.Now().Add(-7 * 24 * time.Hour).Unix()
 			_, err := diagService.PruneLogs(ctx, olderThan)
 			return err
-		}), true)
+		}), true); err != nil {
+			diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task diag_log_prune: %v", err))
+		}
 	}
 
 	// Bootstrap schedules from DB
-	_ = schedSvc.LoadSchedules(context.Background())
+	if err := schedSvc.LoadSchedules(context.Background()); err != nil && diagService != nil {
+		diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to load schedules from DB: %v", err))
+	}
 
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService, rulesStore), schedSvc
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService, rulesStore), schedSvc, nil
+}
+
+func newDegradedMux(initErr error) http.Handler {
+	r := chi.NewRouter()
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status":  "degraded",
+			"service": "harborwatch",
+			"error":   initErr.Error(),
+		})
+	})
+	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusServiceUnavailable, "startup_failed", initErr.Error())
+	})
+	return r
 }
 
 func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService) http.Handler {
@@ -278,7 +340,6 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, gen.HealthResponse{Status: "ok", Service: "harborwatch", Version: appVersion()})
@@ -316,6 +377,18 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				writeJSON(w, http.StatusOK, images)
 			})
 
+			r.Post("/prune", func(w http.ResponseWriter, r *http.Request) {
+				if schedSvc == nil {
+					writeError(w, http.StatusServiceUnavailable, "scheduler_unavailable", "Scheduler not initialized")
+					return
+				}
+				if err := schedSvc.RunTask(r.Context(), "docker_system_prune"); err != nil {
+					writeError(w, http.StatusInternalServerError, "prune_trigger_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusAccepted, map[string]string{"status": "triggered", "task": "docker_system_prune"})
+			})
+
 			r.Get("/events", func(w http.ResponseWriter, r *http.Request) {
 				if dockerClient == nil {
 					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
@@ -339,6 +412,24 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				defer heartbeat.Stop()
 				scanner := bufio.NewScanner(stream)
 				scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+				lineCh := make(chan []byte, 1)
+				errCh := make(chan error, 1)
+				go func() {
+					defer close(lineCh)
+					for scanner.Scan() {
+						// Scanner.Bytes() is invalidated on next Scan; copy before handoff.
+						line := append([]byte(nil), scanner.Bytes()...)
+						select {
+						case lineCh <- line:
+						case <-r.Context().Done():
+							return
+						}
+					}
+					if err := scanner.Err(); err != nil {
+						errCh <- err
+					}
+				}()
+
 				for {
 					select {
 					case <-r.Context().Done():
@@ -346,15 +437,17 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					case <-heartbeat.C:
 						fmt.Fprint(w, ": ping\n\n")
 						flusher.Flush()
-					default:
-						if !scanner.Scan() {
-							if err := scanner.Err(); err != nil && r.Context().Err() == nil {
-								fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
-								flusher.Flush()
-							}
+					case err := <-errCh:
+						if err != nil && r.Context().Err() == nil {
+							fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
+							flusher.Flush()
+						}
+						return
+					case line, ok := <-lineCh:
+						if !ok {
 							return
 						}
-						event := convertEvent(scanner.Bytes())
+						event := convertEvent(line)
 						payload, err := json.Marshal(event)
 						if err != nil {
 							continue
@@ -371,7 +464,6 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 				id := chi.URLParam(r, "id")
-				fmt.Printf("DEBUG: GetContainer ID: %s\n", id)
 				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 				defer cancel()
 
@@ -445,8 +537,8 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				writeJSON(w, http.StatusOK, detail)
 			})
 
-			r.Route("/{id}/rules", func(r chi.Router) {
-				r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			registerRulesRoutes := func(router chi.Router) {
+				getRules := func(w http.ResponseWriter, r *http.Request) {
 					if rulesService == nil {
 						writeError(w, http.StatusServiceUnavailable, "rules_unavailable", "Rules service not initialized")
 						return
@@ -458,9 +550,9 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 						return
 					}
 					writeJSON(w, http.StatusOK, res)
-				})
+				}
 
-				r.Post("/", func(w http.ResponseWriter, r *http.Request) {
+				saveRules := func(w http.ResponseWriter, r *http.Request) {
 					if rulesService == nil {
 						writeError(w, http.StatusServiceUnavailable, "rules_unavailable", "Rules service not initialized")
 						return
@@ -476,8 +568,16 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 						return
 					}
 					writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-				})
-			})
+				}
+
+				// Support both trailing-slash and non-trailing-slash forms.
+				router.Get("/", getRules)
+				router.Post("/", saveRules)
+			}
+
+			r.Route("/{id}/rules", registerRulesRoutes)
+			// Backward-compatible route for older frontend builds.
+			r.Route("/containers/{id}/rules", registerRulesRoutes)
 		})
 
 		r.Route("/scans", func(r chi.Router) {
@@ -682,6 +782,17 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 		})
 
 		r.Route("/ai", func(r chi.Router) {
+			r.Post("/fleet-advice", func(w http.ResponseWriter, r *http.Request) {
+				var containers []gen.ContainerSummary
+				if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&containers); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+					return
+				}
+
+				advice := generateFleetAdvice(containers, aiService != nil && aiService.HasProvider())
+				writeJSON(w, http.StatusOK, map[string]string{"advice": advice})
+			})
+
 			r.Get("/status", func(w http.ResponseWriter, r *http.Request) {
 				enabled := false
 				if aiService != nil {
@@ -713,6 +824,10 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			r.Get("/audit-compose/{id}", func(w http.ResponseWriter, r *http.Request) {
 				if aiService == nil || !aiService.HasProvider() {
 					writeError(w, http.StatusServiceUnavailable, "ai_unavailable", "AI provider not configured")
+					return
+				}
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
 					return
 				}
 				id := chi.URLParam(r, "id")
@@ -814,6 +929,47 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			})
 		})
 
+		r.Post("/metrics/batch", func(w http.ResponseWriter, r *http.Request) {
+			if metricService == nil {
+				writeError(w, http.StatusServiceUnavailable, "metrics_unavailable", "Metrics service not initialized")
+				return
+			}
+			var req struct {
+				IDs      []string `json:"ids"`
+				Duration string   `json:"duration"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
+				return
+			}
+			if len(req.IDs) == 0 {
+				writeError(w, http.StatusBadRequest, "invalid_request", "ids must not be empty")
+				return
+			}
+			if len(req.IDs) > 200 {
+				writeError(w, http.StatusBadRequest, "invalid_request", "ids length exceeds maximum (200)")
+				return
+			}
+			duration := req.Duration
+			if duration == "" {
+				duration = "1h"
+			}
+			out := make(map[string][]metrics.Metric, len(req.IDs))
+			for _, id := range req.IDs {
+				id = strings.TrimSpace(id)
+				if id == "" {
+					continue
+				}
+				data, err := metricService.GetMetrics(r.Context(), id, duration)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "metrics_query_failed", err.Error())
+					return
+				}
+				out[id] = data
+			}
+			writeJSON(w, http.StatusOK, out)
+		})
+
 		r.Get("/metrics/{id}", func(w http.ResponseWriter, r *http.Request) {
 			if metricService == nil {
 				writeError(w, http.StatusServiceUnavailable, "metrics_unavailable", "Metrics service not initialized")
@@ -883,8 +1039,13 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 
-				if st.DiscordWebhookURL != "" {
-					notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
+				if notificationService != nil {
+					switch {
+					case st.DiscordWebhookURL == "":
+						notificationService.RemoveDispatcher("discord")
+					default:
+						notificationService.AddDispatcher(notifications.NewDiscordDispatcher(st.DiscordWebhookURL))
+					}
 				}
 
 				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -896,16 +1057,17 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				writeError(w, http.StatusServiceUnavailable, "portainer_unavailable", "Portainer integration not configured")
 				return
 			}
-					stacks, err := portainerService.ListStacks(r.Context())
-					if err != nil {
-						writeError(w, http.StatusBadGateway, "portainer_error", err.Error())
-						return
-					}
-					if stacks == nil {
-						stacks = []portainer.Stack{}
-					}
-					writeJSON(w, http.StatusOK, stacks)
-				})	})
+			stacks, err := portainerService.ListStacks(r.Context())
+			if err != nil {
+				writeError(w, http.StatusBadGateway, "portainer_error", err.Error())
+				return
+			}
+			if stacks == nil {
+				stacks = []portainer.Stack{}
+			}
+			writeJSON(w, http.StatusOK, stacks)
+		})
+	})
 
 	staticDir := filepath.Clean(filepath.Join("..", "web", "dist"))
 	fs := http.FileServer(http.Dir(staticDir))
@@ -956,6 +1118,51 @@ func convertEvent(raw []byte) gen.DockerEvent {
 		action = event.Status
 	}
 	return gen.DockerEvent{Type: event.Type, Action: action, ID: id, From: event.From, Attributes: event.Actor.Attributes, Time: event.Time}
+}
+
+func generateFleetAdvice(containers []gen.ContainerSummary, aiEnabled bool) string {
+	if len(containers) == 0 {
+		return "No fleet inventory was provided. Refresh inventory and run this analysis again."
+	}
+
+	total := len(containers)
+	running := 0
+	stopped := 0
+	updates := 0
+
+	for _, c := range containers {
+		if strings.EqualFold(c.State, "running") {
+			running++
+		} else {
+			stopped++
+		}
+		if c.UpdateAvailable {
+			updates++
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Fleet snapshot: %d containers (%d running, %d not running).\n", total, running, stopped))
+
+	if updates > 0 {
+		b.WriteString(fmt.Sprintf("- %d container(s) report image updates. Prioritize staging validation before production rollout.\n", updates))
+	} else {
+		b.WriteString("- No image updates are currently flagged for active containers.\n")
+	}
+
+	if stopped > 0 {
+		b.WriteString("- Review stopped containers for orphaned workloads or intentional maintenance state.\n")
+	}
+
+	if running == total && updates == 0 {
+		b.WriteString("- Operationally stable posture detected; continue routine vulnerability and malware scans.\n")
+	}
+
+	if !aiEnabled {
+		b.WriteString("- AI provider is not configured. This report is heuristic-only.")
+	}
+
+	return strings.TrimSpace(b.String())
 }
 
 func spaHandler(static http.Handler, staticDir string) http.Handler {

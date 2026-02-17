@@ -1,19 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import Sidebar from "./lib/components/Sidebar.svelte";
-  import Dashboard from "./lib/pages/Dashboard.svelte";
-  import Containers from "./lib/pages/Containers.svelte";
-  import ContainerPage from "./lib/pages/ContainerPage.svelte";
-  import Images from "./lib/pages/Images.svelte";
-  import Security from "./lib/pages/Security.svelte";
-  import Intelligence from "./lib/pages/Intelligence.svelte";
-  import Updates from "./lib/pages/Updates.svelte";
-  import Automation from "./lib/pages/Automation.svelte";
-  import Doctor from "./lib/pages/Doctor.svelte";
-  import Diagnostics from "./lib/pages/Diagnostics.svelte";
-  import Stacks from "./lib/pages/Stacks.svelte";
-  import Settings from "./lib/pages/Settings.svelte";
-  import Audit from "./lib/pages/Audit.svelte";
   import ToastContainer from "./lib/components/ToastContainer.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
   import { themeStore } from "./lib/stores/theme.svelte";
@@ -139,31 +126,57 @@
       {/if}
 
       {#if currentRoute === 'dashboard'}
-        <Dashboard {containers} {images} {events} onRefresh={loadGlobalData} />
+        {#await import("./lib/pages/Dashboard.svelte") then Mod}
+          <Mod.default {containers} {images} {events} onRefresh={loadGlobalData} />
+        {/await}
       {:else if currentRoute === 'containers'}
-        <Containers {containers} onNavigate={navigate} />
+        {#await import("./lib/pages/Containers.svelte") then Mod}
+          <Mod.default {containers} onNavigate={navigate} />
+        {/await}
       {:else if currentRoute === 'container-detail'}
-        <ContainerPage id={routeParams.id} onNavigate={navigate} />
+        {#await import("./lib/pages/ContainerPage.svelte") then Mod}
+          <Mod.default id={routeParams.id} onNavigate={navigate} />
+        {/await}
       {:else if currentRoute === 'stacks'}
-        <Stacks />
+        {#await import("./lib/pages/Stacks.svelte") then Mod}
+          <Mod.default />
+        {/await}
       {:else if currentRoute === 'images'}
-        <Images {images} />
+        {#await import("./lib/pages/Images.svelte") then Mod}
+          <Mod.default {images} />
+        {/await}
       {:else if currentRoute === 'security'}
-        <Security params={routeParams} />
+        {#await import("./lib/pages/Security.svelte") then Mod}
+          <Mod.default params={routeParams} />
+        {/await}
       {:else if currentRoute === 'automation'}
-        <Automation />
+        {#await import("./lib/pages/Automation.svelte") then Mod}
+          <Mod.default />
+        {/await}
       {:else if currentRoute === 'doctor'}
-        <Doctor />
+        {#await import("./lib/pages/Doctor.svelte") then Mod}
+          <Mod.default />
+        {/await}
       {:else if currentRoute === 'intelligence'}
-        <Intelligence />
+        {#await import("./lib/pages/Intelligence.svelte") then Mod}
+          <Mod.default />
+        {/await}
       {:else if currentRoute === 'updates'}
-        <Updates params={routeParams} />
+        {#await import("./lib/pages/Updates.svelte") then Mod}
+          <Mod.default params={routeParams} />
+        {/await}
       {:else if currentRoute === 'audit'}
-        <Audit />
+        {#await import("./lib/pages/Audit.svelte") then Mod}
+          <Mod.default />
+        {/await}
       {:else if currentRoute === 'diagnostics'}
-        <Diagnostics />
+        {#await import("./lib/pages/Diagnostics.svelte") then Mod}
+          <Mod.default />
+        {/await}
       {:else if currentRoute === 'settings'}
-        <Settings />
+        {#await import("./lib/pages/Settings.svelte") then Mod}
+          <Mod.default />
+        {/await}
       {/if}
     </div>
   </main>

@@ -49,8 +49,14 @@ func (d *discordDispatcher) Send(ctx context.Context, msg Message) error {
 		},
 	}
 
-	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequestWithContext(ctx, "POST", d.webhookURL, bytes.NewBuffer(body))
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", d.webhookURL, bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := d.client.Do(req)

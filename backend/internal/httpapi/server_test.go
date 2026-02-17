@@ -11,15 +11,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
+	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
-	"github.com/Jellman86/HarborWatch/backend/internal/settings"
-	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	"github.com/Jellman86/HarborWatch/backend/internal/rules"
+	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
+	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
 )
 
@@ -109,8 +109,10 @@ func (f fakeAIService) AnalyzeMetrics(ctx context.Context, id string, metrics []
 
 type fakeSchedulerService struct{}
 
-func (f fakeSchedulerService) AddTask(spec string, task scheduler.Task) error { return nil }
-func (f fakeSchedulerService) RemoveTask(name string)                         {}
+func (f fakeSchedulerService) AddTask(spec string, task scheduler.Task, enabled bool) error {
+	return nil
+}
+func (f fakeSchedulerService) RemoveTask(name string) {}
 func (f fakeSchedulerService) ToggleTask(ctx context.Context, name string, enabled bool) error {
 	return nil
 }
@@ -119,10 +121,35 @@ func (f fakeSchedulerService) ListSchedules(ctx context.Context) ([]scheduler.Sc
 	return []scheduler.ScheduleEntry{}, nil
 }
 
+type fakeSchedulerServiceWithRun struct {
+	fakeSchedulerService
+	lastRunName string
+	runErr      error
+}
+
+func (f *fakeSchedulerServiceWithRun) RunTask(ctx context.Context, name string) error {
+	f.lastRunName = name
+	return f.runErr
+}
+
 type fakeMetricsService struct{}
 
 func (f fakeMetricsService) GetMetrics(ctx context.Context, id, dur string) ([]metrics.Metric, error) {
 	return nil, nil
+}
+func (f fakeMetricsService) GetCollectorTask() *metrics.Collector { return nil }
+func (f fakeMetricsService) GetPruneTask() *metrics.PruneTask     { return nil }
+
+type fakeMetricsServiceWithData struct {
+	fakeMetricsService
+	data map[string][]metrics.Metric
+}
+
+func (f fakeMetricsServiceWithData) GetMetrics(ctx context.Context, id, dur string) ([]metrics.Metric, error) {
+	if f.data == nil {
+		return []metrics.Metric{}, nil
+	}
+	return f.data[id], nil
 }
 
 type fakeDiagService struct{}
@@ -139,6 +166,7 @@ type fakeNotificationService struct{}
 
 func (f fakeNotificationService) Dispatch(ctx context.Context, msg notifications.Message) {}
 func (f fakeNotificationService) AddDispatcher(d notifications.Dispatcher)                {}
+func (f fakeNotificationService) RemoveDispatcher(name string)                            {}
 
 type fakeSettingsService struct{}
 
@@ -228,5 +256,76 @@ func TestUpdateEndpoints(t *testing.T) {
 	mux.ServeHTTP(recEvents, httptest.NewRequest(http.MethodGet, "/api/updates/events/u1", nil))
 	if recEvents.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recEvents.Code)
+	}
+}
+
+func TestAuditComposeByID_DockerUnavailable(t *testing.T) {
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, fakeAIService{enabled: true}, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ai/audit-compose/c1", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rec.Code)
+	}
+}
+
+func TestRulesRoute_BackwardCompatibleContainersPath(t *testing.T) {
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers/c1/rules", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestFleetAdviceEndpoint(t *testing.T) {
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	body := strings.NewReader(`[{"id":"c1","names":["/web"],"image":"nginx:latest","state":"running","status":"Up","labels":{},"updateAvailable":true}]`)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/ai/fleet-advice", body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var payload map[string]string
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if strings.TrimSpace(payload["advice"]) == "" {
+		t.Fatalf("expected non-empty advice payload")
+	}
+}
+
+func TestDockerPruneEndpoint_TriggersSchedulerTask(t *testing.T) {
+	sched := &fakeSchedulerServiceWithRun{}
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, sched, nil, nil, nil, nil, nil, fakeRulesService{})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/docker/prune", nil))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rec.Code)
+	}
+	if sched.lastRunName != "docker_system_prune" {
+		t.Fatalf("expected docker_system_prune task trigger, got %q", sched.lastRunName)
+	}
+}
+
+func TestMetricsBatchEndpoint(t *testing.T) {
+	m := fakeMetricsServiceWithData{
+		data: map[string][]metrics.Metric{
+			"c1": {{ContainerID: "c1", Timestamp: 1, CPUPercent: 10}},
+			"c2": {{ContainerID: "c2", Timestamp: 2, CPUPercent: 20}},
+		},
+	}
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, m, nil, nil, nil, nil, fakeRulesService{})
+	body := strings.NewReader(`{"ids":["c1","c2"],"duration":"1h"}`)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/metrics/batch", body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var payload map[string][]metrics.Metric
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if len(payload["c1"]) != 1 || len(payload["c2"]) != 1 {
+		t.Fatalf("expected metrics for c1 and c2, got %#v", payload)
 	}
 }

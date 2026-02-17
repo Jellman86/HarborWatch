@@ -42,7 +42,7 @@
         if (!detail?.rules) return;
         savingRules = true;
         try {
-            const res = await fetch(`/api/docker/containers/${id}/rules`, {
+            const res = await fetch(`/api/docker/${id}/rules`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(detail.rules)

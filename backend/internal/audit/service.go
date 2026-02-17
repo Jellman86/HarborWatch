@@ -56,7 +56,9 @@ WHERE container_id = ?
 UNION ALL
 SELECT job_id as id, type, target, '' as container_id, status, error, started_at, completed_at
 FROM scan_jobs
-WHERE target = (SELECT image FROM containers WHERE id = ? LIMIT 1) OR target = ?
+WHERE target = ? OR target = (
+	SELECT target_image FROM update_runs WHERE container_id = ? ORDER BY created_at DESC LIMIT 1
+)
 ORDER BY started_at DESC
 LIMIT 50
 `
@@ -82,7 +84,7 @@ LIMIT 50
 }
 
 func (s *Service) GetAuditJobSteps(ctx context.Context, id string) ([]gen.UpdateStepEvent, error) {
-	// For now, we only have detailed step logs for Updates. 
+	// For now, we only have detailed step logs for Updates.
 	// Scans are atomic jobs without sub-steps in the DB currently.
 	rows, err := s.db.QueryContext(ctx, `
 SELECT step, status, message, ts FROM update_steps WHERE run_id=? ORDER BY id ASC

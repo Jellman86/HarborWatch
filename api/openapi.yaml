@@ -27,7 +27,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ContainerSummary'
-  /api/docker/containers/{id}:
+  /api/docker/{id}:
     get:
       operationId: getDockerContainerDetail
       parameters:
@@ -42,7 +42,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContainerDetail'
-  /api/docker/containers/{id}/rules:
+  /api/docker/{id}/rules:
     get:
       operationId: getContainerRules
       parameters:
@@ -91,6 +91,19 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ImageSummary'
+  /api/docker/prune:
+    post:
+      operationId: triggerDockerPrune
+      responses:
+        '202':
+          description: Prune task triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  task: { type: string }
   /api/docker/events:
     get:
       operationId: streamDockerEvents
@@ -260,6 +273,26 @@ paths:
                 type: object
                 properties:
                   enabled: { type: boolean }
+  /api/ai/fleet-advice:
+    post:
+      operationId: getFleetAdvice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContainerSummary'
+      responses:
+        '200':
+          description: Fleet-level operational advice
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  advice: { type: string }
   /api/ai/audit-compose:
     post:
       operationId: auditComposeFile
@@ -370,6 +403,33 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Metric'
+  /api/metrics/batch:
+    post:
+      operationId: getBatchContainerMetrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items: { type: string }
+                duration:
+                  type: string
+              required: [ids]
+      responses:
+        '200':
+          description: Metrics by container id
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Metric'
   /api/portainer/stacks:
     get:
       operationId: listPortainerStacks

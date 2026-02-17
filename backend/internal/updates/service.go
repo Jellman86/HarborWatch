@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 )
 
@@ -108,7 +108,7 @@ func (s *Service) execute(jobID string, req Request) {
 
 	// NEW: AI Release Analysis Step
 	if s.ai != nil && s.ai.HasProvider() {
-		_ = s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
+		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
 			// In a real implementation, we'd fetch the actual release notes here.
 			// For now, we simulate with a placeholder.
 			notes := "Placeholder release notes for " + req.TargetImage
@@ -123,7 +123,7 @@ func (s *Service) execute(jobID string, req Request) {
 				BreakingChanges: analysis.BreakingChanges,
 			}
 			_ = s.store.SaveAIAnalysis(ctx, jobID, summary)
-			
+
 			// Policy enforcement: Pause if high risk
 			if analysis.RiskScore >= 80 {
 				if s.notif != nil {
@@ -137,7 +137,10 @@ func (s *Service) execute(jobID string, req Request) {
 				return fmt.Errorf("AI detected high risk (%d): %s", analysis.RiskScore, analysis.Summary)
 			}
 			return nil
-		})
+		}); err != nil {
+			s.finish(jobID, "failed", err)
+			return
+		}
 	}
 
 	if err := s.runStep(ctx, jobID, "backup", func(ctx context.Context) error { return s.executor.Backup(ctx, req) }); err != nil {

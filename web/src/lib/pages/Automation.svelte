@@ -63,6 +63,8 @@
     
     const cronLabel = (spec: string) => {
         if (spec === "0 0 3 * * 0") return "Weekly (Sun 3 AM)";
+        if (spec === "0 0 * * * *") return "Hourly (HH:00)";
+        if (spec === "0 * * * * *") return "Every Minute";
         if (spec === "0 0 0 * * *") return "Daily at Midnight";
         if (spec === "0 0 4 * * 0") return "Weekly (Sun 4 AM)";
         return spec;

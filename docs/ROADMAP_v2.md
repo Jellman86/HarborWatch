@@ -2,6 +2,18 @@
 
 This document outlines the technical specification for transforming HarborWatch from a passive monitoring tool into an active, AI-assisted security appliance.
 
+## Implementation Status (2026-02-17)
+
+- Milestones 6-8 core paths are implemented in production code.
+- Hardening follow-up completed for:
+  - AI update gate enforcement
+  - deterministic rollback behavior
+  - scheduler cron normalization
+  - SSE stability improvements
+  - dispatcher deduplication/replacement semantics
+  - batched metrics endpoint for inventory sparklines
+- Remaining roadmap items are primarily deeper optimization and feature expansion tracks.
+
 ## Core Philosophy: "AI Advises, Policy Enforces"
 To ensure robustness, AI will never directly execute privileged commands. Instead, it acts as an **Intelligence Oracle**, flagging risks and setting "Blockers" that the deterministic Update Engine obeys.
 

@@ -8,10 +8,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	_ "modernc.org/sqlite"
 )
 
 type fakeExecutor struct{ failStep string }
+
+type fakeAIProvider struct {
+	result ai.AnalysisResult
+	err    error
+}
+
+func (f fakeAIProvider) Name() string { return "fake" }
+func (f fakeAIProvider) AnalyzeReleaseNotes(ctx context.Context, notes string) (ai.AnalysisResult, error) {
+	if f.err != nil {
+		return ai.AnalysisResult{}, f.err
+	}
+	return f.result, nil
+}
+func (f fakeAIProvider) AuditCompose(ctx context.Context, yaml string) (string, error) {
+	return "ok", nil
+}
+func (f fakeAIProvider) AnalyzeMetrics(ctx context.Context, containerID string, metrics []any) (string, error) {
+	return "ok", nil
+}
 
 func (f fakeExecutor) Preflight(ctx context.Context, req Request) error {
 	if f.failStep == "preflight" {
@@ -120,4 +140,57 @@ func TestUpdatePipelineRollback(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("timeout waiting for rolled_back")
+}
+
+func TestUpdatePipelineFailsOnHighAIRisk(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	aiSvc := ai.NewService(fakeAIProvider{
+		result: ai.AnalysisResult{
+			RiskScore: 90,
+			RiskLevel: ai.RiskCritical,
+			Summary:   "breaking schema migration",
+		},
+	})
+	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil)
+
+	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.GetJob(context.Background(), res.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job != nil && job.Status == "failed" {
+			seenReleaseFailure := false
+			for _, step := range job.Steps {
+				if step.Step == "release_analysis" && step.Status == "failed" {
+					seenReleaseFailure = true
+				}
+				if step.Step == "backup" {
+					t.Fatal("did not expect backup step when AI blocks the update")
+				}
+			}
+			if !seenReleaseFailure {
+				t.Fatal("expected release_analysis failure step")
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for failed status")
 }

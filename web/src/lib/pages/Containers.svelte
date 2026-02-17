@@ -14,6 +14,8 @@
     let loadingMetrics = $state(false);
     let aiAnalyzing = $state(false);
     let aiInsight = $state("");
+    let sparklineMetrics = $state<Record<string, Metric[]>>({});
+    let lastSparklineKey = $state("");
 
     function toggleView() {
         viewMode = viewMode === 'list' ? 'cards' : 'list';
@@ -91,6 +93,33 @@
     }
 
     let safeContainers = $derived(containers || []);
+
+    async function loadSparklineMetrics(ids: string[]) {
+        if (ids.length === 0) {
+            sparklineMetrics = {};
+            return;
+        }
+        try {
+            const res = await fetch("/api/metrics/batch", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids, duration: "1h" })
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            sparklineMetrics = data || {};
+        } catch (e) {
+            console.error("Failed to fetch sparkline metrics batch", e);
+        }
+    }
+
+    $effect(() => {
+        const ids = safeContainers.map(c => c.id).filter(Boolean);
+        const key = ids.join(",");
+        if (key === lastSparklineKey) return;
+        lastSparklineKey = key;
+        loadSparklineMetrics(ids);
+    });
 </script>
 
 <div class="space-y-6">
@@ -197,7 +226,7 @@
                             </span>
                         </td>
                         <td class="px-6 py-4">
-                            <Sparkline containerId={c.id} />
+                            <Sparkline metrics={sparklineMetrics[c.id] || []} />
                         </td>
                         <td class="px-6 py-4">
                             {#if getPolicy(c.labels)}
@@ -313,7 +342,7 @@
                         </div>
 
                         <div class="flex flex-col h-[40px] justify-center bg-slate-50 dark:bg-slate-900/50 rounded-xl p-2 border border-slate-100 dark:border-slate-800">
-                            <Sparkline containerId={c.id} />
+                            <Sparkline metrics={sparklineMetrics[c.id] || []} />
                         </div>
 
                         {#if c.updateAvailable}

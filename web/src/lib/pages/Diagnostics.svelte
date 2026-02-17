@@ -3,7 +3,7 @@
 
     interface SystemStatus {
         uptime: number;
-        goroutines: number;
+        numGoroutine: number;
         memoryAlloc: number;
         dbSize: number;
     }
@@ -84,7 +84,7 @@
             </div>
             <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl">
                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Routines</p>
-                <p class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{status.goroutines}</p>
+                <p class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{status.numGoroutine}</p>
             </div>
         </div>
     {/if}
