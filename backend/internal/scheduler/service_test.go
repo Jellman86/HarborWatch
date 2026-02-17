@@ -62,3 +62,89 @@ func TestAddTaskUpgradesLegacyCronSpec(t *testing.T) {
 		t.Fatalf("expected upgraded cron spec, got %q", entry.CronSpec)
 	}
 }
+
+func TestUpdateTaskSchedulePersistsAndNormalizes(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	if err := store.SaveSchedule(context.Background(), ScheduleEntry{
+		ID:       "test_task",
+		CronSpec: "0 0 0 * * *",
+		Enabled:  false,
+	}); err != nil {
+		t.Fatalf("seed schedule: %v", err)
+	}
+
+	svc := NewService(store)
+	svc.RegisterTask("test_task", func() Task { return testTask{name: "test_task"} })
+
+	if err := svc.UpdateTaskSchedule(context.Background(), "test_task", "15 2 * * *"); err != nil {
+		t.Fatalf("update schedule: %v", err)
+	}
+
+	entry, err := store.GetSchedule(context.Background(), "test_task")
+	if err != nil {
+		t.Fatalf("get schedule: %v", err)
+	}
+	if entry.CronSpec != "0 15 2 * * *" {
+		t.Fatalf("expected normalized cron spec, got %q", entry.CronSpec)
+	}
+}
+
+func TestUpdateTaskScheduleRebindsEnabledTask(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	if err := store.SaveSchedule(context.Background(), ScheduleEntry{
+		ID:       "test_task",
+		CronSpec: "0 0 0 * * *",
+		Enabled:  true,
+	}); err != nil {
+		t.Fatalf("seed schedule: %v", err)
+	}
+
+	svc := NewService(store)
+	svc.RegisterTask("test_task", func() Task { return testTask{name: "test_task"} })
+	if err := svc.LoadSchedules(context.Background()); err != nil {
+		t.Fatalf("load schedules: %v", err)
+	}
+
+	oldID, ok := svc.tasks["test_task"]
+	if !ok {
+		t.Fatalf("expected runtime task to be registered")
+	}
+
+	if err := svc.UpdateTaskSchedule(context.Background(), "test_task", "0 45 1 * * *"); err != nil {
+		t.Fatalf("update schedule: %v", err)
+	}
+
+	newID, ok := svc.tasks["test_task"]
+	if !ok {
+		t.Fatalf("expected runtime task to remain registered")
+	}
+	if newID == oldID {
+		t.Fatalf("expected runtime task id to change after rebind")
+	}
+
+	entry, err := store.GetSchedule(context.Background(), "test_task")
+	if err != nil {
+		t.Fatalf("get schedule: %v", err)
+	}
+	if entry.CronSpec != "0 45 1 * * *" {
+		t.Fatalf("expected updated cron spec, got %q", entry.CronSpec)
+	}
+}

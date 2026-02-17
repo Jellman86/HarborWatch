@@ -12,6 +12,15 @@
         lastRun?: number;
     }
 
+    type ScheduleCadence = "daily" | "weekly" | "monthly";
+
+    interface ScheduleDraft {
+        cadence: ScheduleCadence;
+        time: string;
+        weeklyDays: number[];
+        monthDays: number[];
+    }
+
     type AutomationDomain = "upgrades" | "maintenance" | "security";
     type AIProvider = "openai" | "anthropic" | "gemini";
 
@@ -19,6 +28,17 @@
         value: string;
         label: string;
     }
+
+    const weekdayOptions: Array<{ value: number; label: string }> = [
+        { value: 0, label: "Sun" },
+        { value: 1, label: "Mon" },
+        { value: 2, label: "Tue" },
+        { value: 3, label: "Wed" },
+        { value: 4, label: "Thu" },
+        { value: 5, label: "Fri" },
+        { value: 6, label: "Sat" }
+    ];
+    const monthDayOptions = Array.from({ length: 31 }, (_, idx) => idx + 1);
 
     const defaultSettings: Settings = {
         discordWebhookUrl: "",
@@ -42,12 +62,14 @@
 
     let settings = $state<Settings>({ ...defaultSettings });
     let schedules = $state<Schedule[]>([]);
+    let scheduleDrafts = $state<Record<string, ScheduleDraft>>({});
 
     let activeTab = $state("automations");
     let activeAutomationTab = $state<AutomationDomain>("upgrades");
 
     let loading = $state(false);
     let saving = $state(false);
+    let savingScheduleId = $state("");
     let testingProvider = $state("");
 
     // Latest curated model choices (validated against provider docs, February 2026).
@@ -162,6 +184,147 @@
         });
     }
 
+    function normalizeCronSpecClient(spec: string): string {
+        const fields = String(spec || "").trim().split(/\s+/).filter(Boolean);
+        if (fields.length === 5) return `0 ${fields.join(" ")}`;
+        if (fields.length === 6) return fields.join(" ");
+        return String(spec || "").trim();
+    }
+
+    function parseCronFieldValues(field: string, min: number, max: number): number[] {
+        const out = new Set<number>();
+        const cleaned = String(field || "").trim();
+        if (!cleaned || cleaned === "*") return [];
+
+        const addValue = (v: number) => {
+            if (v < min || v > max) return;
+            out.add(v);
+        };
+
+        for (const rawPart of cleaned.split(",")) {
+            const part = rawPart.trim();
+            if (!part) continue;
+
+            const [rangeExpr, stepExpr] = part.split("/");
+            const step = Math.max(1, Number(stepExpr || "1") || 1);
+            const range = rangeExpr || "*";
+
+            let start = min;
+            let end = max;
+            if (range !== "*") {
+                if (range.includes("-")) {
+                    const [s, e] = range.split("-");
+                    start = Number(s);
+                    end = Number(e);
+                } else {
+                    const value = Number(range);
+                    if (!Number.isFinite(value)) continue;
+                    addValue(value === 7 && max === 6 ? 0 : value);
+                    continue;
+                }
+            }
+
+            if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+            if (end < start) [start, end] = [end, start];
+            for (let v = start; v <= end; v += step) {
+                addValue(v === 7 && max === 6 ? 0 : v);
+            }
+        }
+
+        return Array.from(out).sort((a, b) => a - b);
+    }
+
+    function parseScheduleDraft(spec: string): ScheduleDraft {
+        const normalized = normalizeCronSpecClient(spec);
+        const fields = normalized.split(/\s+/);
+        const fallback: ScheduleDraft = {
+            cadence: "daily",
+            time: "00:00",
+            weeklyDays: [1],
+            monthDays: [1]
+        };
+        if (fields.length !== 6) return fallback;
+
+        const minute = Number(fields[1]);
+        const hour = Number(fields[2]);
+        const safeMinute = Number.isInteger(minute) && minute >= 0 && minute <= 59 ? minute : 0;
+        const safeHour = Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 0;
+        const time = `${String(safeHour).padStart(2, "0")}:${String(safeMinute).padStart(2, "0")}`;
+
+        const dom = fields[3];
+        const dow = fields[5];
+
+        if (dom !== "*" && dow === "*") {
+            const monthDays = parseCronFieldValues(dom, 1, 31);
+            return { cadence: "monthly", time, weeklyDays: [1], monthDays: monthDays.length ? monthDays : [1] };
+        }
+        if (dow !== "*" && dom === "*") {
+            const weeklyDays = parseCronFieldValues(dow, 0, 6);
+            return { cadence: "weekly", time, weeklyDays: weeklyDays.length ? weeklyDays : [1], monthDays: [1] };
+        }
+        return { cadence: "daily", time, weeklyDays: [1], monthDays: [1] };
+    }
+
+    function draftToCronSpec(draft: ScheduleDraft): string {
+        const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(draft.time || "").trim());
+        const hour = match ? Number(match[1]) : 0;
+        const minute = match ? Number(match[2]) : 0;
+        const hh = String(hour);
+        const mm = String(minute);
+
+        if (draft.cadence === "weekly") {
+            const days = Array.from(
+                new Set((draft.weeklyDays || []).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))
+            ).sort((a, b) => a - b);
+            return `0 ${mm} ${hh} * * ${(days.length ? days : [1]).join(",")}`;
+        }
+        if (draft.cadence === "monthly") {
+            const days = Array.from(
+                new Set((draft.monthDays || []).filter((d) => Number.isInteger(d) && d >= 1 && d <= 31))
+            ).sort((a, b) => a - b);
+            return `0 ${mm} ${hh} ${(days.length ? days : [1]).join(",")} * *`;
+        }
+        return `0 ${mm} ${hh} * * *`;
+    }
+
+    function syncScheduleDrafts() {
+        const next: Record<string, ScheduleDraft> = {};
+        for (const schedule of schedules) {
+            next[schedule.id] = parseScheduleDraft(schedule.cronSpec);
+        }
+        scheduleDrafts = next;
+    }
+
+    function draftForTask(task: Schedule): ScheduleDraft {
+        return scheduleDrafts[task.id] ?? parseScheduleDraft(task.cronSpec);
+    }
+
+    function patchScheduleDraft(id: string, patch: Partial<ScheduleDraft>) {
+        const schedule = scheduleById(id);
+        const current = scheduleDrafts[id] ?? parseScheduleDraft(schedule?.cronSpec || "0 0 0 * * *");
+        scheduleDrafts = { ...scheduleDrafts, [id]: { ...current, ...patch } };
+    }
+
+    function toggleWeeklyDay(id: string, day: number) {
+        const current = scheduleDrafts[id] ?? parseScheduleDraft(scheduleById(id)?.cronSpec || "0 0 0 * * *");
+        const exists = current.weeklyDays.includes(day);
+        const next = exists ? current.weeklyDays.filter((d) => d !== day) : [...current.weeklyDays, day];
+        patchScheduleDraft(id, { weeklyDays: next.length ? next : [1] });
+    }
+
+    function toggleMonthDay(id: string, day: number) {
+        const current = scheduleDrafts[id] ?? parseScheduleDraft(scheduleById(id)?.cronSpec || "0 0 0 * * *");
+        const exists = current.monthDays.includes(day);
+        const next = exists ? current.monthDays.filter((d) => d !== day) : [...current.monthDays, day];
+        patchScheduleDraft(id, { monthDays: next.length ? next : [1] });
+    }
+
+    function scheduleDirty(task: Schedule): boolean {
+        const draft = scheduleDrafts[task.id];
+        if (!draft) return false;
+        return draftToCronSpec(draft) !== normalizeCronSpecClient(task.cronSpec);
+    }
+
     async function loadSettings() {
         const res = await fetch("/api/settings");
         if (!res.ok) throw new Error(`settings read failed (${res.status})`);
@@ -174,6 +337,7 @@
         const res = await fetch("/api/scheduler/schedules");
         if (!res.ok) throw new Error(`schedules read failed (${res.status})`);
         schedules = await res.json();
+        syncScheduleDrafts();
     }
 
     async function loadAll() {
@@ -228,6 +392,31 @@
         }
     }
 
+    async function saveTaskSchedule(id: string) {
+        const draft = scheduleDrafts[id];
+        if (!draft) return;
+        const cronSpec = draftToCronSpec(draft);
+        savingScheduleId = id;
+        try {
+            const res = await fetch("/api/scheduler/update", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id, cronSpec })
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.message || `schedule update failed (${res.status})`);
+            }
+            schedules = schedules.map((s) => (s.id === id ? { ...s, cronSpec } : s));
+            scheduleDrafts = { ...scheduleDrafts, [id]: parseScheduleDraft(cronSpec) };
+            toasts.success(`Schedule updated for ${taskLabel(id)}.`);
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "Failed to update schedule");
+        } finally {
+            savingScheduleId = "";
+        }
+    }
+
     function providerModels(provider: AIProvider): ModelOption[] {
         return latestModelsByProvider[provider];
     }
@@ -258,13 +447,18 @@
     }
 
     function cronLabel(spec: string): string {
-        if (spec === "0 0 3 * * 0") return "Weekly (Sun 03:00)";
-        if (spec === "0 0 * * * *") return "Hourly";
-        if (spec === "0 * * * * *") return "Every Minute";
-        if (spec === "0 0 0 * * *") return "Daily (00:00)";
-        if (spec === "0 0 4 * * 0") return "Weekly (Sun 04:00)";
-        if (spec === "0 0 1 * * *") return "Daily (01:00)";
-        return spec;
+        const draft = parseScheduleDraft(spec);
+        if (draft.cadence === "weekly") {
+            const labels = draft.weeklyDays
+                .map((day) => weekdayOptions.find((opt) => opt.value === day)?.label || String(day))
+                .join(", ");
+            return `Weekly (${labels || "Mon"} ${draft.time})`;
+        }
+        if (draft.cadence === "monthly") {
+            const days = draft.monthDays.join(", ");
+            return `Monthly (Day ${days || "1"} ${draft.time})`;
+        }
+        return `Daily (${draft.time})`;
     }
 
     function taskLabel(id: string): string {
@@ -389,7 +583,8 @@
 
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
                         {#each schedulesForDomain(activeAutomationTab) as task}
-                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30">
+                            {@const draft = draftForTask(task)}
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">
                                 <div class="flex flex-wrap items-center justify-between gap-3">
                                     <div>
                                         <p class="text-sm font-black text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
@@ -409,6 +604,71 @@
                                         </button>
                                     </div>
                                 </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                                    <div class="space-y-1">
+                                        <label for={"cadence-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
+                                        <select
+                                            id={"cadence-" + task.id}
+                                            value={draft.cadence}
+                                            onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
+                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                        >
+                                            <option value="daily">Daily</option>
+                                            <option value="weekly">Weekly</option>
+                                            <option value="monthly">Monthly</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <label for={"time-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
+                                        <input
+                                            id={"time-" + task.id}
+                                            type="time"
+                                            value={draft.time}
+                                            onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                        />
+                                    </div>
+
+                                    <button
+                                        onclick={() => saveTaskSchedule(task.id)}
+                                        disabled={!scheduleDirty(task) || savingScheduleId === task.id}
+                                        class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
+                                    >
+                                        {savingScheduleId === task.id ? "Saving..." : "Save Schedule"}
+                                    </button>
+                                </div>
+
+                                {#if draft.cadence === "weekly"}
+                                    <div class="space-y-1">
+                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
+                                        <div class="flex flex-wrap gap-2">
+                                            {#each weekdayOptions as day}
+                                                <button
+                                                    onclick={() => toggleWeeklyDay(task.id, day.value)}
+                                                    class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {draft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                >
+                                                    {day.label}
+                                                </button>
+                                            {/each}
+                                        </div>
+                                    </div>
+                                {:else if draft.cadence === "monthly"}
+                                    <div class="space-y-1">
+                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            {#each monthDayOptions as day}
+                                                <button
+                                                    onclick={() => toggleMonthDay(task.id, day)}
+                                                    class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {draft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                >
+                                                    {day}
+                                                </button>
+                                            {/each}
+                                        </div>
+                                    </div>
+                                {/if}
                             </div>
                         {:else}
                             <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-sm text-slate-500 italic">

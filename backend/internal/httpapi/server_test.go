@@ -153,6 +153,9 @@ func (f fakeSchedulerService) RemoveTask(name string) {}
 func (f fakeSchedulerService) ToggleTask(ctx context.Context, name string, enabled bool) error {
 	return nil
 }
+func (f fakeSchedulerService) UpdateTaskSchedule(ctx context.Context, name string, spec string) error {
+	return nil
+}
 func (f fakeSchedulerService) RunTask(ctx context.Context, name string) error { return nil }
 func (f fakeSchedulerService) ListSchedules(ctx context.Context) ([]scheduler.ScheduleEntry, error) {
 	return []scheduler.ScheduleEntry{}, nil

@@ -100,6 +100,7 @@ type SchedulerService interface {
 	AddTask(spec string, task scheduler.Task, enabled bool) error
 	RemoveTask(name string)
 	ToggleTask(ctx context.Context, name string, enabled bool) error
+	UpdateTaskSchedule(ctx context.Context, name string, spec string) error
 	RunTask(ctx context.Context, name string) error
 	ListSchedules(ctx context.Context) ([]scheduler.ScheduleEntry, error)
 }
@@ -1267,6 +1268,32 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				}
 				if err := schedSvc.ToggleTask(r.Context(), req.ID, req.Enabled); err != nil {
 					writeError(w, http.StatusInternalServerError, "toggle_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			})
+
+			r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
+				if schedSvc == nil {
+					writeError(w, http.StatusServiceUnavailable, "scheduler_unavailable", "Scheduler not initialized")
+					return
+				}
+				var req struct {
+					ID       string `json:"id"`
+					CronSpec string `json:"cronSpec"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+					return
+				}
+				req.ID = strings.TrimSpace(req.ID)
+				req.CronSpec = strings.TrimSpace(req.CronSpec)
+				if req.ID == "" || req.CronSpec == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "id and cronSpec are required")
+					return
+				}
+				if err := schedSvc.UpdateTaskSchedule(r.Context(), req.ID, req.CronSpec); err != nil {
+					writeError(w, http.StatusBadRequest, "update_failed", err.Error())
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

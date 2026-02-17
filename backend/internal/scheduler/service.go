@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -25,6 +26,10 @@ type Service struct {
 	tasks    map[string]cron.EntryID
 	registry map[string]func() Task
 }
+
+var cronSpecParser = cron.NewParser(
+	cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
+)
 
 func NewService(store *Store) *Service {
 	return &Service{
@@ -53,6 +58,10 @@ func (s *Service) Stop() {
 // AddTask registers a task into the system. If it's not in the DB, it's saved with the provided default enabled state.
 func (s *Service) AddTask(spec string, task Task, enabled bool) error {
 	taskName := task.Name()
+	spec = normalizeCronSpec(spec)
+	if err := validateCronSpec(spec); err != nil {
+		return err
+	}
 
 	// 1. Ensure it's in the registry so it can be enabled later
 	s.mu.Lock()
@@ -74,10 +83,9 @@ func (s *Service) AddTask(spec string, task Task, enabled bool) error {
 		// Keep cron specs up to date for existing installations that persisted older 5-field specs.
 		entry, err := s.store.GetSchedule(ctx, taskName)
 		if err == nil {
-			targetSpec := normalizeCronSpec(spec)
-			if entry.CronSpec != targetSpec && targetSpec != "" {
-				log.Printf("Updating cron spec for %s: %q -> %q", taskName, entry.CronSpec, targetSpec)
-				_ = s.store.UpdateScheduleSpec(ctx, taskName, targetSpec)
+			if entry.CronSpec != spec {
+				log.Printf("Updating cron spec for %s: %q -> %q", taskName, entry.CronSpec, spec)
+				_ = s.store.UpdateScheduleSpec(ctx, taskName, spec)
 			}
 		}
 
@@ -113,6 +121,10 @@ func (s *Service) LoadSchedules(ctx context.Context) error {
 		if spec != entry.CronSpec && s.store != nil {
 			_ = s.store.UpdateScheduleSpec(ctx, entry.ID, spec)
 		}
+		if err := validateCronSpec(spec); err != nil {
+			log.Printf("Skipping invalid cron spec for task %s: %v", entry.ID, err)
+			continue
+		}
 
 		s.mu.RLock()
 		factory, ok := s.registry[entry.ID]
@@ -121,13 +133,7 @@ func (s *Service) LoadSchedules(ctx context.Context) error {
 		if ok {
 			task := factory()
 			// We use a simplified internal add that doesn't re-save to DB to avoid loops
-			id, err := s.cron.AddFunc(spec, func() {
-				log.Printf("Executing scheduled task: %s", entry.ID)
-				if err := task.Run(context.Background()); err != nil {
-					log.Printf("Error executing task %s: %v", entry.ID, err)
-				}
-				_ = s.store.UpdateLastRun(context.Background(), entry.ID, time.Now().Unix())
-			})
+			id, err := s.scheduleTask(entry.ID, spec, task)
 			if err == nil {
 				s.mu.Lock()
 				s.tasks[entry.ID] = id
@@ -150,6 +156,29 @@ func normalizeCronSpec(spec string) string {
 	default:
 		return spec
 	}
+}
+
+func validateCronSpec(spec string) error {
+	normalized := normalizeCronSpec(spec)
+	if strings.TrimSpace(normalized) == "" {
+		return errors.New("cron spec is required")
+	}
+	if _, err := cronSpecParser.Parse(normalized); err != nil {
+		return fmt.Errorf("invalid cron spec: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) scheduleTask(name, spec string, task Task) (cron.EntryID, error) {
+	return s.cron.AddFunc(spec, func() {
+		log.Printf("Executing scheduled task: %s", name)
+		if err := task.Run(context.Background()); err != nil {
+			log.Printf("Error executing task %s: %v", name, err)
+		}
+		if s.store != nil {
+			_ = s.store.UpdateLastRun(context.Background(), name, time.Now().Unix())
+		}
+	})
 }
 
 func (s *Service) RemoveTask(name string) {
@@ -197,33 +226,89 @@ func (s *Service) ToggleTask(ctx context.Context, name string, enabled bool) err
 	if _, ok := s.tasks[name]; ok {
 		return nil // Already running
 	}
+	if s.store == nil {
+		return errors.New("scheduler store unavailable")
+	}
 
-	entries, _ := s.store.ListSchedules(ctx)
+	entries, err := s.store.ListSchedules(ctx)
+	if err != nil {
+		return err
+	}
 	var spec string
 	for _, e := range entries {
 		if e.ID == name {
-			spec = e.CronSpec
+			spec = normalizeCronSpec(e.CronSpec)
+			if spec != e.CronSpec {
+				_ = s.store.UpdateScheduleSpec(ctx, e.ID, spec)
+			}
 			break
 		}
 	}
+	if spec == "" {
+		return fmt.Errorf("task %s schedule not found", name)
+	}
+	if err := validateCronSpec(spec); err != nil {
+		return err
+	}
 
 	factory, ok := s.registry[name]
-	if ok && spec != "" {
-		task := factory()
-		id, err := s.cron.AddFunc(spec, func() {
-			log.Printf("Executing scheduled task: %s", name)
-			if err := task.Run(context.Background()); err != nil {
-				log.Printf("Error executing task %s: %v", name, err)
-			}
-			if s.store != nil {
-				_ = s.store.UpdateLastRun(context.Background(), name, time.Now().Unix())
-			}
-		})
-		if err != nil {
-			return err
-		}
-		s.tasks[name] = id
+	if !ok {
+		return fmt.Errorf("task %s not found in registry", name)
 	}
+	task := factory()
+	id, err := s.scheduleTask(name, spec, task)
+	if err != nil {
+		return err
+	}
+	s.tasks[name] = id
+
+	return nil
+}
+
+func (s *Service) UpdateTaskSchedule(ctx context.Context, name string, spec string) error {
+	if s.store == nil {
+		return errors.New("scheduler store unavailable")
+	}
+
+	spec = normalizeCronSpec(spec)
+	if err := validateCronSpec(spec); err != nil {
+		return err
+	}
+
+	entry, err := s.store.GetSchedule(ctx, name)
+	if err != nil {
+		return err
+	}
+	if entry.CronSpec == spec {
+		return nil
+	}
+
+	if err := s.store.UpdateScheduleSpec(ctx, name, spec); err != nil {
+		return err
+	}
+	if !entry.Enabled {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if id, ok := s.tasks[name]; ok {
+		s.cron.Remove(id)
+		delete(s.tasks, name)
+	}
+
+	factory, ok := s.registry[name]
+	if !ok {
+		return fmt.Errorf("task %s not found in registry", name)
+	}
+
+	task := factory()
+	id, err := s.scheduleTask(name, spec, task)
+	if err != nil {
+		return err
+	}
+	s.tasks[name] = id
 
 	return nil
 }
