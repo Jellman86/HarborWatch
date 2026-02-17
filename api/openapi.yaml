@@ -604,6 +604,7 @@ components:
       required: [summary]
       properties:
         summary: { $ref: '#/components/schemas/ContainerSummary' }
+        diskUsage: { $ref: '#/components/schemas/ContainerDiskUsage' }
         vulnerabilitySummary: { $ref: '#/components/schemas/ScanSummary' }
         malwareSummary:
           type: array
@@ -615,6 +616,12 @@ components:
           type: array
           items: { $ref: '#/components/schemas/AuditJobSummary' }
         rules: { $ref: '#/components/schemas/ContainerRules' }
+    ContainerDiskUsage:
+      type: object
+      properties:
+        writableBytes: { type: integer, format: int64 }
+        rootFsBytes: { type: integer, format: int64 }
+        mountCount: { type: integer }
     ContainerRules:
       type: object
       required: [containerId, updatePolicy]

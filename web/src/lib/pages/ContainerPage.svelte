@@ -200,6 +200,31 @@
         });
     }
 
+    function formatMalwareTargetLabel(target: string): string {
+        const prefix = `container:${id}:`;
+        if (!target?.startsWith(prefix)) return target || "unknown";
+        const scope = target.slice(prefix.length);
+        if (scope === "rootfs") return "rootfs (/)";
+        if (scope.startsWith("mount:")) {
+            const mountPath = scope.slice("mount:".length);
+            return `mount (${mountPath || "unknown"})`;
+        }
+        return scope;
+    }
+
+    function formatBytes(value?: number): string {
+        const n = Number(value || 0);
+        if (!Number.isFinite(n) || n <= 0) return "0 B";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let size = n;
+        let idx = 0;
+        while (size >= 1024 && idx < units.length - 1) {
+            size /= 1024;
+            idx++;
+        }
+        return `${size.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`;
+    }
+
     onMount(() => {
         loadDetail();
     });
@@ -325,7 +350,65 @@
                             {/if}
                         </div>
                     </div>
-                    
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Vulnerability details</h3>
+                            {#if detail.vulnerabilitySummary}
+                                <div class="grid grid-cols-2 gap-3 text-xs">
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Source</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.source}</p>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Scanned</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{new Date(detail.vulnerabilitySummary.scannedAt * 1000).toLocaleString()}</p>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Total</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.total}</p>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Risk Score</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.riskScore}/100</p>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Medium</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.medium}</p>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Low / Unknown</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.vulnerabilitySummary.low} / {detail.vulnerabilitySummary.unknown}</p>
+                                    </div>
+                                </div>
+                            {:else}
+                                <p class="text-slate-400 italic text-sm">No Trivy results recorded yet for this image.</p>
+                            {/if}
+                        </div>
+
+                        <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Container disk usage</h3>
+                            {#if detail.diskUsage}
+                                <div class="grid grid-cols-1 gap-3 text-xs">
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Writable layer</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{formatBytes(detail.diskUsage.writableBytes)} ({detail.diskUsage.writableBytes || 0} bytes)</p>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Root filesystem</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{formatBytes(detail.diskUsage.rootFsBytes)} ({detail.diskUsage.rootFsBytes || 0} bytes)</p>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                        <p class="text-slate-400 uppercase text-[10px] font-black">Mounted volumes</p>
+                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.diskUsage.mountCount || 0}</p>
+                                    </div>
+                                </div>
+                            {:else}
+                                <p class="text-slate-400 italic text-sm">Disk usage data unavailable for this container.</p>
+                            {/if}
+                        </div>
+                    </div>
+
                     <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                         <div class="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                             <h3 class="text-sm font-black uppercase tracking-tight text-slate-400">Malware scan history</h3>
@@ -336,20 +419,32 @@
                                     <thead>
                                         <tr class="text-slate-400 text-[10px] font-black uppercase tracking-widest">
                                             <th class="pb-4">Date</th>
+                                            <th class="pb-4">Scope</th>
                                             <th class="pb-4">Status</th>
-                                            <th class="pb-4">Threats</th>
+                                            <th class="pb-4">Threat details</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-50 dark:divide-slate-700">
                                         {#each detail.malwareSummary as ms}
                                             <tr>
                                                 <td class="py-4">{new Date(ms.scannedAt * 1000).toLocaleString()}</td>
+                                                <td class="py-4 text-slate-600 dark:text-slate-300">{formatMalwareTargetLabel(ms.target)}</td>
                                                 <td class="py-4">
                                                     <span class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase {ms.infected ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
                                                         {ms.infected ? 'Infected' : 'Clean'}
                                                     </span>
                                                 </td>
-                                                <td class="py-4 text-slate-500">{ms.threatsFound?.length || 0} found</td>
+                                                <td class="py-4 text-slate-500">
+                                                    {#if ms.threatsFound && ms.threatsFound.length > 0}
+                                                        <div class="flex flex-wrap gap-2">
+                                                            {#each ms.threatsFound as threat}
+                                                                <span class="px-2 py-1 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300 text-[10px] font-mono">{threat}</span>
+                                                            {/each}
+                                                        </div>
+                                                    {:else}
+                                                        <span class="text-emerald-600 dark:text-emerald-400 text-xs font-semibold">No threats found</span>
+                                                    {/if}
+                                                </td>
                                             </tr>
                                         {/each}
                                     </tbody>

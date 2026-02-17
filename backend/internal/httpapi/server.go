@@ -501,6 +501,10 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					ActionHistory:  []gen.AuditJobSummary{},
 				}
 
+				if du, err := collectContainerDiskUsage(ctx, id); err == nil {
+					detail.DiskUsage = du
+				}
+
 				// Enrich with Security Data
 				if scanService != nil {
 					if vs, err := scanService.LatestSummaryForTarget(ctx, summary.Image); err == nil {

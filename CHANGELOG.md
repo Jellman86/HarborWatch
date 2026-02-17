@@ -8,6 +8,10 @@ All notable changes to HarborWatch are documented in this file.
 - **Container ClamAV Action:**
   - Added `POST /api/scans/malware/container/{id}` to queue malware scans for both container rootfs and mounted paths.
   - Added container detail UI actions for `Run Trivy Scan` and `Scan with ClamAV` with non-blocking progress/result feedback.
+  - Added expanded scan result rendering in container security view (vulnerability metadata + per-scope malware threat details).
+- **Container Disk Visibility:**
+  - Added `diskUsage` payload to container detail responses with writable bytes, rootfs bytes, and mount count.
+  - Added container disk usage card in the container security tab.
 - **Asset Lifecycle Automation:**
   - Added automatic `validateUrl` derivation from container labels, healthcheck command, ports, and global validation pattern settings.
   - Rules APIs now auto-fill missing validation URLs while still allowing user overrides.
