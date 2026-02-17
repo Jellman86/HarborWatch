@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -24,9 +25,20 @@ func (trivyScanner) Scan(ctx context.Context, target string) (Result, error) {
 		return Result{}, ErrTrivyUnavailable
 	}
 
-	cmd := exec.CommandContext(ctx, "trivy", "image", "--quiet", "--format", "json", target)
+	args := []string{
+		"image",
+		"--quiet",
+		"--format", "json",
+		"--scanners", "vuln",
+		"--timeout", trivyInternalTimeout(),
+		target,
+	}
+	cmd := exec.CommandContext(ctx, "trivy", args...)
 	output, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			return Result{}, fmt.Errorf("trivy scan timed out or was cancelled: %w", ctx.Err())
+		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			return Result{}, fmt.Errorf("trivy scan failed (exit %d): %s", exitErr.ExitCode(), string(exitErr.Stderr))
@@ -69,4 +81,11 @@ func (trivyScanner) Scan(ctx context.Context, target string) (Result, error) {
 	}
 
 	return res, nil
+}
+
+func trivyInternalTimeout() string {
+	if v := os.Getenv("HW_TRIVY_INTERNAL_TIMEOUT"); v != "" {
+		return v
+	}
+	return "10m"
 }

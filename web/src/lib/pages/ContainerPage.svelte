@@ -19,6 +19,7 @@
 
     async function loadDetail() {
         loading = true;
+        error = "";
         try {
             const res = await fetch(`/api/docker/${id}`);
             if (res.ok) {
@@ -29,7 +30,8 @@
                 data.recentMetrics = data.recentMetrics || [];
                 detail = data;
             } else {
-                error = "Container not found";
+                const body = await res.json().catch(() => ({}));
+                error = body?.message || `Container lookup failed (${res.status})`;
             }
         } catch (e) {
             error = "Failed to load container data";

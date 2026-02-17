@@ -24,6 +24,32 @@ HarborWatch is a professional, local-first container maintenance and security ap
   - `POST /api/docker/prune` (trigger scheduled prune task)
   - `POST /api/ai/fleet-advice` (fleet-level advisory summary)
   - `POST /api/metrics/batch` (multi-container metrics retrieval)
+  - `GET /api/docker/{id}/logs` (container stdout/stderr retrieval with tail/since controls)
+  - `GET /api/diagnostics/snapshot` (aggregated diagnostics bundle for autonomous investigation)
+  - `GET /api/diagnostics/containers/{id}/logs` (container logs through diagnostics namespace)
+
+## Diagnostics API
+
+- `GET /api/system/logs` now supports filters:
+  - `limit` (default `100`, max `2000`)
+  - `level` (e.g. `ERROR`)
+  - `source` (case-insensitive substring)
+  - `since` (unix timestamp in seconds)
+- `GET /api/diagnostics/snapshot` supports:
+  - `logLimit`, `auditLimit`
+  - `includeFleet` (`true`/`false`)
+  - `containerId`
+  - `containerLogTail`, `containerLogSince`
+- `GET /api/docker/{id}/logs` and `GET /api/diagnostics/containers/{id}/logs` support:
+  - `tail` (line count)
+  - `since` (duration like `1h` or unix timestamp)
+  - `timestamps` (`true`/`false`)
+
+## Scanner Timeouts
+
+- `HW_TRIVY_SCAN_TIMEOUT` sets overall vulnerability scan job timeout (default `15m`).
+- `HW_TRIVY_INTERNAL_TIMEOUT` sets Trivy CLI timeout argument (default `10m`).
+- `HW_CLAMAV_SCAN_TIMEOUT` sets malware scan job timeout (default `15m`).
 
 ## Technology Stack
 

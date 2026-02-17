@@ -10,9 +10,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
+	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
@@ -27,6 +29,8 @@ type fakeDockerClient struct {
 	containers []gen.ContainerSummary
 	images     []gen.ImageSummary
 	events     string
+	logs       dockerengine.ContainerLogs
+	logErr     error
 }
 
 func (f fakeDockerClient) ListContainers(ctx context.Context) ([]gen.ContainerSummary, error) {
@@ -34,6 +38,21 @@ func (f fakeDockerClient) ListContainers(ctx context.Context) ([]gen.ContainerSu
 }
 func (f fakeDockerClient) GetContainer(ctx context.Context, id string) (gen.ContainerSummary, error) {
 	return gen.ContainerSummary{ID: id}, nil
+}
+func (f fakeDockerClient) GetContainerLogs(ctx context.Context, id string, tail int, since time.Time, timestamps bool) (dockerengine.ContainerLogs, error) {
+	if f.logErr != nil {
+		return dockerengine.ContainerLogs{}, f.logErr
+	}
+	out := f.logs
+	out.ContainerID = id
+	if out.Combined == "" {
+		out.Combined = "line1\nline2"
+		out.LineCount = 2
+	}
+	out.Tail = tail
+	out.Since = since.Unix()
+	out.Timestamps = timestamps
+	return out, nil
 }
 func (f fakeDockerClient) GetContainerComposeConfig(ctx context.Context, id string, ps *portainer.Client) (string, error) {
 	return "version: '3'", nil
@@ -152,14 +171,25 @@ func (f fakeMetricsServiceWithData) GetMetrics(ctx context.Context, id, dur stri
 	return f.data[id], nil
 }
 
-type fakeDiagService struct{}
+type fakeDiagService struct {
+	logs []diag.LogEntry
+}
 
 func (f fakeDiagService) Log(level, source, message string) {}
 func (f fakeDiagService) ListLogs(ctx context.Context, limit int) ([]diag.LogEntry, error) {
-	return nil, nil
+	if len(f.logs) == 0 {
+		return nil, nil
+	}
+	if len(f.logs) > limit {
+		return f.logs[:limit], nil
+	}
+	return f.logs, nil
 }
 func (f fakeDiagService) GetSystemStatus() diag.SystemStatus {
-	return diag.SystemStatus{}
+	return diag.SystemStatus{Uptime: 42, NumGoroutine: 9}
+}
+func (f fakeDiagService) PruneLogs(ctx context.Context, olderThan int64) (int64, error) {
+	return 0, nil
 }
 
 type fakeNotificationService struct{}
@@ -327,5 +357,83 @@ func TestMetricsBatchEndpoint(t *testing.T) {
 	}
 	if len(payload["c1"]) != 1 || len(payload["c2"]) != 1 {
 		t.Fatalf("expected metrics for c1 and c2, got %#v", payload)
+	}
+}
+
+func TestDockerContainerLogsEndpoint(t *testing.T) {
+	docker := fakeDockerClient{
+		logs: dockerengine.ContainerLogs{
+			Combined: "hello\nworld",
+		},
+	}
+	mux := NewMuxWithDeps(docker, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/c1/logs?tail=10&since=1h&timestamps=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload dockerengine.ContainerLogs
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if payload.ContainerID != "c1" {
+		t.Fatalf("expected container id c1, got %q", payload.ContainerID)
+	}
+	if payload.Tail != 10 {
+		t.Fatalf("expected tail 10, got %d", payload.Tail)
+	}
+}
+
+func TestSystemLogsFilters(t *testing.T) {
+	diagSvc := fakeDiagService{
+		logs: []diag.LogEntry{
+			{Timestamp: 200, Level: "INFO", Source: "A", Message: "ok"},
+			{Timestamp: 300, Level: "ERROR", Source: "Docker", Message: "boom"},
+		},
+	}
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, diagSvc, nil, nil, nil, fakeRulesService{})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/system/logs?limit=10&level=error&source=docker&since=250", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var payload []diag.LogEntry
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("expected 1 filtered log, got %d", len(payload))
+	}
+	if payload[0].Level != "ERROR" {
+		t.Fatalf("expected ERROR log, got %q", payload[0].Level)
+	}
+}
+
+func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
+	diagSvc := fakeDiagService{
+		logs: []diag.LogEntry{
+			{Timestamp: 300, Level: "ERROR", Source: "Scanner", Message: "failed"},
+		},
+	}
+	docker := fakeDockerClient{
+		containers: []gen.ContainerSummary{{ID: "c1", State: "running", Image: "nginx:latest"}},
+		images:     []gen.ImageSummary{{ID: "img1", RepoTags: []string{"nginx:latest"}}},
+		logs:       dockerengine.ContainerLogs{Combined: "x"},
+	}
+	mux := NewMuxWithDeps(docker, fakeScanService{}, nil, nil, fakeAuditService{}, nil, fakeSchedulerService{}, nil, diagSvc, nil, nil, nil, fakeRulesService{})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/diagnostics/snapshot?containerId=c1&includeFleet=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if payload["generatedAt"] == nil {
+		t.Fatalf("expected generatedAt in diagnostics snapshot")
+	}
+	if payload["components"] == nil {
+		t.Fatalf("expected components in diagnostics snapshot")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -95,7 +96,7 @@ func (s *Service) StartMalwareScan(target string) (gen.ScanStartResponse, error)
 }
 
 func (s *Service) run(jobID, target string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), envDuration("HW_TRIVY_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
 
 	result, err := s.scanner.Scan(ctx, target)
@@ -121,7 +122,7 @@ func (s *Service) run(jobID, target string) {
 }
 
 func (s *Service) runMalware(jobID, target string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), envDuration("HW_CLAMAV_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
 
 	result, err := s.malwareScanner.ScanPath(ctx, target)
@@ -170,7 +171,7 @@ func (s *Service) Job(ctx context.Context, jobID string) (gen.ScanJobStatus, err
 	if ok {
 		return job, nil
 	}
-	
+
 	dbJob, err := s.store.GetJob(ctx, jobID)
 	if err != nil {
 		return gen.ScanJobStatus{}, err
@@ -199,4 +200,16 @@ func newJobID() (string, error) {
 		return "", fmt.Errorf("create job id: %w", err)
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
 }

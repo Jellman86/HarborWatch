@@ -1,6 +1,7 @@
 package dockerengine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,21 +11,37 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	"github.com/moby/moby/client"
+	"github.com/moby/moby/pkg/stdcopy"
 	"gopkg.in/yaml.v3"
 )
 
 const defaultDockerSocket = "/var/run/docker.sock"
+const maxContainerLogBytes = 2 << 20 // 2MiB safety cap per request.
 
 // Client is a lightweight Docker Engine API client over a Unix socket.
 type Client struct {
 	httpClient *http.Client
 	baseURL    *url.URL
+}
+
+type ContainerLogs struct {
+	ContainerID string `json:"containerId"`
+	Tail        int    `json:"tail"`
+	Since       int64  `json:"since"`
+	Timestamps  bool   `json:"timestamps"`
+	Stdout      string `json:"stdout"`
+	Stderr      string `json:"stderr"`
+	Combined    string `json:"combined"`
+	LineCount   int    `json:"lineCount"`
+	Truncated   bool   `json:"truncated"`
+	CapturedAt  int64  `json:"capturedAt"`
 }
 
 func NewFromEnv() (*Client, error) {
@@ -133,6 +150,91 @@ func (c *Client) OpenEventStream(ctx context.Context) (io.ReadCloser, error) {
 	}
 
 	return resp.Body, nil
+}
+
+func (c *Client) GetContainerLogs(ctx context.Context, id string, tail int, since time.Time, timestamps bool) (ContainerLogs, error) {
+	if strings.TrimSpace(id) == "" {
+		return ContainerLogs{}, fmt.Errorf("container id is required")
+	}
+	if tail <= 0 {
+		tail = 200
+	}
+
+	q := url.Values{}
+	q.Set("stdout", "1")
+	q.Set("stderr", "1")
+	q.Set("tail", strconv.Itoa(tail))
+	if !since.IsZero() {
+		q.Set("since", strconv.FormatInt(since.Unix(), 10))
+	}
+	if timestamps {
+		q.Set("timestamps", "1")
+	}
+
+	path := fmt.Sprintf("/containers/%s/logs?%s", url.PathEscape(id), q.Encode())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL.String()+path, nil)
+	if err != nil {
+		return ContainerLogs{}, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return ContainerLogs{}, fmt.Errorf("docker logs request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return ContainerLogs{}, fmt.Errorf("docker logs failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxContainerLogBytes+1))
+	if err != nil {
+		return ContainerLogs{}, fmt.Errorf("read docker logs response: %w", err)
+	}
+	truncated := len(raw) > maxContainerLogBytes
+	if truncated {
+		raw = raw[:maxContainerLogBytes]
+	}
+
+	var stdoutBuf bytes.Buffer
+	var stderrBuf bytes.Buffer
+	stdout := ""
+	stderr := ""
+	combined := string(raw)
+	if _, err := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, bytes.NewReader(raw)); err == nil {
+		stdout = stdoutBuf.String()
+		stderr = stderrBuf.String()
+		combined = strings.TrimRight(stdout, "\n")
+		if stderr != "" {
+			if combined != "" {
+				combined += "\n"
+			}
+			combined += strings.TrimRight(stderr, "\n")
+		}
+	} else {
+		// TTY-enabled containers are already plain text and cannot be demuxed.
+		stdout = string(raw)
+	}
+
+	if truncated {
+		notice := "\n[harborwatch] log output truncated at 2MiB"
+		combined += notice
+		stdout += notice
+	}
+
+	return ContainerLogs{
+		ContainerID: id,
+		Tail:        tail,
+		Since:       since.Unix(),
+		Timestamps:  timestamps,
+		Stdout:      stdout,
+		Stderr:      stderr,
+		Combined:    combined,
+		LineCount:   countLines(combined),
+		Truncated:   truncated,
+		CapturedAt:  time.Now().Unix(),
+	}, nil
 }
 
 func (c *Client) GetContainerComposeConfig(ctx context.Context, id string, ps *portainer.Client) (string, error) {
@@ -251,6 +353,17 @@ func (c *Client) reconstructYAML(raw map[string]any) string {
 	}
 
 	return "# Reconstructed Effective Configuration (Inspect Data)\n" + string(out)
+}
+
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	n := strings.Count(s, "\n")
+	if strings.HasSuffix(s, "\n") {
+		return n
+	}
+	return n + 1
 }
 
 func (c *Client) getJSONRaw(ctx context.Context, path string) ([]byte, error) {

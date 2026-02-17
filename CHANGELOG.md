@@ -2,6 +2,37 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.2] - 2026-02-17
+
+### Added
+- **Diagnostics API Expansion:**
+  - Added `GET /api/docker/{id}/logs` with `tail`, `since`, and `timestamps` controls for direct container log retrieval.
+  - Added `GET /api/diagnostics/containers/{id}/logs` as a diagnostics namespace endpoint for container logs.
+  - Added `GET /api/diagnostics/snapshot` that aggregates:
+    - component availability (`docker`, `scanner`, `audit`, `scheduler`, `diag`)
+    - runtime system status
+    - recent internal logs
+    - recent and failed audit jobs
+    - scheduler state
+    - latest scan summary
+    - optional fleet inventory/images and target-container logs
+- **API Error Telemetry:**
+  - Added HTTP error middleware that records all 4xx/5xx API responses (method, path, status, duration, request-id, client metadata) into diagnostics logs.
+
+### Fixed
+- **Container Detail Routing Compatibility:**
+  - Added backward-compatible container detail alias route (`/api/docker/containers/{id}`) to fix “Container not found” behavior for older frontend paths.
+- **Trivy Scan Stability:**
+  - Added configurable scan timeouts (`HW_TRIVY_SCAN_TIMEOUT`, `HW_TRIVY_INTERNAL_TIMEOUT`) and clearer timeout/cancellation errors to reduce opaque `exit -1` failures.
+- **System Logs Querying:**
+  - Enhanced `GET /api/system/logs` to support `limit`, `level`, `source`, and `since` filters for faster root-cause isolation.
+
+### Tests
+- Added API regression coverage for:
+  - container log retrieval route behavior
+  - diagnostics snapshot response shape
+  - filtered diagnostics log query behavior
+
 ## [0.7.1] - 2026-02-17
 
 ### Fixed

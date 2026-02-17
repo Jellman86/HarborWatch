@@ -42,6 +42,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContainerDetail'
+  /api/docker/{id}/logs:
+    get:
+      operationId: getDockerContainerLogs
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: tail
+          required: false
+          schema: { type: integer, default: 300 }
+        - in: query
+          name: since
+          required: false
+          schema:
+            type: string
+            description: Duration (`15m`, `1h`) or unix timestamp (seconds)
+        - in: query
+          name: timestamps
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Recent container logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerLogs'
   /api/docker/{id}/rules:
     get:
       operationId: getContainerRules
@@ -442,6 +471,114 @@ paths:
                 type: array
                 items:
                   type: object
+  /api/system/status:
+    get:
+      operationId: getSystemStatus
+      responses:
+        '200':
+          description: Runtime diagnostics summary
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/system/logs:
+    get:
+      operationId: getSystemLogs
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, default: 100 }
+        - in: query
+          name: level
+          required: false
+          schema: { type: string }
+        - in: query
+          name: source
+          required: false
+          schema: { type: string }
+        - in: query
+          name: since
+          required: false
+          schema:
+            type: integer
+            format: int64
+            description: Unix timestamp (seconds)
+      responses:
+        '200':
+          description: Internal logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DiagLogEntry'
+  /api/diagnostics/containers/{id}/logs:
+    get:
+      operationId: getDiagnosticsContainerLogs
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: tail
+          required: false
+          schema: { type: integer, default: 300 }
+        - in: query
+          name: since
+          required: false
+          schema:
+            type: string
+            description: Duration (`15m`, `1h`) or unix timestamp (seconds)
+        - in: query
+          name: timestamps
+          required: false
+          schema: { type: boolean, default: true }
+      responses:
+        '200':
+          description: Diagnostics container log payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContainerLogs'
+  /api/diagnostics/snapshot:
+    get:
+      operationId: getDiagnosticsSnapshot
+      parameters:
+        - in: query
+          name: logLimit
+          required: false
+          schema: { type: integer, default: 300 }
+        - in: query
+          name: auditLimit
+          required: false
+          schema: { type: integer, default: 100 }
+        - in: query
+          name: includeFleet
+          required: false
+          schema: { type: boolean, default: true }
+        - in: query
+          name: containerId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: containerLogTail
+          required: false
+          schema: { type: integer, default: 250 }
+        - in: query
+          name: containerLogSince
+          required: false
+          schema:
+            type: string
+            description: Duration (`15m`, `1h`) or unix timestamp (seconds)
+      responses:
+        '200':
+          description: Aggregated diagnostics bundle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticsSnapshot'
 components:
   schemas:
     ContainerDetail:
@@ -525,6 +662,75 @@ components:
         from: { type: string }
         attributes: { type: object, additionalProperties: { type: string } }
         time: { type: integer, format: int64 }
+    DiagLogEntry:
+      type: object
+      required: [timestamp, level, source, message]
+      properties:
+        id: { type: integer, format: int64 }
+        timestamp: { type: integer, format: int64 }
+        level: { type: string }
+        source: { type: string }
+        message: { type: string }
+    ContainerLogs:
+      type: object
+      required: [containerId, tail, since, timestamps, combined, lineCount, truncated, capturedAt]
+      properties:
+        containerId: { type: string }
+        tail: { type: integer }
+        since: { type: integer, format: int64 }
+        timestamps: { type: boolean }
+        stdout: { type: string }
+        stderr: { type: string }
+        combined: { type: string }
+        lineCount: { type: integer }
+        truncated: { type: boolean }
+        capturedAt: { type: integer, format: int64 }
+    DiagnosticsSnapshot:
+      type: object
+      required: [generatedAt, components]
+      properties:
+        generatedAt: { type: integer, format: int64 }
+        components:
+          type: object
+          additionalProperties: { type: string }
+        errors:
+          type: array
+          items: { type: string }
+        systemStatus:
+          type: object
+        internalLogs:
+          type: array
+          items: { $ref: '#/components/schemas/DiagLogEntry' }
+        recentAuditJobs:
+          type: array
+          items: { $ref: '#/components/schemas/AuditJobSummary' }
+        failedAuditJobs:
+          type: array
+          items: { $ref: '#/components/schemas/AuditJobSummary' }
+        schedules:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              cronSpec: { type: string }
+              enabled: { type: boolean }
+              lastRun: { type: integer, format: int64 }
+        latestScanSummary: { $ref: '#/components/schemas/ScanSummary' }
+        fleetStats:
+          type: object
+          properties:
+            total: { type: integer }
+            running: { type: integer }
+            stopped: { type: integer }
+        fleetContainers:
+          type: array
+          items: { $ref: '#/components/schemas/ContainerSummary' }
+        fleetImages:
+          type: array
+          items: { $ref: '#/components/schemas/ImageSummary' }
+        targetContainer: { $ref: '#/components/schemas/ContainerSummary' }
+        targetContainerLogs: { $ref: '#/components/schemas/ContainerLogs' }
     ScanRunRequest:
       type: object
       required: [target]

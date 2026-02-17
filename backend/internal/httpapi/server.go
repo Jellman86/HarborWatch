@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 type DockerClient interface {
 	ListContainers(ctx context.Context) ([]gen.ContainerSummary, error)
 	GetContainer(ctx context.Context, id string) (gen.ContainerSummary, error)
+	GetContainerLogs(ctx context.Context, id string, tail int, since time.Time, timestamps bool) (dockerengine.ContainerLogs, error)
 	GetContainerComposeConfig(ctx context.Context, id string, portainer *portainer.Client) (string, error)
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 	OpenEventStream(ctx context.Context) (io.ReadCloser, error)
@@ -340,6 +342,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(diagnosticsHTTPErrorLogger(diagService))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, gen.HealthResponse{Status: "ok", Service: "harborwatch", Version: appVersion()})
@@ -458,7 +461,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				}
 			})
 
-			r.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
+			getContainerDetail := func(w http.ResponseWriter, r *http.Request) {
 				if dockerClient == nil {
 					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
 					return
@@ -535,7 +538,44 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				// but the backend is ready for the Doctor.
 
 				writeJSON(w, http.StatusOK, detail)
-			})
+			}
+
+			getContainerLogs := func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				id := chi.URLParam(r, "id")
+				tail := parseIntQuery(r.URL.Query().Get("tail"), 300, 1, 5000)
+				timestamps := strings.EqualFold(r.URL.Query().Get("timestamps"), "true") || r.URL.Query().Get("timestamps") == "1"
+				since, err := parseSinceQuery(r.URL.Query().Get("since"), 6*time.Hour)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", "since must be a duration (e.g. 15m, 1h) or unix timestamp")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+				defer cancel()
+				logs, err := dockerClient.GetContainerLogs(ctx, id, tail, since, timestamps)
+				if err != nil {
+					if diagService != nil {
+						diagService.Log("ERROR", "DockerLogs", fmt.Sprintf("Failed to load logs for %s: %v", id, err))
+					}
+					status := http.StatusBadGateway
+					if isContainerNotFoundError(err) {
+						status = http.StatusNotFound
+					}
+					writeError(w, status, "container_logs_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, logs)
+			}
+
+			r.Get("/{id}", getContainerDetail)
+			// Backward-compatible alias for older frontend builds that still call /docker/containers/{id}.
+			r.Get("/containers/{id}", getContainerDetail)
+			r.Get("/{id}/logs", getContainerLogs)
+			// Backward-compatible alias for older frontend builds.
+			r.Get("/containers/{id}/logs", getContainerLogs)
 
 			registerRulesRoutes := func(router chi.Router) {
 				getRules := func(w http.ResponseWriter, r *http.Request) {
@@ -1001,12 +1041,110 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					writeError(w, http.StatusServiceUnavailable, "diag_unavailable", "Diagnostic service not initialized")
 					return
 				}
-				logs, err := diagService.ListLogs(r.Context(), 100)
+				limit := parseIntQuery(r.URL.Query().Get("limit"), 100, 1, 2000)
+				fetchLimit := limit
+				if fetchLimit < 500 {
+					fetchLimit = 500
+				}
+				level := strings.TrimSpace(strings.ToUpper(r.URL.Query().Get("level")))
+				source := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("source")))
+				sinceRaw := strings.TrimSpace(r.URL.Query().Get("since"))
+				var since int64
+				if sinceRaw != "" {
+					parsed, err := strconv.ParseInt(sinceRaw, 10, 64)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid_request", "since must be a unix timestamp in seconds")
+						return
+					}
+					since = parsed
+				}
+
+				logs, err := diagService.ListLogs(r.Context(), fetchLimit)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, "diag_log_failed", err.Error())
 					return
 				}
+
+				filtered := make([]diag.LogEntry, 0, min(limit, len(logs)))
+				for _, entry := range logs {
+					if level != "" && !strings.EqualFold(entry.Level, level) {
+						continue
+					}
+					if source != "" && !strings.Contains(strings.ToLower(entry.Source), source) {
+						continue
+					}
+					if since > 0 && entry.Timestamp < since {
+						continue
+					}
+					filtered = append(filtered, entry)
+					if len(filtered) >= limit {
+						break
+					}
+				}
+
+				writeJSON(w, http.StatusOK, filtered)
+			})
+		})
+
+		r.Route("/diagnostics", func(r chi.Router) {
+			r.Get("/containers/{id}/logs", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				id := chi.URLParam(r, "id")
+				tail := parseIntQuery(r.URL.Query().Get("tail"), 300, 1, 5000)
+				timestamps := strings.EqualFold(r.URL.Query().Get("timestamps"), "true") || r.URL.Query().Get("timestamps") == "1"
+				since, err := parseSinceQuery(r.URL.Query().Get("since"), 6*time.Hour)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", "since must be a duration (e.g. 15m, 1h) or unix timestamp")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+				defer cancel()
+				logs, err := dockerClient.GetContainerLogs(ctx, id, tail, since, timestamps)
+				if err != nil {
+					if diagService != nil {
+						diagService.Log("ERROR", "DockerLogs", fmt.Sprintf("Failed to load logs for %s: %v", id, err))
+					}
+					status := http.StatusBadGateway
+					if isContainerNotFoundError(err) {
+						status = http.StatusNotFound
+					}
+					writeError(w, status, "container_logs_failed", err.Error())
+					return
+				}
 				writeJSON(w, http.StatusOK, logs)
+			})
+
+			r.Get("/snapshot", func(w http.ResponseWriter, r *http.Request) {
+				snapshot, err := collectDiagnosticsSnapshot(
+					r.Context(),
+					diagnosticsDeps{
+						dockerClient: dockerClient,
+						scanService:  scanService,
+						auditService: auditService,
+						schedSvc:     schedSvc,
+						diagService:  diagService,
+					},
+					diagnosticsSnapshotOptions{
+						LogLimit:         parseIntQuery(r.URL.Query().Get("logLimit"), 300, 10, 2000),
+						AuditLimit:       parseIntQuery(r.URL.Query().Get("auditLimit"), 100, 10, 500),
+						IncludeFleet:     parseBoolQuery(r.URL.Query().Get("includeFleet"), true),
+						ContainerID:      strings.TrimSpace(r.URL.Query().Get("containerId")),
+						ContainerLogTail: parseIntQuery(r.URL.Query().Get("containerLogTail"), 250, 1, 5000),
+						ContainerSince:   r.URL.Query().Get("containerLogSince"),
+					},
+				)
+				if err != nil {
+					status := http.StatusInternalServerError
+					if strings.Contains(err.Error(), "invalid containerLogSince") {
+						status = http.StatusBadRequest
+					}
+					writeError(w, status, "diagnostics_snapshot_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, snapshot)
 			})
 		})
 
