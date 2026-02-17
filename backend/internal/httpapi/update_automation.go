@@ -1,12 +1,17 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 )
+
+type upgradeContextBuilder interface {
+	BuildUpgradeContext(ctx context.Context, repo, currentTag, targetTag string) (string, error)
+}
 
 func deriveGithubRepo(repoURL string) (string, bool) {
 	raw := strings.TrimSpace(repoURL)
@@ -62,4 +67,38 @@ func summarizeReleaseIntel(intel gen.ReleaseRiskSummary) string {
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func buildReleaseContext(ctx context.Context, releaseService ReleaseService, repo, currentTag, targetTag string) string {
+	if releaseService == nil {
+		return ""
+	}
+	if advanced, ok := releaseService.(upgradeContextBuilder); ok {
+		if text, err := advanced.BuildUpgradeContext(ctx, repo, currentTag, targetTag); err == nil {
+			if strings.TrimSpace(text) != "" {
+				return text
+			}
+		}
+	}
+	if intel, err := releaseService.Analyze(ctx, repo); err == nil {
+		return summarizeReleaseIntel(intel)
+	}
+	return ""
+}
+
+func imageTagFromRef(image string) string {
+	raw := strings.TrimSpace(image)
+	if raw == "" {
+		return "unknown"
+	}
+	withoutDigest := strings.SplitN(raw, "@", 2)[0]
+	lastSlash := strings.LastIndex(withoutDigest, "/")
+	lastColon := strings.LastIndex(withoutDigest, ":")
+	if lastColon > lastSlash {
+		tag := strings.TrimSpace(withoutDigest[lastColon+1:])
+		if tag != "" {
+			return tag
+		}
+	}
+	return "latest"
 }

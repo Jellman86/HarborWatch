@@ -13,7 +13,7 @@ All notable changes to HarborWatch are documented in this file.
   - Rules APIs now auto-fill missing validation URLs while still allowing user overrides.
 - **Update Pipeline Input Automation:**
   - `POST /api/updates/run` now auto-derives `targetImage` and `validateUrl` when omitted, using container context.
-  - Update AI analysis now includes container context and repository intelligence (when repo metadata is available).
+  - Update AI analysis now includes container context and repository intelligence grounded on release notes in the detected current->target version range (with fallback heuristics).
 
 ### Fixed
 - **ClamAV Container Scan Build/Runtime Stability:**

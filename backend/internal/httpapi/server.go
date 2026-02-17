@@ -829,10 +829,10 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				releaseContext := ""
 				if releaseService != nil {
 					if repo, ok := deriveGithubRepo(repoURL); ok {
+						currentTag := imageTagFromRef(summary.Image)
+						targetTag := imageTagFromRef(req.TargetImage)
 						releaseCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
-						if intel, err := releaseService.Analyze(releaseCtx, repo); err == nil {
-							releaseContext = summarizeReleaseIntel(intel)
-						}
+						releaseContext = buildReleaseContext(releaseCtx, releaseService, repo, currentTag, targetTag)
 						cancel()
 					}
 				}

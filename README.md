@@ -12,7 +12,7 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - **Dual-Engine Security Scanning:** Integrated vulnerability (Trivy) and malware (ClamAV) scanning with shared database persistence.
 - **High-Resolution Performance Profiling:** Real-time sparklines and detailed historical charts for CPU and Memory utilization.
 - **Unified Configuration:** Seamlessly merge `docker-compose` environment variables with persistent database settings.
-- **Automated Lifecycle Inputs:** Validation URLs and update form defaults are auto-derived from container metadata, health checks, exposed ports, and settings patterns, while remaining fully user-editable.
+- **Automated Lifecycle Inputs:** Validation URLs and update form defaults are auto-derived from container metadata, health checks, exposed ports, settings patterns, and repo-aware release context, while remaining fully user-editable.
 
 ## Reliability & Performance Notes (v0.7.1)
 
