@@ -966,8 +966,6 @@ components:
       properties:
         discordWebhookUrl: { type: string }
         discordEnabled: { type: boolean }
-        gotifyUrl: { type: string }
-        gotifyToken: { type: string }
         portainerUrl: { type: string }
         portainerApiKey: { type: string }
         portainerEnabled: { type: boolean }

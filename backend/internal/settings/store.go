@@ -13,8 +13,6 @@ type Settings struct {
 	// Notifications
 	DiscordWebhookURL string `json:"discordWebhookUrl"`
 	DiscordEnabled    bool   `json:"discordEnabled"`
-	GotifyURL         string `json:"gotifyUrl"`
-	GotifyToken       string `json:"gotifyToken"`
 
 	// API Keys / Integrations
 	PortainerURL     string `json:"portainerUrl"`
@@ -86,10 +84,6 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.DiscordWebhookURL = value
 		case "discord_enabled":
 			st.DiscordEnabled = parseStoredBool(value, st.DiscordEnabled)
-		case "gotify_url":
-			st.GotifyURL = value
-		case "gotify_token":
-			st.GotifyToken = value
 		case "portainer_url":
 			st.PortainerURL = value
 		case "portainer_api_key":
@@ -127,8 +121,6 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		envKey string
 	}{
 		"discordWebhookUrl":  {&st.DiscordWebhookURL, "DISCORD_WEBHOOK_URL"},
-		"gotifyUrl":          {&st.GotifyURL, "GOTIFY_URL"},
-		"gotifyToken":        {&st.GotifyToken, "GOTIFY_TOKEN"},
 		"portainerUrl":       {&st.PortainerURL, "PORTAINER_URL"},
 		"portainerApiKey":    {&st.PortainerApiKey, "PORTAINER_API_KEY"},
 		"aiProvider":         {&st.AIProvider, "AI_PROVIDER"},
@@ -188,8 +180,6 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	keys := map[string]string{
 		"discord_webhook_url":   st.DiscordWebhookURL,
 		"discord_enabled":       boolString(st.DiscordEnabled),
-		"gotify_url":            st.GotifyURL,
-		"gotify_token":          st.GotifyToken,
 		"portainer_url":         st.PortainerURL,
 		"portainer_api_key":     st.PortainerApiKey,
 		"portainer_enabled":     boolString(st.PortainerEnabled),
@@ -209,8 +199,6 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	jsonToDbKey := map[string]string{
 		"discordWebhookUrl":   "discord_webhook_url",
 		"discordEnabled":      "discord_enabled",
-		"gotifyUrl":           "gotify_url",
-		"gotifyToken":         "gotify_token",
 		"portainerUrl":        "portainer_url",
 		"portainerApiKey":     "portainer_api_key",
 		"portainerEnabled":    "portainer_enabled",

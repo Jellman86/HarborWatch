@@ -73,7 +73,7 @@ To ensure robustness, AI will never directly execute privileged commands. Instea
 **Goal:** Play nicely with existing homelab tools.
 
 ### 8.1. Notification Dispatcher
-*   **Channels:** Discord (Webhooks), Slack, Email (SMTP), Gotify.
+*   **Channels:** Discord (Webhooks), Slack, Email (SMTP).
 *   **Triggers:**
     *   "Critical Vulnerability Found"
     *   "Update Blocked by AI (Breaking Change Detected)"

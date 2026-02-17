@@ -212,8 +212,6 @@ type UpdateJobStatus struct {
 type Settings struct {
 	DiscordWebhookURL    string          `json:"discordWebhookUrl"`
 	DiscordEnabled       bool            `json:"discordEnabled"`
-	GotifyURL            string          `json:"gotifyUrl"`
-	GotifyToken          string          `json:"gotifyToken"`
 	PortainerURL         string          `json:"portainerUrl"`
 	PortainerApiKey      string          `json:"portainerApiKey"`
 	PortainerEnabled     bool            `json:"portainerEnabled"`

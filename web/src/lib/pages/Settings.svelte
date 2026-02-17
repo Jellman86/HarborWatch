@@ -23,8 +23,6 @@
     const defaultSettings: Settings = {
         discordWebhookUrl: "",
         discordEnabled: true,
-        gotifyUrl: "",
-        gotifyToken: "",
         portainerUrl: "",
         portainerApiKey: "",
         portainerEnabled: true,
@@ -525,14 +523,6 @@
                     <div class="space-y-2">
                         <label for="discord-webhook" class="text-[10px] font-black uppercase text-slate-400 ml-1">Discord Webhook</label>
                         <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl") || !settings.discordEnabled} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                    </div>
-                    <div class="space-y-2">
-                        <label for="gotify-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Gotify URL</label>
-                        <input id="gotify-url" bind:value={settings.gotifyUrl} disabled={isLocked("gotifyUrl")} placeholder="https://gotify.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                    </div>
-                    <div class="space-y-2">
-                        <label for="gotify-token" class="text-[10px] font-black uppercase text-slate-400 ml-1">Gotify Token</label>
-                        <input id="gotify-token" type="password" bind:value={settings.gotifyToken} disabled={isLocked("gotifyToken")} placeholder="A..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                     </div>
                     <div class="space-y-2">
                         <label for="portainer-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer URL</label>
