@@ -188,9 +188,9 @@
             } else {
                 const down = to.row > from.row;
                 // Cross-row connectors should land on side faces, alternating by row parity:
-                // row 2 -> left face, row 3 -> right face, row 4 -> left face, etc.
+                // row 2 -> right face, row 3 -> left face, row 4 -> right face, etc.
                 const fromSideRight = from.row % 2 === 0;
-                const toSideLeft = to.row % 2 === 1;
+                const toSideLeft = to.row % 2 === 0;
 
                 const startX = clamp(
                     fromSideRight ? from.right + CONNECTOR_GAP_X : from.left - CONNECTOR_GAP_X,
