@@ -278,6 +278,31 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/MalwareScanSummary'
+  /api/scans/malware/details:
+    get:
+      operationId: getMalwareScanDetails
+      parameters:
+        - in: query
+          name: target
+          required: false
+          schema: { type: string }
+        - in: query
+          name: prefix
+          required: false
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Malware scan details
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MalwareScanDetail'
   /api/scans/malware/container/{id}:
     post:
       operationId: runContainerMalwareScan
@@ -657,6 +682,9 @@ components:
         writableBytes: { type: integer, format: int64 }
         rootFsBytes: { type: integer, format: int64 }
         mountCount: { type: integer }
+        hostTotalBytes: { type: integer, format: int64 }
+        hostAvailableBytes: { type: integer, format: int64 }
+        hostUsedBytes: { type: integer, format: int64 }
     ContainerRules:
       type: object
       required: [containerId, updatePolicy]
@@ -845,6 +873,25 @@ components:
         scannedAt: { type: integer, format: int64 }
         infected: { type: boolean }
         threatsFound: { type: array, items: { type: string } }
+    MalwareThreatDetail:
+      type: object
+      properties:
+        path: { type: string }
+        signature: { type: string }
+    MalwareScanDetail:
+      type: object
+      required: [target, source, scannedAt, infected, threatsFound]
+      properties:
+        target: { type: string }
+        source: { type: string }
+        scannedAt: { type: integer, format: int64 }
+        infected: { type: boolean }
+        threatsFound: { type: array, items: { type: string } }
+        threatDetails:
+          type: array
+          items: { $ref: '#/components/schemas/MalwareThreatDetail' }
+        rawOutput: { type: string }
+        parseError: { type: string }
     ReleaseExcerpt:
       type: object
       required: [tag, text, weight]

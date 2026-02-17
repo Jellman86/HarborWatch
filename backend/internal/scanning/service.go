@@ -236,6 +236,14 @@ func (s *Service) MalwareSummariesForContainer(ctx context.Context, containerID 
 	return s.store.MalwareSummariesByPrefix(ctx, "container:"+containerID)
 }
 
+func (s *Service) MalwareDetails(ctx context.Context, target, prefix string, limit int) ([]gen.MalwareScanDetail, error) {
+	return s.store.MalwareDetails(ctx, target, prefix, limit)
+}
+
+func (s *Service) MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error) {
+	return s.store.MalwareDetails(ctx, "", "container:"+containerID, limit)
+}
+
 func newJobID() (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {

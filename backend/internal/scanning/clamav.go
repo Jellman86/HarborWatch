@@ -43,7 +43,7 @@ func (clamAVScanner) ScanPath(ctx context.Context, path string) (MalwareResult, 
 	// clamscan exit codes: 0 = no virus, 1 = virus found, 2 = error
 	cmd := exec.CommandContext(ctx, "clamscan", "--no-summary", "-r", path)
 	output, err := cmd.CombinedOutput()
-	
+
 	res := MalwareResult{
 		Target:    path,
 		Source:    "clamav",
@@ -67,17 +67,42 @@ func (clamAVScanner) ScanPath(ctx context.Context, path string) (MalwareResult, 
 }
 
 func parseClamOutput(output string) []string {
-	var threats []string
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.HasSuffix(line, " FOUND") {
-			// Example: /path/to/file: Eicar-Signature FOUND
-			parts := strings.Split(line, ": ")
-			if len(parts) >= 2 {
-				threat := strings.TrimSuffix(parts[1], " FOUND")
-				threats = append(threats, strings.TrimSpace(threat))
-			}
+	details := parseClamThreatDetails(output)
+	threats := make([]string, 0, len(details))
+	for _, d := range details {
+		if d.Signature != "" {
+			threats = append(threats, d.Signature)
 		}
 	}
 	return threats
+}
+
+type clamThreatDetail struct {
+	Path      string
+	Signature string
+}
+
+func parseClamThreatDetails(output string) []clamThreatDetail {
+	lines := strings.Split(output, "\n")
+	details := make([]clamThreatDetail, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasSuffix(line, " FOUND") {
+			continue
+		}
+
+		// Example:
+		// /path/to/file: Eicar-Signature FOUND
+		idx := strings.LastIndex(line, ": ")
+		if idx < 0 {
+			continue
+		}
+		filePath := strings.TrimSpace(line[:idx])
+		signature := strings.TrimSpace(strings.TrimSuffix(line[idx+2:], " FOUND"))
+		details = append(details, clamThreatDetail{
+			Path:      filePath,
+			Signature: signature,
+		})
+	}
+	return details
 }

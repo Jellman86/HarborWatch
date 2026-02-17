@@ -101,6 +101,12 @@ func (f fakeScanService) MalwareSummaries(ctx context.Context, target string) ([
 func (f fakeScanService) MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error) {
 	return nil, nil
 }
+func (f fakeScanService) MalwareDetails(ctx context.Context, target, prefix string, limit int) ([]gen.MalwareScanDetail, error) {
+	return nil, nil
+}
+func (f fakeScanService) MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error) {
+	return nil, nil
+}
 
 type fakeReleaseService struct{ summary gen.ReleaseRiskSummary }
 

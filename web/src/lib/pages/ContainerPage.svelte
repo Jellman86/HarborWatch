@@ -1,7 +1,9 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ContainerDetail, TrivyScanDetails } from "../api-types";
+    import type { ContainerDetail, MalwareScanDetail, TrivyScanDetails } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
+    import DiskUsagePanel from "../components/DiskUsagePanel.svelte";
+    import MalwareScanPanel from "../components/MalwareScanPanel.svelte";
     import TrivyFindingsPanel from "../components/TrivyFindingsPanel.svelte";
     import { toasts } from "../stores/ToastStore";
 
@@ -24,6 +26,8 @@
     let lifecycleMessage = $state("");
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
     let loadingVulnerabilityDetails = $state(false);
+    let malwareDetails = $state<MalwareScanDetail[]>([]);
+    let loadingMalwareDetails = $state(false);
 
     async function loadDetail(silent = false) {
         if (!silent) {
@@ -39,19 +43,24 @@
                 data.actionHistory = data.actionHistory || [];
                 data.recentMetrics = data.recentMetrics || [];
                 detail = data;
-                await loadVulnerabilityDetails(data?.summary?.image || "");
+                await Promise.all([
+                    loadVulnerabilityDetails(data?.summary?.image || ""),
+                    loadMalwareDetailsForContainer()
+                ]);
             } else {
                 const body = await res.json().catch(() => ({}));
                 if (!silent) {
                     error = body?.message || `Container lookup failed (${res.status})`;
                 }
                 vulnerabilityDetails = null;
+                malwareDetails = [];
             }
         } catch (e) {
             if (!silent) {
                 error = "Failed to load container data";
             }
             vulnerabilityDetails = null;
+            malwareDetails = [];
         } finally {
             if (!silent) {
                 loading = false;
@@ -77,6 +86,24 @@
             vulnerabilityDetails = null;
         } finally {
             loadingVulnerabilityDetails = false;
+        }
+    }
+
+    async function loadMalwareDetailsForContainer() {
+        loadingMalwareDetails = true;
+        try {
+            const prefix = `container:${id}`;
+            const res = await fetch(`/api/scans/malware/details?prefix=${encodeURIComponent(prefix)}&limit=40`);
+            if (!res.ok) {
+                malwareDetails = [];
+                return;
+            }
+            const rows = await res.json();
+            malwareDetails = Array.isArray(rows) ? rows : [];
+        } catch (e) {
+            malwareDetails = [];
+        } finally {
+            loadingMalwareDetails = false;
         }
     }
 
@@ -227,31 +254,6 @@
         });
     }
 
-    function formatMalwareTargetLabel(target: string): string {
-        const prefix = `container:${id}:`;
-        if (!target?.startsWith(prefix)) return target || "unknown";
-        const scope = target.slice(prefix.length);
-        if (scope === "rootfs") return "rootfs (/)";
-        if (scope.startsWith("mount:")) {
-            const mountPath = scope.slice("mount:".length);
-            return `mount (${mountPath || "unknown"})`;
-        }
-        return scope;
-    }
-
-    function formatBytes(value?: number): string {
-        const n = Number(value || 0);
-        if (!Number.isFinite(n) || n <= 0) return "0 B";
-        const units = ["B", "KB", "MB", "GB", "TB"];
-        let size = n;
-        let idx = 0;
-        while (size >= 1024 && idx < units.length - 1) {
-            size /= 1024;
-            idx++;
-        }
-        return `${size.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`;
-    }
-
     onMount(() => {
         loadDetail();
     });
@@ -345,6 +347,10 @@
                     <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
                         <MetricChart metrics={detail.recentMetrics || []} title="Memory footprint" type="memory" />
                     </div>
+                    <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Container disk usage</h3>
+                        <DiskUsagePanel diskUsage={detail.diskUsage} />
+                    </div>
                 </div>
             {:else if activeTab === 'security'}
                 <div class="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -378,78 +384,17 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Vulnerability details</h3>
-                            <TrivyFindingsPanel details={vulnerabilityDetails} loading={loadingVulnerabilityDetails} />
-                        </div>
-
-                        <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Container disk usage</h3>
-                            {#if detail.diskUsage}
-                                <div class="grid grid-cols-1 gap-3 text-xs">
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Writable layer</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{formatBytes(detail.diskUsage.writableBytes)} ({detail.diskUsage.writableBytes || 0} bytes)</p>
-                                    </div>
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Root filesystem</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{formatBytes(detail.diskUsage.rootFsBytes)} ({detail.diskUsage.rootFsBytes || 0} bytes)</p>
-                                    </div>
-                                    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                        <p class="text-slate-400 uppercase text-[10px] font-black">Mounted volumes</p>
-                                        <p class="font-bold text-slate-700 dark:text-slate-200">{detail.diskUsage.mountCount || 0}</p>
-                                    </div>
-                                </div>
-                            {:else}
-                                <p class="text-slate-400 italic text-sm">Disk usage data unavailable for this container.</p>
-                            {/if}
-                        </div>
+                    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                        <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Vulnerability details</h3>
+                        <TrivyFindingsPanel details={vulnerabilityDetails} loading={loadingVulnerabilityDetails} />
                     </div>
 
                     <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                         <div class="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400">Malware scan history</h3>
+                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400">Malware scan details</h3>
                         </div>
                         <div class="p-6">
-                            {#if detail.malwareSummary && detail.malwareSummary.length > 0}
-                                <table class="w-full text-left text-sm">
-                                    <thead>
-                                        <tr class="text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                                            <th class="pb-4">Date</th>
-                                            <th class="pb-4">Scope</th>
-                                            <th class="pb-4">Status</th>
-                                            <th class="pb-4">Threat details</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-slate-50 dark:divide-slate-700">
-                                        {#each detail.malwareSummary as ms}
-                                            <tr>
-                                                <td class="py-4">{new Date(ms.scannedAt * 1000).toLocaleString()}</td>
-                                                <td class="py-4 text-slate-600 dark:text-slate-300">{formatMalwareTargetLabel(ms.target)}</td>
-                                                <td class="py-4">
-                                                    <span class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase {ms.infected ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
-                                                        {ms.infected ? 'Infected' : 'Clean'}
-                                                    </span>
-                                                </td>
-                                                <td class="py-4 text-slate-500">
-                                                    {#if ms.threatsFound && ms.threatsFound.length > 0}
-                                                        <div class="flex flex-wrap gap-2">
-                                                            {#each ms.threatsFound as threat}
-                                                                <span class="px-2 py-1 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300 text-[10px] font-mono">{threat}</span>
-                                                            {/each}
-                                                        </div>
-                                                    {:else}
-                                                        <span class="text-emerald-600 dark:text-emerald-400 text-xs font-semibold">No threats found</span>
-                                                    {/if}
-                                                </td>
-                                            </tr>
-                                        {/each}
-                                    </tbody>
-                                </table>
-                            {:else}
-                                <p class="text-center py-8 text-slate-400 italic text-sm">No malware scans recorded for this container.</p>
-                            {/if}
+                            <MalwareScanPanel details={malwareDetails} loading={loadingMalwareDetails} />
                         </div>
                     </div>
                 </div>

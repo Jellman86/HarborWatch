@@ -52,6 +52,8 @@ type ScanService interface {
 	LatestDetailsForTarget(ctx context.Context, target string) (*gen.TrivyScanDetails, error)
 	MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error)
 	MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error)
+	MalwareDetails(ctx context.Context, target, prefix string, limit int) ([]gen.MalwareScanDetail, error)
+	MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error)
 }
 
 type ReleaseService interface {
@@ -788,6 +790,29 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 				writeJSON(w, http.StatusOK, summaries)
+			})
+
+			r.Get("/malware/details", func(w http.ResponseWriter, r *http.Request) {
+				if scanService == nil {
+					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+					return
+				}
+				target := strings.TrimSpace(r.URL.Query().Get("target"))
+				prefix := strings.TrimSpace(r.URL.Query().Get("prefix"))
+				limit := 25
+				if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+					if parsed, err := strconv.Atoi(raw); err == nil {
+						limit = parsed
+					}
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				details, err := scanService.MalwareDetails(ctx, target, prefix, limit)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "malware_scan_read_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, details)
 			})
 		})
 

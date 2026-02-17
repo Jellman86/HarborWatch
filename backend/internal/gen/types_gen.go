@@ -44,9 +44,12 @@ type ContainerDetail struct {
 	Rules                *ContainerRules      `json:"rules,omitempty"`
 }
 type ContainerDiskUsage struct {
-	WritableBytes int64 `json:"writableBytes,omitempty"`
-	RootFsBytes   int64 `json:"rootFsBytes,omitempty"`
-	MountCount    int   `json:"mountCount,omitempty"`
+	WritableBytes      int64 `json:"writableBytes,omitempty"`
+	RootFsBytes        int64 `json:"rootFsBytes,omitempty"`
+	MountCount         int   `json:"mountCount,omitempty"`
+	HostTotalBytes     int64 `json:"hostTotalBytes,omitempty"`
+	HostAvailableBytes int64 `json:"hostAvailableBytes,omitempty"`
+	HostUsedBytes      int64 `json:"hostUsedBytes,omitempty"`
 }
 type ContainerRules struct {
 	ContainerID         string `json:"containerId"`
@@ -131,6 +134,20 @@ type TrivyScanDetails struct {
 	Results    []TrivyResultGroup `json:"results,omitempty"`
 	RawJSON    string             `json:"rawJson,omitempty"`
 	ParseError string             `json:"parseError,omitempty"`
+}
+type MalwareThreatDetail struct {
+	Path      string `json:"path,omitempty"`
+	Signature string `json:"signature,omitempty"`
+}
+type MalwareScanDetail struct {
+	Target        string                `json:"target"`
+	Source        string                `json:"source"`
+	ScannedAt     int64                 `json:"scannedAt"`
+	Infected      bool                  `json:"infected"`
+	ThreatsFound  []string              `json:"threatsFound"`
+	ThreatDetails []MalwareThreatDetail `json:"threatDetails,omitempty"`
+	RawOutput     string                `json:"rawOutput,omitempty"`
+	ParseError    string                `json:"parseError,omitempty"`
 }
 type MalwareScanSummary struct {
 	Target       string   `json:"target"`

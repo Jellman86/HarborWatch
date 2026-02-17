@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ScanSummary, MalwareScanSummary, ScanJobStatus, ScanStartResponse, TrivyScanDetails } from "../api-types";
+    import type { MalwareScanDetail, ScanJobStatus, ScanStartResponse, ScanSummary, TrivyScanDetails } from "../api-types";
+    import MalwareScanPanel from "../components/MalwareScanPanel.svelte";
     import TrivyFindingsPanel from "../components/TrivyFindingsPanel.svelte";
 
     let { params } = $props<{
@@ -9,7 +10,6 @@
 
     // Component State
     let summary = $state<ScanSummary | null>(null);
-    let malwareSummaries = $state<MalwareScanSummary[]>([]);
     let activeJob = $state<ScanJobStatus | null>(null);
     let scanError = $state("");
     let target = $state("nginx:latest");
@@ -17,6 +17,8 @@
     let pollTimer: number | null = null;
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
     let loadingVulnerabilityDetails = $state(false);
+    let malwareDetails = $state<MalwareScanDetail[]>([]);
+    let loadingMalwareDetails = $state(false);
 
     $effect(() => {
         if (params?.target) {
@@ -39,8 +41,8 @@
                 fetch("/api/scans/malware/summary").then(r => r.ok ? r.json() : [])
             ]);
             summary = vuln;
-            malwareSummaries = (mal || []).map((m: any) => ({ ...m, threatsFound: m.threatsFound || [] }));
-            await loadVulnerabilityDetails(target);
+            void mal;
+            await Promise.all([loadVulnerabilityDetails(target), loadMalwareDetails()]);
             if (vulnerabilityDetails?.summary) {
                 summary = vulnerabilityDetails.summary;
             }
@@ -67,6 +69,28 @@
             vulnerabilityDetails = null;
         } finally {
             loadingVulnerabilityDetails = false;
+        }
+    }
+
+    async function loadMalwareDetails() {
+        const normalized = malwareTarget.trim();
+        if (!normalized) {
+            malwareDetails = [];
+            return;
+        }
+        loadingMalwareDetails = true;
+        try {
+            const res = await fetch(`/api/scans/malware/details?target=${encodeURIComponent(normalized)}&limit=25`);
+            if (!res.ok) {
+                malwareDetails = [];
+                return;
+            }
+            const rows = await res.json();
+            malwareDetails = Array.isArray(rows) ? rows : [];
+        } catch (e) {
+            malwareDetails = [];
+        } finally {
+            loadingMalwareDetails = false;
         }
     }
 
@@ -228,37 +252,10 @@
                     </button>
                 </div>
 
-                <div class="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                    {#each malwareSummaries as ms}
-                        <div class="p-4 rounded-xl border transition-all {ms.infected ? 'bg-rose-50 border-rose-100 dark:bg-rose-900/10 dark:border-rose-900/30' : 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-900/30'}">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs font-bold font-mono text-slate-500 truncate max-w-[200px]">{ms.target}</span>
-                                <span class="text-[10px] font-black uppercase {ms.infected ? 'text-rose-600' : 'text-emerald-600'}">
-                                    {ms.infected ? 'Infected' : 'Clean'}
-                                </span>
-                            </div>
-                            {#if ms.infected && ms.threatsFound.length > 0}
-                                <div class="mt-2 flex flex-wrap gap-1">
-                                    {#each ms.threatsFound as threat}
-                                        <span class="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-bold rounded uppercase">{threat}</span>
-                                    {/each}
-                                </div>
-                            {/if}
-                            <div class="mt-2 text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                                Scanned {new Date(ms.scannedAt * 1000).toLocaleDateString()}
-                            </div>
-                        </div>
-                    {:else}
-                        <div class="py-8 text-center text-slate-400 italic text-sm">No malware scan history</div>
-                    {/each}
+                <div class="space-y-3">
+                    <MalwareScanPanel details={malwareDetails} loading={loadingMalwareDetails} />
                 </div>
             </div>
         </section>
     </div>
 </div>
-
-<style>
-    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-track { @apply bg-transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { @apply bg-slate-200 dark:bg-slate-700 rounded-full; }
-</style>

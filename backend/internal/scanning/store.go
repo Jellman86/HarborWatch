@@ -157,6 +157,73 @@ func (s *Store) MalwareSummariesByPrefix(ctx context.Context, prefix string) ([]
 	return summaries, nil
 }
 
+func (s *Store) MalwareDetails(ctx context.Context, target, prefix string, limit int) ([]gen.MalwareScanDetail, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	query := `SELECT target, source, scanned_at, infected, threats_found, raw_output FROM malware_scan_results`
+	var (
+		clauses []string
+		args    []any
+	)
+	if target != "" {
+		clauses = append(clauses, "target = ?")
+		args = append(args, target)
+	}
+	if prefix != "" {
+		clauses = append(clauses, "target LIKE ?")
+		args = append(args, prefix+":%")
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY scanned_at DESC, id DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query malware details: %w", err)
+	}
+	defer rows.Close()
+
+	details := make([]gen.MalwareScanDetail, 0, limit)
+	for rows.Next() {
+		var (
+			detail     gen.MalwareScanDetail
+			infected   int
+			threatsRaw string
+			rawOutput  string
+		)
+		if err := rows.Scan(&detail.Target, &detail.Source, &detail.ScannedAt, &infected, &threatsRaw, &rawOutput); err != nil {
+			return nil, fmt.Errorf("scan malware detail: %w", err)
+		}
+		detail.Infected = infected == 1
+		detail.RawOutput = rawOutput
+		if strings.TrimSpace(threatsRaw) != "" {
+			if err := json.Unmarshal([]byte(threatsRaw), &detail.ThreatsFound); err != nil {
+				detail.ParseError = fmt.Sprintf("parse threats json: %v", err)
+			}
+		}
+		matches := parseClamThreatDetails(rawOutput)
+		detail.ThreatDetails = make([]gen.MalwareThreatDetail, 0, len(matches))
+		for _, m := range matches {
+			detail.ThreatDetails = append(detail.ThreatDetails, gen.MalwareThreatDetail{
+				Path:      m.Path,
+				Signature: m.Signature,
+			})
+		}
+		details = append(details, detail)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate malware details: %w", err)
+	}
+	return details, nil
+}
+
 func (s *Store) CreateJob(ctx context.Context, job gen.ScanJobStatus, scanType string) error {
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO scan_jobs(job_id, target, type, status, source, started_at)
