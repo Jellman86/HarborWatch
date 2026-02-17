@@ -16,9 +16,11 @@ import (
 type ScannerService interface {
 	StartScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
+	UpdateClamAVSignatures(ctx context.Context) (string, error)
 }
 
 type ContainerAutomationPolicy func(ctx context.Context, containerID string) bool
+type MalwareMountPolicy func(ctx context.Context, containerID, sourcePath string) bool
 
 // DockerPruneTask cleans up dangling images and stopped containers.
 type DockerPruneTask struct {
@@ -98,9 +100,10 @@ func (t *TrivySweepTask) Run(ctx context.Context) error {
 
 // ClamAVSweepTask scans all container host mounts for malware.
 type ClamAVSweepTask struct {
-	docker  *client.Client
-	scanner ScannerService
-	allow   ContainerAutomationPolicy
+	docker     *client.Client
+	scanner    ScannerService
+	allow      ContainerAutomationPolicy
+	allowMount MalwareMountPolicy
 }
 
 func NewClamAVSweepTask(cli *client.Client, s ScannerService, allow ...ContainerAutomationPolicy) *ClamAVSweepTask {
@@ -109,6 +112,11 @@ func NewClamAVSweepTask(cli *client.Client, s ScannerService, allow ...Container
 		task.allow = allow[0]
 	}
 	return task
+}
+
+func (t *ClamAVSweepTask) WithMountPolicy(policy MalwareMountPolicy) *ClamAVSweepTask {
+	t.allowMount = policy
+	return t
 }
 
 func (t *ClamAVSweepTask) Name() string { return "malware_sweep_clamav" }
@@ -132,14 +140,44 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 		}
 
 		for _, m := range inspect.Mounts {
-			if m.Source != "" && !seenPaths[m.Source] {
-				log.Printf("Automated Security Sweep: Triggering ClamAV scan for path %s", m.Source)
-				if _, err := t.scanner.StartMalwareScan(m.Source); err != nil {
-					log.Printf("ERROR: Failed to start automated ClamAV scan for %s: %v", m.Source, err)
+			source := strings.TrimSpace(m.Source)
+			if source == "" {
+				continue
+			}
+			if t.allowMount != nil && !t.allowMount(ctx, c.ID, source) {
+				continue
+			}
+			if !seenPaths[source] {
+				log.Printf("Automated Security Sweep: Triggering ClamAV scan for path %s", source)
+				if _, err := t.scanner.StartMalwareScan(source); err != nil {
+					log.Printf("ERROR: Failed to start automated ClamAV scan for %s: %v", source, err)
 				}
-				seenPaths[m.Source] = true
+				seenPaths[source] = true
 			}
 		}
+	}
+	return nil
+}
+
+// ClamAVSignatureUpdateTask refreshes local ClamAV signatures.
+type ClamAVSignatureUpdateTask struct {
+	scanner ScannerService
+}
+
+func NewClamAVSignatureUpdateTask(s ScannerService) *ClamAVSignatureUpdateTask {
+	return &ClamAVSignatureUpdateTask{scanner: s}
+}
+
+func (t *ClamAVSignatureUpdateTask) Name() string { return "clamav_signature_update" }
+
+func (t *ClamAVSignatureUpdateTask) Run(ctx context.Context) error {
+	log.Printf("Automated Security Sweep: Triggering ClamAV signature update")
+	summary, err := t.scanner.UpdateClamAVSignatures(ctx)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(summary) != "" {
+		log.Printf("ClamAV signature update summary: %s", summary)
 	}
 	return nil
 }

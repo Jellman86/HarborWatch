@@ -303,6 +303,29 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/MalwareScanDetail'
+  /api/scans/malware/signatures/status:
+    get:
+      operationId: getClamAVSignatureStatus
+      responses:
+        '200':
+          description: ClamAV engine and signature metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClamAVSignatureStatus'
+  /api/scans/malware/signatures/update:
+    post:
+      operationId: updateClamAVSignatures
+      responses:
+        '200':
+          description: Triggered and completed signature update
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  summary: { type: string }
   /api/scans/malware/container/{id}:
     post:
       operationId: runContainerMalwareScan
@@ -896,6 +919,18 @@ components:
           items: { $ref: '#/components/schemas/MalwareThreatDetail' }
         rawOutput: { type: string }
         parseError: { type: string }
+    ClamAVSignatureStatus:
+      type: object
+      properties:
+        engineVersion: { type: string }
+        databaseVersion: { type: string }
+        databaseTimestamp: { type: string }
+        databasePublished: { type: integer, format: int64 }
+        databaseDir: { type: string }
+        databaseFiles:
+          type: array
+          items: { type: string }
+        lastLocalUpdate: { type: integer, format: int64 }
     ReleaseExcerpt:
       type: object
       required: [tag, text, weight]
@@ -982,6 +1017,8 @@ components:
         instanceUrl: { type: string }
         validateUrlPattern: { type: string }
         uiAnimationsEnabled: { type: boolean }
+        automationIgnoredContainers: { type: string }
+        malwareIgnoredMounts: { type: string }
         environmentOverrides:
           type: object
           additionalProperties: { type: boolean }

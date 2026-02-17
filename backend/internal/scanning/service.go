@@ -83,6 +83,34 @@ func (s *Service) StartMalwareScan(target string) (gen.ScanStartResponse, error)
 	return s.StartMalwareScanPath(target, target, false)
 }
 
+func (s *Service) ClamAVSignatureStatus(ctx context.Context) (ClamAVSignatureStatus, error) {
+	statusCtx, cancel := context.WithTimeout(ctx, envDuration("HW_CLAMAV_STATUS_TIMEOUT", 10*time.Second))
+	defer cancel()
+	return ReadClamAVSignatureStatus(statusCtx)
+}
+
+func (s *Service) UpdateClamAVSignatures(ctx context.Context) (string, error) {
+	s.clamavSem <- struct{}{}
+	defer func() { <-s.clamavSem }()
+
+	updateCtx, cancel := context.WithTimeout(ctx, envDuration("HW_CLAMAV_UPDATE_TIMEOUT", 10*time.Minute))
+	defer cancel()
+	if s.diag != nil {
+		s.diag.Log("INFO", "Scanner", "Starting ClamAV signature update")
+	}
+	summary, err := UpdateClamAVSignatures(updateCtx)
+	if err != nil {
+		if s.diag != nil {
+			s.diag.Log("ERROR", "Scanner", fmt.Sprintf("ClamAV signature update failed: %v", err))
+		}
+		return summary, err
+	}
+	if s.diag != nil {
+		s.diag.Log("INFO", "Scanner", fmt.Sprintf("ClamAV signature update completed: %s", summary))
+	}
+	return summary, nil
+}
+
 func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
 	targetLabel = strings.TrimSpace(targetLabel)
 	scanPath = strings.TrimSpace(scanPath)

@@ -20,6 +20,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	"github.com/Jellman86/HarborWatch/backend/internal/rules"
+	"github.com/Jellman86/HarborWatch/backend/internal/scanning"
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
@@ -78,6 +79,12 @@ func (f fakeScanService) StartMalwareScan(target string) (gen.ScanStartResponse,
 }
 func (f fakeScanService) StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
 	return f.startResp, nil
+}
+func (f fakeScanService) ClamAVSignatureStatus(ctx context.Context) (scanning.ClamAVSignatureStatus, error) {
+	return scanning.ClamAVSignatureStatus{EngineVersion: "ClamAV 1.4.0"}, nil
+}
+func (f fakeScanService) UpdateClamAVSignatures(ctx context.Context) (string, error) {
+	return "up to date", nil
 }
 func (f fakeScanService) Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error) {
 	j, ok := f.jobs[jobID]

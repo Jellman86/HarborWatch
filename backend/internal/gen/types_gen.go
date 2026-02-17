@@ -153,6 +153,15 @@ type MalwareScanDetail struct {
 	RawOutput     string                `json:"rawOutput,omitempty"`
 	ParseError    string                `json:"parseError,omitempty"`
 }
+type ClamAVSignatureStatus struct {
+	EngineVersion     string   `json:"engineVersion"`
+	DatabaseVersion   string   `json:"databaseVersion,omitempty"`
+	DatabaseTimestamp string   `json:"databaseTimestamp,omitempty"`
+	DatabasePublished int64    `json:"databasePublished,omitempty"`
+	DatabaseDir       string   `json:"databaseDir,omitempty"`
+	DatabaseFiles     []string `json:"databaseFiles,omitempty"`
+	LastLocalUpdate   int64    `json:"lastLocalUpdate,omitempty"`
+}
 type MalwareScanSummary struct {
 	Target       string   `json:"target"`
 	Source       string   `json:"source"`
@@ -210,21 +219,23 @@ type UpdateJobStatus struct {
 	Steps       []UpdateStepEvent  `json:"steps"`
 }
 type Settings struct {
-	DiscordWebhookURL    string          `json:"discordWebhookUrl"`
-	DiscordEnabled       bool            `json:"discordEnabled"`
-	PortainerURL         string          `json:"portainerUrl"`
-	PortainerApiKey      string          `json:"portainerApiKey"`
-	PortainerEnabled     bool            `json:"portainerEnabled"`
-	AIEnabled            bool            `json:"aiEnabled"`
-	AIProvider           string          `json:"aiProvider"`
-	OpenAIKey            string          `json:"openaiKey"`
-	OpenAIModel          string          `json:"openaiModel"`
-	AnthropicKey         string          `json:"anthropicKey"`
-	AnthropicModel       string          `json:"anthropicModel"`
-	GeminiKey            string          `json:"geminiKey"`
-	GeminiModel          string          `json:"geminiModel"`
-	InstanceURL          string          `json:"instanceUrl"`
-	ValidateURLPattern   string          `json:"validateUrlPattern"`
-	UIAnimationsEnabled  bool            `json:"uiAnimationsEnabled"`
-	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
+	DiscordWebhookURL           string          `json:"discordWebhookUrl"`
+	DiscordEnabled              bool            `json:"discordEnabled"`
+	PortainerURL                string          `json:"portainerUrl"`
+	PortainerApiKey             string          `json:"portainerApiKey"`
+	PortainerEnabled            bool            `json:"portainerEnabled"`
+	AIEnabled                   bool            `json:"aiEnabled"`
+	AIProvider                  string          `json:"aiProvider"`
+	OpenAIKey                   string          `json:"openaiKey"`
+	OpenAIModel                 string          `json:"openaiModel"`
+	AnthropicKey                string          `json:"anthropicKey"`
+	AnthropicModel              string          `json:"anthropicModel"`
+	GeminiKey                   string          `json:"geminiKey"`
+	GeminiModel                 string          `json:"geminiModel"`
+	InstanceURL                 string          `json:"instanceUrl"`
+	ValidateURLPattern          string          `json:"validateUrlPattern"`
+	UIAnimationsEnabled         bool            `json:"uiAnimationsEnabled"`
+	AutomationIgnoredContainers string          `json:"automationIgnoredContainers"`
+	MalwareIgnoredMounts        string          `json:"malwareIgnoredMounts"`
+	EnvironmentOverrides        map[string]bool `json:"environmentOverrides"`
 }

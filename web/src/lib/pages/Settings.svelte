@@ -29,6 +29,16 @@
         label: string;
     }
 
+    interface ClamAVSignatureStatus {
+        engineVersion: string;
+        databaseVersion?: string;
+        databaseTimestamp?: string;
+        databasePublished?: number;
+        databaseDir?: string;
+        databaseFiles?: string[];
+        lastLocalUpdate?: number;
+    }
+
     const weekdayOptions: Array<{ value: number; label: string }> = [
         { value: 0, label: "Sun" },
         { value: 1, label: "Mon" },
@@ -57,6 +67,8 @@
         instanceUrl: "",
         validateUrlPattern: "",
         uiAnimationsEnabled: true,
+        automationIgnoredContainers: "harborwatch",
+        malwareIgnoredMounts: "",
         environmentOverrides: {}
     };
 
@@ -71,6 +83,9 @@
     let saving = $state(false);
     let savingScheduleId = $state("");
     let testingProvider = $state("");
+    let clamavStatus = $state<ClamAVSignatureStatus | null>(null);
+    let clamavStatusLoading = $state(false);
+    let clamavUpdating = $state(false);
 
     // Latest curated model choices (validated against provider docs, February 2026).
     const latestModelsByProvider: Record<AIProvider, ModelOption[]> = {
@@ -116,7 +131,7 @@
             title: "Security Automation",
             subtitle: "Continuously sweep vulnerabilities and malware",
             accent: "#f97316",
-            tasks: ["security_sweep_trivy", "malware_sweep_clamav"],
+            tasks: ["security_sweep_trivy", "malware_sweep_clamav", "clamav_signature_update"],
             flow: ["Inventory Assets", "Run Trivy", "Run ClamAV", "Prioritize Findings", "Escalate Action"]
         }
     };
@@ -155,8 +170,16 @@
     async function setDomainEnabled(domain: AutomationDomain, enabled: boolean) {
         const scoped = schedulesForDomain(domain);
         try {
+            let changed = 0;
             for (const task of scoped) {
+                if (task.enabled === enabled) continue;
                 await setScheduleEnabled(task.id, enabled);
+                changed += 1;
+            }
+            if (changed === 0) {
+                toasts.info(`${automationConfig[domain].title} already ${enabled ? "enabled" : "disabled"}.`);
+            } else {
+                toasts.success(`${enabled ? "Enabled" : "Disabled"} ${automationConfig[domain].title} (${changed} task${changed === 1 ? "" : "s"}).`);
             }
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to toggle automation domain");
@@ -340,10 +363,23 @@
         syncScheduleDrafts();
     }
 
+    async function loadClamAVStatus() {
+        clamavStatusLoading = true;
+        try {
+            const res = await fetch("/api/scans/malware/signatures/status");
+            if (!res.ok) throw new Error(`clamav status failed (${res.status})`);
+            clamavStatus = await res.json();
+        } catch {
+            clamavStatus = null;
+        } finally {
+            clamavStatusLoading = false;
+        }
+    }
+
     async function loadAll() {
         loading = true;
         try {
-            await Promise.all([loadSettings(), loadSchedules()]);
+            await Promise.all([loadSettings(), loadSchedules(), loadClamAVStatus()]);
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to load settings");
         } finally {
@@ -387,8 +423,26 @@
             if (!res.ok) throw new Error(`run failed (${res.status})`);
             toasts.success(`Task ${taskLabel(id)} triggered.`);
             await loadSchedules();
+            if (id === "clamav_signature_update") {
+                setTimeout(() => { void loadClamAVStatus(); }, 1000);
+            }
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to run task");
+        }
+    }
+
+    async function updateClamAVSignaturesNow() {
+        clamavUpdating = true;
+        try {
+            const res = await fetch("/api/scans/malware/signatures/update", { method: "POST" });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body?.message || `signature update failed (${res.status})`);
+            toasts.success("ClamAV signatures updated.");
+            await Promise.all([loadSchedules(), loadClamAVStatus()]);
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "ClamAV signature update failed");
+        } finally {
+            clamavUpdating = false;
         }
     }
 
@@ -469,6 +523,7 @@
             case "diag_log_prune": return "Diagnostics Log Prune";
             case "security_sweep_trivy": return "Trivy Security Sweep";
             case "malware_sweep_clamav": return "ClamAV Malware Sweep";
+            case "clamav_signature_update": return "ClamAV Signature Update";
             default: return id.replace(/_/g, " ");
         }
     }
@@ -565,6 +620,37 @@
                         >
                             Disable Domain
                         </button>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Safety Exclusions</p>
+                    <p class="text-[11px] text-slate-500 mt-1">Ignored containers are excluded from automated update and security tasks. HarborWatch is always included for self-protection.</p>
+                    <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label for="automation-ignore-containers" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</label>
+                            <textarea
+                                id="automation-ignore-containers"
+                                rows="3"
+                                bind:value={settings.automationIgnoredContainers}
+                                disabled={isLocked("automationIgnoredContainers")}
+                                placeholder="harborwatch, plex, qbittorrent"
+                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                            ></textarea>
+                            <p class="text-[11px] text-slate-500">Use container name, image text, or ID prefix. Separate entries with commas or new lines.</p>
+                        </div>
+                        <div class="space-y-2">
+                            <label for="malware-ignore-mounts" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
+                            <textarea
+                                id="malware-ignore-mounts"
+                                rows="3"
+                                bind:value={settings.malwareIgnoredMounts}
+                                disabled={isLocked("malwareIgnoredMounts")}
+                                placeholder="/mnt/media, /srv/plex-library"
+                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                            ></textarea>
+                            <p class="text-[11px] text-slate-500">These path patterns are skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
+                        </div>
                     </div>
                 </div>
 
@@ -810,6 +896,67 @@
                     >
                         <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {(scheduleById('metrics_collector')?.enabled ?? false) ? 'right-1' : 'left-1'}"></div>
                     </button>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">ClamAV Signatures</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Manage malware signature definition freshness and update cadence.</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button
+                                onclick={loadClamAVStatus}
+                                disabled={clamavStatusLoading}
+                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
+                            >
+                                {clamavStatusLoading ? "Refreshing..." : "Refresh Status"}
+                            </button>
+                            <button
+                                onclick={updateClamAVSignaturesNow}
+                                disabled={clamavUpdating}
+                                class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                            >
+                                {clamavUpdating ? "Updating..." : "Update Now"}
+                            </button>
+                            {#if scheduleById("clamav_signature_update")}
+                                <button
+                                    onclick={() => toggleTask("clamav_signature_update", scheduleById("clamav_signature_update")?.enabled ?? false)}
+                                    class="w-10 h-5 rounded-full relative transition-colors {(scheduleById('clamav_signature_update')?.enabled ?? false) ? 'bg-brand-600' : 'bg-slate-300'}"
+                                    aria-label="Toggle automated signature update"
+                                >
+                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {(scheduleById('clamav_signature_update')?.enabled ?? false) ? 'right-1' : 'left-1'}"></div>
+                                </button>
+                            {/if}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-4 gap-3">
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Engine</p>
+                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1 break-all">{clamavStatus?.engineVersion || "Unavailable"}</p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Signature Version</p>
+                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databaseVersion || "Unknown"}</p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Published</p>
+                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databasePublished ? new Date(clamavStatus.databasePublished * 1000).toLocaleString() : (clamavStatus?.databaseTimestamp || "Unknown")}</p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Local DB Updated</p>
+                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.lastLocalUpdate ? new Date(clamavStatus.lastLocalUpdate * 1000).toLocaleString() : "Unknown"}</p>
+                        </div>
+                    </div>
+
+                    <p class="text-[11px] text-slate-500">
+                        {#if scheduleById("clamav_signature_update")}
+                            Automation schedule: <span class="font-bold">{cronLabel(scheduleById("clamav_signature_update")?.cronSpec || "")}</span>.
+                        {:else}
+                            Signature update scheduler task is not registered.
+                        {/if}
+                    </p>
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">

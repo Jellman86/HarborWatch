@@ -28,9 +28,11 @@ type Settings struct {
 	GeminiModel      string `json:"geminiModel"`
 
 	// System
-	InstanceURL         string `json:"instanceUrl"`
-	ValidateURLPattern  string `json:"validateUrlPattern"`
-	UIAnimationsEnabled bool   `json:"uiAnimationsEnabled"`
+	InstanceURL                 string `json:"instanceUrl"`
+	ValidateURLPattern          string `json:"validateUrlPattern"`
+	UIAnimationsEnabled         bool   `json:"uiAnimationsEnabled"`
+	AutomationIgnoredContainers string `json:"automationIgnoredContainers"`
+	MalwareIgnoredMounts        string `json:"malwareIgnoredMounts"`
 
 	// Metadata (read-only info for UI)
 	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
@@ -60,11 +62,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 func (s *Store) Get(ctx context.Context) (Settings, error) {
 	st := Settings{
-		AIEnabled:            true,
-		DiscordEnabled:       true,
-		PortainerEnabled:     true,
-		UIAnimationsEnabled:  true,
-		EnvironmentOverrides: make(map[string]bool),
+		AIEnabled:                   true,
+		DiscordEnabled:              true,
+		PortainerEnabled:            true,
+		UIAnimationsEnabled:         true,
+		AutomationIgnoredContainers: "harborwatch",
+		EnvironmentOverrides:        make(map[string]bool),
 	}
 
 	// 1. Load from Database
@@ -112,6 +115,10 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.ValidateURLPattern = value
 		case "ui_animations_enabled":
 			st.UIAnimationsEnabled = parseStoredBool(value, st.UIAnimationsEnabled)
+		case "automation_ignored_containers":
+			st.AutomationIgnoredContainers = value
+		case "malware_ignored_mounts":
+			st.MalwareIgnoredMounts = value
 		}
 	}
 
@@ -120,18 +127,20 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		ptr    *string
 		envKey string
 	}{
-		"discordWebhookUrl":  {&st.DiscordWebhookURL, "DISCORD_WEBHOOK_URL"},
-		"portainerUrl":       {&st.PortainerURL, "PORTAINER_URL"},
-		"portainerApiKey":    {&st.PortainerApiKey, "PORTAINER_API_KEY"},
-		"aiProvider":         {&st.AIProvider, "AI_PROVIDER"},
-		"openaiKey":          {&st.OpenAIKey, "OPENAI_API_KEY"},
-		"openaiModel":        {&st.OpenAIModel, "OPENAI_MODEL"},
-		"anthropicKey":       {&st.AnthropicKey, "ANTHROPIC_API_KEY"},
-		"anthropicModel":     {&st.AnthropicModel, "ANTHROPIC_MODEL"},
-		"geminiKey":          {&st.GeminiKey, "GEMINI_API_KEY"},
-		"geminiModel":        {&st.GeminiModel, "GEMINI_MODEL"},
-		"instanceUrl":        {&st.InstanceURL, "HW_INSTANCE_URL"},
-		"validateUrlPattern": {&st.ValidateURLPattern, "HW_VALIDATE_PATTERN"},
+		"discordWebhookUrl":           {&st.DiscordWebhookURL, "DISCORD_WEBHOOK_URL"},
+		"portainerUrl":                {&st.PortainerURL, "PORTAINER_URL"},
+		"portainerApiKey":             {&st.PortainerApiKey, "PORTAINER_API_KEY"},
+		"aiProvider":                  {&st.AIProvider, "AI_PROVIDER"},
+		"openaiKey":                   {&st.OpenAIKey, "OPENAI_API_KEY"},
+		"openaiModel":                 {&st.OpenAIModel, "OPENAI_MODEL"},
+		"anthropicKey":                {&st.AnthropicKey, "ANTHROPIC_API_KEY"},
+		"anthropicModel":              {&st.AnthropicModel, "ANTHROPIC_MODEL"},
+		"geminiKey":                   {&st.GeminiKey, "GEMINI_API_KEY"},
+		"geminiModel":                 {&st.GeminiModel, "GEMINI_MODEL"},
+		"instanceUrl":                 {&st.InstanceURL, "HW_INSTANCE_URL"},
+		"validateUrlPattern":          {&st.ValidateURLPattern, "HW_VALIDATE_PATTERN"},
+		"automationIgnoredContainers": {&st.AutomationIgnoredContainers, "HW_AUTOMATION_IGNORE_CONTAINERS"},
+		"malwareIgnoredMounts":        {&st.MalwareIgnoredMounts, "HW_MALWARE_IGNORE_MOUNTS"},
 	}
 
 	for jsonKey, mapping := range envMap {
@@ -163,6 +172,9 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		}
 	}
 
+	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
+	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
+
 	return st, nil
 }
 
@@ -170,6 +182,8 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	// Only save values that are NOT currently overridden by environment variables
 	// Load current state to check overrides
 	current, _ := s.Get(ctx)
+	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
+	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -178,41 +192,45 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	defer tx.Rollback()
 
 	keys := map[string]string{
-		"discord_webhook_url":   st.DiscordWebhookURL,
-		"discord_enabled":       boolString(st.DiscordEnabled),
-		"portainer_url":         st.PortainerURL,
-		"portainer_api_key":     st.PortainerApiKey,
-		"portainer_enabled":     boolString(st.PortainerEnabled),
-		"ai_enabled":            boolString(st.AIEnabled),
-		"ai_provider":           st.AIProvider,
-		"openai_key":            st.OpenAIKey,
-		"openai_model":          st.OpenAIModel,
-		"anthropic_key":         st.AnthropicKey,
-		"anthropic_model":       st.AnthropicModel,
-		"gemini_key":            st.GeminiKey,
-		"gemini_model":          st.GeminiModel,
-		"instance_url":          st.InstanceURL,
-		"validate_url_pattern":  st.ValidateURLPattern,
-		"ui_animations_enabled": boolString(st.UIAnimationsEnabled),
+		"discord_webhook_url":           st.DiscordWebhookURL,
+		"discord_enabled":               boolString(st.DiscordEnabled),
+		"portainer_url":                 st.PortainerURL,
+		"portainer_api_key":             st.PortainerApiKey,
+		"portainer_enabled":             boolString(st.PortainerEnabled),
+		"ai_enabled":                    boolString(st.AIEnabled),
+		"ai_provider":                   st.AIProvider,
+		"openai_key":                    st.OpenAIKey,
+		"openai_model":                  st.OpenAIModel,
+		"anthropic_key":                 st.AnthropicKey,
+		"anthropic_model":               st.AnthropicModel,
+		"gemini_key":                    st.GeminiKey,
+		"gemini_model":                  st.GeminiModel,
+		"instance_url":                  st.InstanceURL,
+		"validate_url_pattern":          st.ValidateURLPattern,
+		"ui_animations_enabled":         boolString(st.UIAnimationsEnabled),
+		"automation_ignored_containers": st.AutomationIgnoredContainers,
+		"malware_ignored_mounts":        st.MalwareIgnoredMounts,
 	}
 
 	jsonToDbKey := map[string]string{
-		"discordWebhookUrl":   "discord_webhook_url",
-		"discordEnabled":      "discord_enabled",
-		"portainerUrl":        "portainer_url",
-		"portainerApiKey":     "portainer_api_key",
-		"portainerEnabled":    "portainer_enabled",
-		"aiEnabled":           "ai_enabled",
-		"aiProvider":          "ai_provider",
-		"openaiKey":           "openai_key",
-		"openaiModel":         "openai_model",
-		"anthropicKey":        "anthropic_key",
-		"anthropicModel":      "anthropic_model",
-		"geminiKey":           "gemini_key",
-		"geminiModel":         "gemini_model",
-		"instanceUrl":         "instance_url",
-		"validateUrlPattern":  "validate_url_pattern",
-		"uiAnimationsEnabled": "ui_animations_enabled",
+		"discordWebhookUrl":           "discord_webhook_url",
+		"discordEnabled":              "discord_enabled",
+		"portainerUrl":                "portainer_url",
+		"portainerApiKey":             "portainer_api_key",
+		"portainerEnabled":            "portainer_enabled",
+		"aiEnabled":                   "ai_enabled",
+		"aiProvider":                  "ai_provider",
+		"openaiKey":                   "openai_key",
+		"openaiModel":                 "openai_model",
+		"anthropicKey":                "anthropic_key",
+		"anthropicModel":              "anthropic_model",
+		"geminiKey":                   "gemini_key",
+		"geminiModel":                 "gemini_model",
+		"instanceUrl":                 "instance_url",
+		"validateUrlPattern":          "validate_url_pattern",
+		"uiAnimationsEnabled":         "ui_animations_enabled",
+		"automationIgnoredContainers": "automation_ignored_containers",
+		"malwareIgnoredMounts":        "malware_ignored_mounts",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {
@@ -252,4 +270,47 @@ func boolString(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func normalizeContainerIgnoreList(raw string) string {
+	tokens := normalizeDelimitedList(raw)
+	for _, token := range splitDelimitedList(tokens) {
+		if strings.EqualFold(token, "harborwatch") {
+			return tokens
+		}
+	}
+	if tokens == "" {
+		return "harborwatch"
+	}
+	return tokens + ", harborwatch"
+}
+
+func normalizeDelimitedList(raw string) string {
+	parts := splitDelimitedList(raw)
+	seen := make(map[string]struct{}, len(parts))
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		key := strings.ToLower(part)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, part)
+	}
+	return strings.Join(out, ", ")
+}
+
+func splitDelimitedList(raw string) []string {
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
+	})
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		part := strings.TrimSpace(field)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
 }

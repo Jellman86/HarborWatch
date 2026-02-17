@@ -46,6 +46,8 @@ type ScanService interface {
 	StartScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
+	ClamAVSignatureStatus(ctx context.Context) (scanning.ClamAVSignatureStatus, error)
+	UpdateClamAVSignatures(ctx context.Context) (string, error)
 	Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
 	LatestSummary(ctx context.Context) (*gen.ScanSummary, error)
 	LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error)
@@ -265,7 +267,63 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		return true
 	}
 
+	loadRuntimeSettings := func(ctx context.Context) settings.Settings {
+		st := settings.Settings{AutomationIgnoredContainers: "harborwatch"}
+		if settingsStore == nil {
+			return st
+		}
+		settingsCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		loaded, err := settingsStore.Get(settingsCtx)
+		if err != nil {
+			return st
+		}
+		return loaded
+	}
+
+	isIgnoredContainer := func(ctx context.Context, containerID string) bool {
+		containerID = strings.TrimSpace(containerID)
+		if containerID == "" {
+			return false
+		}
+		st := loadRuntimeSettings(ctx)
+		tokens := append(splitDelimitedTokens(st.AutomationIgnoredContainers), "harborwatch")
+		seen := map[string]struct{}{}
+		unique := make([]string, 0, len(tokens))
+		for _, token := range tokens {
+			key := strings.ToLower(strings.TrimSpace(token))
+			if key == "" {
+				continue
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			unique = append(unique, token)
+		}
+
+		summary := gen.ContainerSummary{ID: containerID}
+		if dockerClient != nil {
+			inspectCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			if c, err := dockerClient.GetContainer(inspectCtx, containerID); err == nil {
+				summary = c
+			}
+			cancel()
+		}
+		return containerMatchesAnyToken(summary, unique)
+	}
+
+	isIgnoredMalwareMount := func(ctx context.Context, sourcePath string) bool {
+		st := loadRuntimeSettings(ctx)
+		patterns := splitDelimitedTokens(st.MalwareIgnoredMounts)
+		return pathMatchesAnyPattern(sourcePath, patterns)
+	}
+
 	containerAutomationEnabled := func(ctx context.Context, containerID, domain string) bool {
+		if isIgnoredContainer(ctx, containerID) {
+			return false
+		}
+
 		taskID := ""
 		switch strings.ToLower(strings.TrimSpace(domain)) {
 		case "upgrades":
@@ -379,12 +437,35 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				schedSvc.RegisterTask("malware_sweep_clamav", func() scheduler.Task {
 					return scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
 						return containerAutomationEnabled(ctx, containerID, "security")
+					}).WithMountPolicy(func(ctx context.Context, containerID, sourcePath string) bool {
+						if isIgnoredMalwareMount(ctx, sourcePath) {
+							if diagService != nil {
+								diagService.Log("INFO", "Scheduler", fmt.Sprintf("Skipping malware mount for %s: %s", containerID, sourcePath))
+							}
+							return false
+						}
+						return true
 					})
 				})
 				if err := schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
 					return containerAutomationEnabled(ctx, containerID, "security")
+				}).WithMountPolicy(func(ctx context.Context, containerID, sourcePath string) bool {
+					if isIgnoredMalwareMount(ctx, sourcePath) {
+						if diagService != nil {
+							diagService.Log("INFO", "Scheduler", fmt.Sprintf("Skipping malware mount for %s: %s", containerID, sourcePath))
+						}
+						return false
+					}
+					return true
 				}), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task malware_sweep_clamav: %v", err))
+				}
+
+				schedSvc.RegisterTask("clamav_signature_update", func() scheduler.Task {
+					return scheduler.NewClamAVSignatureUpdateTask(scanService)
+				})
+				if err := schedSvc.AddTask("0 30 2 * * *", scheduler.NewClamAVSignatureUpdateTask(scanService), true); err != nil && diagService != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task clamav_signature_update: %v", err))
 				}
 			}
 		}
@@ -784,6 +865,36 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 				writeJSON(w, http.StatusAccepted, resp)
+			})
+
+			r.Get("/malware/signatures/status", func(w http.ResponseWriter, r *http.Request) {
+				if scanService == nil {
+					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+				defer cancel()
+				status, err := scanService.ClamAVSignatureStatus(ctx)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "clamav_status_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, status)
+			})
+
+			r.Post("/malware/signatures/update", func(w http.ResponseWriter, r *http.Request) {
+				if scanService == nil {
+					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+				defer cancel()
+				summary, err := scanService.UpdateClamAVSignatures(ctx)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "clamav_update_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "summary": summary})
 			})
 
 			r.Post("/malware/container/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -1634,6 +1745,102 @@ func convertEvent(raw []byte) gen.DockerEvent {
 		action = event.Status
 	}
 	return gen.DockerEvent{Type: event.Type, Action: action, ID: id, From: event.From, Attributes: event.Actor.Attributes, Time: event.Time}
+}
+
+func splitDelimitedTokens(raw string) []string {
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
+	})
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		token := strings.TrimSpace(field)
+		if token == "" {
+			continue
+		}
+		out = append(out, token)
+	}
+	return out
+}
+
+func containerMatchesAnyToken(summary gen.ContainerSummary, tokens []string) bool {
+	for _, token := range tokens {
+		if containerMatchesToken(summary, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func containerMatchesToken(summary gen.ContainerSummary, token string) bool {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" {
+		return false
+	}
+
+	id := strings.ToLower(strings.TrimSpace(summary.ID))
+	if id != "" && (id == token || strings.HasPrefix(id, token)) {
+		return true
+	}
+
+	image := strings.ToLower(strings.TrimSpace(summary.Image))
+	if image != "" && (image == token || strings.Contains(image, token)) {
+		return true
+	}
+
+	for _, name := range summary.Names {
+		normalized := strings.ToLower(strings.Trim(strings.TrimSpace(name), "/"))
+		if normalized == "" {
+			continue
+		}
+		if normalized == token || strings.Contains(normalized, token) {
+			return true
+		}
+	}
+
+	for _, value := range summary.Labels {
+		labelValue := strings.ToLower(strings.TrimSpace(value))
+		if labelValue == "" {
+			continue
+		}
+		if labelValue == token || strings.Contains(labelValue, token) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func pathMatchesAnyPattern(sourcePath string, patterns []string) bool {
+	sourcePath = strings.ToLower(filepath.Clean(strings.TrimSpace(sourcePath)))
+	if sourcePath == "" {
+		return false
+	}
+	for _, raw := range patterns {
+		pattern := strings.TrimSpace(raw)
+		if pattern == "" {
+			continue
+		}
+		patternLower := strings.ToLower(pattern)
+		if strings.ContainsAny(patternLower, "*?[]") {
+			if ok, _ := filepath.Match(patternLower, sourcePath); ok {
+				return true
+			}
+			if ok, _ := filepath.Match(patternLower, filepath.Base(sourcePath)); ok {
+				return true
+			}
+		}
+		cleaned := strings.ToLower(filepath.Clean(patternLower))
+		if strings.HasPrefix(cleaned, "/") {
+			if sourcePath == cleaned || strings.HasPrefix(sourcePath, cleaned+"/") {
+				return true
+			}
+			continue
+		}
+		if strings.Contains(sourcePath, cleaned) {
+			return true
+		}
+	}
+	return false
 }
 
 func generateFleetAdvice(containers []gen.ContainerSummary, aiEnabled bool) string {
