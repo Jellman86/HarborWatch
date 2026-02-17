@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -25,15 +26,23 @@ type Service struct {
 
 	mu   sync.RWMutex
 	jobs map[string]gen.ScanJobStatus
+
+	// Concurrency guards to avoid spawning too many heavy scanners at once.
+	trivySem  chan struct{}
+	clamavSem chan struct{}
 }
 
 func NewService(scanner Scanner, malwareScanner MalwareScanner, store *Store, diag DiagService) *Service {
+	trivyConcurrency := envInt("HW_TRIVY_MAX_CONCURRENCY", 2, 1, 16)
+	clamavConcurrency := envInt("HW_CLAMAV_MAX_CONCURRENCY", 1, 1, 8)
 	return &Service{
 		scanner:        scanner,
 		malwareScanner: malwareScanner,
 		store:          store,
 		diag:           diag,
 		jobs:           map[string]gen.ScanJobStatus{},
+		trivySem:       make(chan struct{}, trivyConcurrency),
+		clamavSem:      make(chan struct{}, clamavConcurrency),
 	}
 }
 
@@ -96,6 +105,9 @@ func (s *Service) StartMalwareScan(target string) (gen.ScanStartResponse, error)
 }
 
 func (s *Service) run(jobID, target string) {
+	s.trivySem <- struct{}{}
+	defer func() { <-s.trivySem }()
+
 	ctx, cancel := context.WithTimeout(context.Background(), envDuration("HW_TRIVY_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
 
@@ -122,6 +134,9 @@ func (s *Service) run(jobID, target string) {
 }
 
 func (s *Service) runMalware(jobID, target string) {
+	s.clamavSem <- struct{}{}
+	defer func() { <-s.clamavSem }()
+
 	ctx, cancel := context.WithTimeout(context.Background(), envDuration("HW_CLAMAV_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
 
@@ -212,4 +227,22 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+func envInt(key string, fallback, minValue, maxValue int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	if parsed < minValue {
+		return minValue
+	}
+	if parsed > maxValue {
+		return maxValue
+	}
+	return parsed
 }

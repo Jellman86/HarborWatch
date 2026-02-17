@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/docker/docker/api/types/container"
@@ -30,7 +31,7 @@ func (t *DockerPruneTask) Name() string { return "docker_system_prune" }
 
 func (t *DockerPruneTask) Run(ctx context.Context) error {
 	log.Println("Starting automated Docker system prune...")
-	
+
 	// Prune Images
 	report, err := t.docker.ImagesPrune(ctx, filters.NewArgs(filters.Arg("dangling", "true")))
 	if err != nil {
@@ -66,10 +67,20 @@ func (t *TrivySweepTask) Run(ctx context.Context) error {
 		return err
 	}
 
+	seenImages := make(map[string]struct{}, len(containers))
 	for _, c := range containers {
-		log.Printf("Automated Security Sweep: Triggering Trivy scan for %s", c.Image)
-		if _, err := t.scanner.StartScan(c.Image); err != nil {
-			log.Printf("ERROR: Failed to start automated Trivy scan for %s: %v", c.Image, err)
+		image := strings.TrimSpace(c.Image)
+		if image == "" {
+			continue
+		}
+		if _, ok := seenImages[image]; ok {
+			continue
+		}
+		seenImages[image] = struct{}{}
+
+		log.Printf("Automated Security Sweep: Triggering Trivy scan for %s", image)
+		if _, err := t.scanner.StartScan(image); err != nil {
+			log.Printf("ERROR: Failed to start automated Trivy scan for %s: %v", image, err)
 		}
 	}
 	return nil
