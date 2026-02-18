@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -20,6 +22,12 @@ type Service struct {
 	client *http.Client
 }
 
+type repoSpec struct {
+	provider string
+	host     string
+	path     string
+}
+
 func NewService() *Service {
 	return &Service{client: &http.Client{Timeout: 20 * time.Second}}
 }
@@ -28,17 +36,18 @@ func (s *Service) Analyze(ctx context.Context, repo string) (gen.ReleaseRiskSumm
 	if strings.TrimSpace(repo) == "" {
 		repo = defaultRepo()
 	}
-	if !validRepo(repo) {
-		return gen.ReleaseRiskSummary{}, fmt.Errorf("invalid repo format: expected owner/name")
+	spec, err := parseRepoSpec(repo)
+	if err != nil {
+		return gen.ReleaseRiskSummary{}, err
 	}
 
-	releases, err := s.fetchReleases(ctx, repo)
+	releases, err := s.fetchReleases(ctx, spec)
 	if err != nil {
 		return gen.ReleaseRiskSummary{}, err
 	}
 
 	summary := gen.ReleaseRiskSummary{
-		Repo:                repo,
+		Repo:                spec.display(),
 		ReleasesAnalyzed:    len(releases),
 		GeneratedAt:         time.Now().UTC().Unix(),
 		HighlightedExcerpts: []gen.ReleaseExcerpt{},
@@ -80,21 +89,42 @@ func (s *Service) BuildUpgradeContext(ctx context.Context, repo, currentTag, tar
 	if strings.TrimSpace(repo) == "" {
 		repo = defaultRepo()
 	}
-	if !validRepo(repo) {
-		return "", fmt.Errorf("invalid repo format: expected owner/name")
+	spec, err := parseRepoSpec(repo)
+	if err != nil {
+		return "", err
 	}
 
-	releases, err := s.fetchReleases(ctx, repo)
+	releases, err := s.fetchReleases(ctx, spec)
 	if err != nil {
 		return "", err
 	}
 
 	selected, reason := selectUpgradeReleases(releases, currentTag, targetTag)
-	return formatUpgradeContext(repo, currentTag, targetTag, selected, reason), nil
+	return formatUpgradeContext(spec.display(), currentTag, targetTag, selected, reason), nil
 }
 
-func (s *Service) fetchReleases(ctx context.Context, repo string) ([]githubRelease, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+repo+"/releases?per_page=50", nil)
+func (s *Service) fetchReleases(ctx context.Context, spec repoSpec) ([]githubRelease, error) {
+	switch spec.provider {
+	case "github":
+		return s.fetchGitHubReleases(ctx, spec)
+	case "gitlab":
+		return s.fetchGitLabReleases(ctx, spec)
+	case "gitea", "forgejo":
+		return s.fetchGiteaReleases(ctx, spec)
+	default:
+		// Best-effort for self-hosted forges where host naming is unknown.
+		if rels, err := s.fetchGiteaReleases(ctx, spec); err == nil {
+			return rels, nil
+		}
+		if rels, err := s.fetchGitLabReleases(ctx, spec); err == nil {
+			return rels, nil
+		}
+		return nil, fmt.Errorf("unsupported release source for %s", spec.display())
+	}
+}
+
+func (s *Service) fetchGitHubReleases(ctx context.Context, spec repoSpec) ([]githubRelease, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+spec.path+"/releases?per_page=50", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +150,113 @@ func (s *Service) fetchReleases(ctx context.Context, repo string) ([]githubRelea
 		return nil, fmt.Errorf("decode github releases: %w", err)
 	}
 	return releases, nil
+}
+
+func (s *Service) fetchGitLabReleases(ctx context.Context, spec repoSpec) ([]githubRelease, error) {
+	project := url.PathEscape(spec.path)
+	apiURL := fmt.Sprintf("https://%s/api/v4/projects/%s/releases?per_page=50", spec.host, project)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "harborwatch-release-intelligence")
+	if tok := strings.TrimSpace(os.Getenv("GITLAB_TOKEN")); tok != "" {
+		req.Header.Set("PRIVATE-TOKEN", tok)
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitlab releases request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("gitlab releases failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload []struct {
+		TagName     string `json:"tag_name"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		ReleasedAt  string `json:"released_at"`
+		CreatedAt   string `json:"created_at"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode gitlab releases: %w", err)
+	}
+
+	out := make([]githubRelease, 0, len(payload))
+	for _, rel := range payload {
+		published := strings.TrimSpace(rel.ReleasedAt)
+		if published == "" {
+			published = strings.TrimSpace(rel.CreatedAt)
+		}
+		out = append(out, githubRelease{
+			TagName:     strings.TrimSpace(rel.TagName),
+			Name:        strings.TrimSpace(rel.Name),
+			Body:        strings.TrimSpace(rel.Description),
+			PublishedAt: published,
+		})
+	}
+	return out, nil
+}
+
+func (s *Service) fetchGiteaReleases(ctx context.Context, spec repoSpec) ([]githubRelease, error) {
+	parts := strings.Split(spec.path, "/")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid gitea repo path: %q", spec.path)
+	}
+	repoPath := url.PathEscape(parts[0]) + "/" + url.PathEscape(parts[1])
+	apiURL := fmt.Sprintf("https://%s/api/v1/repos/%s/releases?page=1&limit=50", spec.host, repoPath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "harborwatch-release-intelligence")
+	if tok := firstNonEmptyToken("GITEA_TOKEN", "FORGEJO_TOKEN"); tok != "" {
+		req.Header.Set("Authorization", "token "+tok)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitea releases request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("gitea releases failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload []struct {
+		TagName     string `json:"tag_name"`
+		Name        string `json:"name"`
+		Body        string `json:"body"`
+		PublishedAt string `json:"published_at"`
+		CreatedAt   string `json:"created_at"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode gitea releases: %w", err)
+	}
+
+	out := make([]githubRelease, 0, len(payload))
+	for _, rel := range payload {
+		published := strings.TrimSpace(rel.PublishedAt)
+		if published == "" {
+			published = strings.TrimSpace(rel.CreatedAt)
+		}
+		out = append(out, githubRelease{
+			TagName:     strings.TrimSpace(rel.TagName),
+			Name:        strings.TrimSpace(rel.Name),
+			Body:        strings.TrimSpace(rel.Body),
+			PublishedAt: published,
+		})
+	}
+	return out, nil
 }
 
 func analyzeReleaseText(r githubRelease) releaseAnalysis {
@@ -178,8 +315,8 @@ func truncate(s string, max int) string {
 }
 
 func validRepo(repo string) bool {
-	parts := strings.Split(repo, "/")
-	return len(parts) == 2 && parts[0] != "" && parts[1] != ""
+	_, err := parseRepoSpec(repo)
+	return err == nil
 }
 
 func defaultRepo() string {
@@ -206,6 +343,151 @@ type semVersion struct {
 	minor int
 	patch int
 	pre   string
+}
+
+func (r repoSpec) display() string {
+	if r.provider == "github" && strings.EqualFold(r.host, "github.com") {
+		return r.path
+	}
+	return r.host + "/" + r.path
+}
+
+func parseRepoSpec(raw string) (repoSpec, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return repoSpec{}, fmt.Errorf("invalid repo format: empty")
+	}
+
+	if isOwnerRepoShorthand(trimmed) {
+		return repoSpec{provider: "github", host: "github.com", path: trimmed}, nil
+	}
+
+	if !strings.Contains(trimmed, "://") {
+		first := strings.SplitN(trimmed, "/", 2)[0]
+		if strings.Contains(first, ".") {
+			trimmed = "https://" + trimmed
+		}
+	}
+
+	u, err := url.Parse(trimmed)
+	if err != nil || strings.TrimSpace(u.Hostname()) == "" {
+		return repoSpec{}, fmt.Errorf("invalid repo format: expected owner/name or repository URL")
+	}
+	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	parts := trimRepoPath(host, splitRepoPath(u.Path))
+	if len(parts) < 2 {
+		return repoSpec{}, fmt.Errorf("invalid repo format: could not derive repository path from %q", raw)
+	}
+
+	provider := detectProvider(host, u.Path)
+	switch provider {
+	case "github", "bitbucket", "gitea", "forgejo":
+		parts = parts[:2]
+	case "gitlab":
+		// keep full group/subgroup/project path
+	default:
+		// For unknown forges, keep full path and rely on provider probing.
+	}
+
+	return repoSpec{
+		provider: provider,
+		host:     host,
+		path:     strings.Join(parts, "/"),
+	}, nil
+}
+
+func splitRepoPath(raw string) []string {
+	cleaned := path.Clean("/" + strings.TrimSpace(raw))
+	segs := strings.Split(strings.Trim(cleaned, "/"), "/")
+	out := make([]string, 0, len(segs))
+	for _, seg := range segs {
+		item := strings.TrimSpace(seg)
+		if item == "" || item == "." {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func trimRepoPath(host string, parts []string) []string {
+	if len(parts) == 0 {
+		return nil
+	}
+	stopTokens := map[string]struct{}{
+		"-":              {},
+		"releases":       {},
+		"release":        {},
+		"tags":           {},
+		"tag":            {},
+		"tree":           {},
+		"blob":           {},
+		"src":            {},
+		"commits":        {},
+		"commit":         {},
+		"compare":        {},
+		"pull":           {},
+		"pulls":          {},
+		"issues":         {},
+		"wiki":           {},
+		"merge_requests": {},
+		"merge-requests": {},
+	}
+	limit := len(parts)
+	for i, seg := range parts {
+		if _, stop := stopTokens[strings.ToLower(strings.TrimSpace(seg))]; stop {
+			limit = i
+			break
+		}
+	}
+	parts = append([]string(nil), parts[:limit]...)
+	if len(parts) == 0 {
+		return nil
+	}
+	parts[len(parts)-1] = strings.TrimSuffix(parts[len(parts)-1], ".git")
+	if parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
+	}
+	if strings.Contains(host, "gitlab") && len(parts) >= 3 && strings.EqualFold(parts[0], "v2") {
+		parts = parts[1:]
+	}
+	return parts
+}
+
+func detectProvider(host, rawPath string) string {
+	switch {
+	case host == "github.com":
+		return "github"
+	case host == "bitbucket.org":
+		return "bitbucket"
+	case strings.Contains(host, "gitlab"):
+		return "gitlab"
+	case strings.Contains(host, "gitea"):
+		return "gitea"
+	case strings.Contains(host, "forgejo"):
+		return "forgejo"
+	case strings.Contains(rawPath, "/-/"):
+		return "gitlab"
+	default:
+		return "generic"
+	}
+}
+
+func isOwnerRepoShorthand(raw string) bool {
+	if strings.Contains(raw, "://") {
+		return false
+	}
+	parts := strings.Split(raw, "/")
+	return len(parts) == 2 && parts[0] != "" && parts[1] != "" && !strings.Contains(parts[0], ".")
+}
+
+func firstNonEmptyToken(keys ...string) string {
+	for _, key := range keys {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func parseLooseSemverTag(tag string) (semVersion, bool) {

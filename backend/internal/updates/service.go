@@ -150,23 +150,31 @@ func (s *Service) execute(jobID string, req Request) {
 			}
 			_ = s.store.SaveAIAnalysis(ctx, jobID, summary)
 
-			// Policy enforcement: Pause if high risk
-			if analysis.RiskScore >= 80 {
+			threshold := envInt("HW_AI_BLOCK_RISK_THRESHOLD", 80, 0, 100)
+			if blocked, reason := shouldBlockForAI(analysis, threshold); blocked {
 				if s.notif != nil {
 					s.notif.Dispatch(ctx, notifications.Message{
 						Title:  "Update Paused: High Risk Detected",
-						Body:   fmt.Sprintf("AI detected high risk (%d) for %s: %s", analysis.RiskScore, req.TargetImage, analysis.Summary),
+						Body:   fmt.Sprintf("AI blocked update for %s: %s", req.TargetImage, reason),
 						Level:  notifications.LevelCritical,
 						Source: "Update Engine",
 					})
 				}
-				return fmt.Errorf("AI detected high risk (%d): %s", analysis.RiskScore, analysis.Summary)
+				return fmt.Errorf("AI blocked update: %s", reason)
 			}
 			return nil
 		}); err != nil {
 			s.finish(jobID, "failed", err)
 			return
 		}
+	} else {
+		s.emit(jobID, gen.UpdateStepEvent{
+			JobID:     jobID,
+			Step:      "release_analysis",
+			Status:    "completed",
+			Message:   "skipped: ai provider not configured",
+			Timestamp: time.Now().UTC().Unix(),
+		})
 	}
 
 	if err := s.runStep(ctx, jobID, "backup", func(ctx context.Context) error { return s.executor.Backup(ctx, req) }); err != nil {
@@ -349,4 +357,25 @@ func envInt(key string, fallback, minValue, maxValue int) int {
 		return maxValue
 	}
 	return parsed
+}
+
+func shouldBlockForAI(analysis ai.AnalysisResult, riskThreshold int) (bool, string) {
+	reasons := make([]string, 0, 3)
+	if analysis.ActionRequired {
+		reasons = append(reasons, "action_required=true")
+	}
+	if len(analysis.BreakingChanges) > 0 {
+		max := len(analysis.BreakingChanges)
+		if max > 2 {
+			max = 2
+		}
+		reasons = append(reasons, "breaking changes: "+strings.Join(analysis.BreakingChanges[:max], "; "))
+	}
+	if analysis.RiskScore >= riskThreshold {
+		reasons = append(reasons, fmt.Sprintf("risk_score=%d (threshold=%d)", analysis.RiskScore, riskThreshold))
+	}
+	if len(reasons) == 0 {
+		return false, ""
+	}
+	return true, strings.Join(reasons, " | ")
 }

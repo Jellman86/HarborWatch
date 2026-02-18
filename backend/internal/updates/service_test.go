@@ -197,3 +197,97 @@ func TestUpdatePipelineFailsOnHighAIRisk(t *testing.T) {
 	}
 	t.Fatal("timeout waiting for failed status")
 }
+
+func TestUpdatePipelineFailsOnAIBreakingChanges(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	aiSvc := ai.NewService(fakeAIProvider{
+		result: ai.AnalysisResult{
+			RiskScore:       20,
+			RiskLevel:       ai.RiskLow,
+			Summary:         "contains breaking config changes",
+			BreakingChanges: []string{"config format changed"},
+		},
+	})
+	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil)
+
+	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.GetJob(context.Background(), res.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job != nil && job.Status == "failed" {
+			for _, step := range job.Steps {
+				if step.Step == "backup" {
+					t.Fatal("did not expect backup step when AI blocks due to breaking changes")
+				}
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for failed status")
+}
+
+func TestUpdatePipelineFailsOnAIActionRequired(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	aiSvc := ai.NewService(fakeAIProvider{
+		result: ai.AnalysisResult{
+			RiskScore:      10,
+			RiskLevel:      ai.RiskLow,
+			Summary:        "manual migration required",
+			ActionRequired: true,
+		},
+	})
+	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil)
+
+	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.GetJob(context.Background(), res.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job != nil && job.Status == "failed" {
+			for _, step := range job.Steps {
+				if step.Step == "backup" {
+					t.Fatal("did not expect backup step when AI marks action_required=true")
+				}
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for failed status")
+}

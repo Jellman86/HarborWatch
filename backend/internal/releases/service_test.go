@@ -23,8 +23,34 @@ func TestValidRepo(t *testing.T) {
 	if !validRepo("owner/repo") {
 		t.Fatal("expected valid repo")
 	}
+	if !validRepo("https://gitlab.com/group/subgroup/project/-/releases") {
+		t.Fatal("expected gitlab URL to be valid")
+	}
 	if validRepo("bad") {
 		t.Fatal("expected invalid repo")
+	}
+}
+
+func TestParseRepoSpecGitLabReleasesURL(t *testing.T) {
+	spec, err := parseRepoSpec("https://gitlab.com/group/subgroup/project/-/releases")
+	if err != nil {
+		t.Fatalf("expected parse success, got %v", err)
+	}
+	if spec.provider != "gitlab" {
+		t.Fatalf("expected provider gitlab, got %q", spec.provider)
+	}
+	if spec.path != "group/subgroup/project" {
+		t.Fatalf("expected gitlab path extraction, got %q", spec.path)
+	}
+}
+
+func TestParseRepoSpecGiteaURL(t *testing.T) {
+	spec, err := parseRepoSpec("https://code.example.com/acme/api/releases")
+	if err != nil {
+		t.Fatalf("expected parse success, got %v", err)
+	}
+	if spec.path != "acme/api" {
+		t.Fatalf("expected owner/repo extraction, got %q", spec.path)
 	}
 }
 

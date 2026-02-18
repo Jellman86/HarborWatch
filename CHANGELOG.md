@@ -2,6 +2,31 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.9] - 2026-02-18
+
+### Added
+- **Cross-Registry Intelligence Derivation:**
+  - Added repository URL derivation fallback from container image references when OCI labels are missing.
+  - Added support for deriving repository links from `ghcr.io`, `registry.gitlab.com`, Docker Hub, and Quay image refs.
+- **Non-GitHub Release Source Coverage:**
+  - Extended release source parsing to understand GitHub, GitLab, and Gitea/Forgejo-style repository/changelog URLs.
+  - Added provider-specific changelog fallback URL derivation (`/releases`, `/-/releases`, etc.) for non-GitHub repos.
+
+### Changed
+- **Release Context Enrichment Path:**
+  - Update runs now attempt release intelligence for any supported repository/changelog reference (not just GitHub owner/repo shorthand).
+  - Release context now degrades gracefully with structured fallback text when provider APIs are unavailable or unsupported.
+- **AI Upgrade Safety Gate:**
+  - AI release analysis now blocks upgrades when any of the following are true:
+    - `action_required = true`
+    - one or more explicit `breaking_changes` are returned
+    - `risk_score` meets/exceeds threshold
+  - Added configurable risk threshold via `HW_AI_BLOCK_RISK_THRESHOLD` (default `80`).
+  - Added explicit `release_analysis` skip event when no AI provider is configured, so no-AI deployments remain non-blocking and observable.
+
+### Tests
+- `go test ./internal/httpapi ./internal/releases ./internal/updates` (backend)
+
 ## [0.7.8] - 2026-02-18
 
 ### Added
