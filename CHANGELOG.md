@@ -34,14 +34,25 @@ All notable changes to HarborWatch are documented in this file.
   - `StartUpdate` now rejects duplicate in-flight runs for the same container when a `running` job already exists.
 - **Automation Task Filtering Semantics:**
   - Container automation checks now support task-specific global enable state evaluation, improving consistency between scheduler toggles and task execution.
+- **Container Malware Scan UX:**
+  - Container security view now polls dedicated malware summary/details/job endpoints instead of repeatedly reloading the full container detail payload.
+  - Reduces visible page refresh/jump behavior during long-running container malware scans.
+
+### Fixed
+- **Malware Scan Job Visibility and Recovery:**
+  - Added `GET /api/scans/jobs` with `type`, `prefix`, and `limit` filters so queued/running/completed scan state is observable in UI flows.
+  - Added `GET /api/scans/malware/container/{id}/summary` for lightweight per-container malware history retrieval.
+  - On backend startup, stale scan jobs left in `running` state are now reconciled to `failed` with a restart-interruption reason, preventing indefinite ghost-running jobs.
+  - ClamAV container scans now transition through explicit `queued -> running -> completed/failed/cancelled` states.
 
 ### Tests
 - Added backend coverage for:
   - locked policy block on `POST /api/updates/run`
   - auto-apply task start/skip behavior
   - duplicate running update rejection in update service
+  - scan jobs list endpoint behavior
 - Validation commands:
-  - `go test ./internal/httpapi ./internal/updates`
+  - `go test ./internal/httpapi ./internal/scanning ./internal/updates`
   - `npm --prefix web run build`
 
 ## [0.7.12] - 2026-02-18

@@ -102,6 +102,19 @@ func (f fakeScanService) Job(ctx context.Context, jobID string) (gen.ScanJobStat
 	}
 	return j, nil
 }
+func (f fakeScanService) ListJobs(ctx context.Context, scanType, targetPrefix string, limit int) ([]gen.ScanJobStatus, error) {
+	out := make([]gen.ScanJobStatus, 0, len(f.jobs))
+	for _, job := range f.jobs {
+		if strings.TrimSpace(scanType) != "" && !strings.EqualFold(scanType, "malware") && !strings.EqualFold(scanType, "vulnerability") {
+			continue
+		}
+		if strings.TrimSpace(targetPrefix) != "" && !strings.HasPrefix(job.Target, targetPrefix) {
+			continue
+		}
+		out = append(out, job)
+	}
+	return out, nil
+}
 func (f fakeScanService) LatestSummary(ctx context.Context) (*gen.ScanSummary, error) {
 	return f.summary, nil
 }
@@ -470,6 +483,34 @@ func TestScanCancelEndpoint(t *testing.T) {
 	}
 	if body.Status != "cancelled" {
 		t.Fatalf("expected cancelled job status, got %q", body.Status)
+	}
+}
+
+func TestScanJobsListEndpoint(t *testing.T) {
+	scans := fakeScanService{
+		jobs: map[string]gen.ScanJobStatus{
+			"s1": {
+				JobID:     "s1",
+				Target:    "container:c1:rootfs",
+				Status:    "running",
+				Source:    "clamav",
+				StartedAt: time.Now().UTC().Unix(),
+			},
+		},
+	}
+	mux := NewMuxWithDeps(nil, scans, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/scans/jobs?type=malware&prefix=container:c1&limit=10", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var jobs []gen.ScanJobStatus
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&jobs); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(jobs) != 1 || jobs[0].JobID != "s1" {
+		t.Fatalf("unexpected jobs payload: %#v", jobs)
 	}
 }
 

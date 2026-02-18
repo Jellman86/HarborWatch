@@ -87,6 +87,12 @@ HarborWatch is a professional, local-first container maintenance and security ap
   - `{{INSTANCE_URL}}`, `{{HOST}}`, `{{PORT}}`, `{{SCHEME}}`, `{{PATH}}`, `{{CONTAINER_ID}}`, `{{CONTAINER_NAME}}`, `{{IMAGE}}`
 - Users can always override the derived URL in the Lifecycle policy UI.
 
+## Upgrade Automation Controls
+
+- `HW_AI_BLOCK_RISK_THRESHOLD` sets the AI risk-score block threshold used during update `release_analysis` (default `80`).
+- `HW_AUTO_UPGRADE_MAX_CONCURRENCY` limits auto-apply starts per scheduler run (default `1`).
+- `HW_AUTO_UPGRADE_MIN_RETRY_MINUTES` sets auto-apply retry cooldown after failed/rolled-back jobs (default `60`).
+
 ## AI Provider Configuration
 
 - `AI_PROVIDER`: `openai` | `anthropic` | `gemini` (optional; defaults to first configured provider)

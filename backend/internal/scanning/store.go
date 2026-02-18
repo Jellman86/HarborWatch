@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	_ "modernc.org/sqlite"
@@ -259,6 +260,76 @@ FROM scan_jobs WHERE job_id=?
 		return nil, fmt.Errorf("read scan job: %w", err)
 	}
 	return &job, nil
+}
+
+func (s *Store) ListJobs(ctx context.Context, scanType, targetPrefix string, limit int) ([]gen.ScanJobStatus, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	query := `
+SELECT job_id, target, status, source, error, started_at, completed_at
+FROM scan_jobs
+`
+	var (
+		clauses []string
+		args    []any
+	)
+	if t := strings.TrimSpace(scanType); t != "" {
+		clauses = append(clauses, "type = ?")
+		args = append(args, t)
+	}
+	if p := strings.TrimSpace(targetPrefix); p != "" {
+		clauses = append(clauses, "target LIKE ?")
+		args = append(args, p+"%")
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY started_at DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list scan jobs: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]gen.ScanJobStatus, 0, limit)
+	for rows.Next() {
+		var job gen.ScanJobStatus
+		if err := rows.Scan(&job.JobID, &job.Target, &job.Status, &job.Source, &job.Error, &job.StartedAt, &job.CompletedAt); err != nil {
+			return nil, fmt.Errorf("scan scan job row: %w", err)
+		}
+		out = append(out, job)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate scan jobs: %w", err)
+	}
+	return out, nil
+}
+
+func (s *Store) MarkRunningJobsFailed(ctx context.Context, reason string) (int64, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "scan interrupted by HarborWatch restart"
+	}
+	res, err := s.db.ExecContext(ctx, `
+UPDATE scan_jobs
+SET status = 'failed', error = ?, completed_at = ?
+WHERE status = 'running'
+`, reason, time.Now().UTC().Unix())
+	if err != nil {
+		return 0, fmt.Errorf("mark running scan jobs failed: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("rows affected running scan jobs: %w", err)
+	}
+	return n, nil
 }
 
 func (s *Store) LatestSummary(ctx context.Context) (*gen.ScanSummary, error) {

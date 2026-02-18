@@ -5,6 +5,7 @@
         ComposeAuditRecordSummary,
         ContainerDetail,
         MalwareScanDetail,
+        ScanJobStatus,
         TrivyScanDetails,
         UpdateJobStatus
     } from "../api-types";
@@ -56,6 +57,7 @@
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
     let loadingVulnerabilityDetails = $state(false);
     let malwareDetails = $state<MalwareScanDetail[]>([]);
+    let malwareJobs = $state<ScanJobStatus[]>([]);
     let loadingMalwareDetails = $state(false);
     let intel = $state<ContainerIntelRecord | null>(null);
     let loadingIntel = $state(false);
@@ -84,7 +86,9 @@
                 syncLifecycleModeFromRules();
                 await Promise.all([
                     loadVulnerabilityDetails(data?.summary?.image || ""),
+                    loadMalwareSummaryForContainer(),
                     loadMalwareDetailsForContainer(),
+                    loadMalwareJobsForContainer(),
                     loadUpdateHistory(),
                     loadContainerIntel(),
                     loadComposeAuditHistory()
@@ -98,6 +102,7 @@
                 malwareDetails = [];
                 updateHistory = [];
                 intel = null;
+                malwareJobs = [];
                 composeAuditHistory = [];
                 selectedComposeAuditId = "";
                 aiAuditMarkdown = "";
@@ -112,6 +117,7 @@
             malwareDetails = [];
             updateHistory = [];
             intel = null;
+            malwareJobs = [];
             composeAuditHistory = [];
             selectedComposeAuditId = "";
             aiAuditMarkdown = "";
@@ -160,6 +166,37 @@
             malwareDetails = [];
         } finally {
             loadingMalwareDetails = false;
+        }
+    }
+
+    async function loadMalwareSummaryForContainer() {
+        try {
+            const res = await fetch(`/api/scans/malware/container/${id}/summary`);
+            if (!res.ok) {
+                if (detail) detail.malwareSummary = [];
+                return;
+            }
+            const rows = await res.json();
+            if (detail) {
+                detail.malwareSummary = Array.isArray(rows) ? rows : [];
+            }
+        } catch {
+            if (detail) detail.malwareSummary = [];
+        }
+    }
+
+    async function loadMalwareJobsForContainer() {
+        try {
+            const prefix = `container:${id}`;
+            const res = await fetch(`/api/scans/jobs?type=malware&prefix=${encodeURIComponent(prefix)}&limit=20`);
+            if (!res.ok) {
+                malwareJobs = [];
+                return;
+            }
+            const rows = await res.json();
+            malwareJobs = Array.isArray(rows) ? rows : [];
+        } catch {
+            malwareJobs = [];
         }
     }
 
@@ -452,6 +489,7 @@
         runningMalwareScan = true;
         scanMessage = "Queueing ClamAV container scan...";
         const previousTop = detail?.malwareSummary?.[0]?.scannedAt || 0;
+        const scanStartTs = Math.floor(Date.now() / 1000);
         try {
             const res = await fetch(`/api/scans/malware/container/${id}`, { method: "POST" });
             if (!res.ok) {
@@ -460,7 +498,7 @@
             }
             toasts.success("ClamAV scans queued for container rootfs and mounts.");
             scanMessage = "ClamAV scan queued. Waiting for results...";
-            await refreshMalwareHistory(previousTop);
+            await refreshMalwareHistory(previousTop, scanStartTs);
         } catch (e) {
             scanMessage = "Failed to queue ClamAV scan.";
             toasts.error(e instanceof Error ? e.message : "Failed to queue ClamAV scan.");
@@ -469,16 +507,39 @@
         }
     }
 
-    async function refreshMalwareHistory(previousTopScannedAt: number) {
-        for (let i = 0; i < 20; i++) {
+    function summarizeMalwareJobs(scanStartTs: number): string {
+        const recentJobs = malwareJobs.filter((job) => Number(job.startedAt || 0) >= scanStartTs - 2);
+        if (recentJobs.length === 0) return "";
+        let queued = 0;
+        let running = 0;
+        let failed = 0;
+        let completed = 0;
+        for (const job of recentJobs) {
+            const status = String(job.status || "").toLowerCase();
+            if (status === "queued") queued += 1;
+            else if (status === "running") running += 1;
+            else if (status === "completed") completed += 1;
+            else if (status === "failed" || status === "cancelled") failed += 1;
+        }
+        return `Jobs: queued ${queued}, running ${running}, completed ${completed}, failed ${failed}`;
+    }
+
+    async function refreshMalwareHistory(previousTopScannedAt: number, scanStartTs: number) {
+        for (let i = 0; i < 30; i++) {
             await new Promise((resolve) => setTimeout(resolve, 3000));
-            await loadDetail(true);
+            await Promise.all([
+                loadMalwareSummaryForContainer(),
+                loadMalwareDetailsForContainer(),
+                loadMalwareJobsForContainer()
+            ]);
             const top = detail?.malwareSummary?.[0]?.scannedAt || 0;
             if (top > previousTopScannedAt) {
                 scanMessage = "ClamAV results updated.";
                 toasts.success("ClamAV scan finished and results were added.");
                 return;
             }
+            const jobSummary = summarizeMalwareJobs(scanStartTs);
+            scanMessage = jobSummary ? `ClamAV scan queued. ${jobSummary}` : "ClamAV scan queued. Waiting for scanner workers...";
         }
         scanMessage = "ClamAV scan is still running in background.";
         toasts.info("ClamAV scan is still running. Results will appear when complete.");

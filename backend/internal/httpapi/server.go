@@ -52,6 +52,7 @@ type ScanService interface {
 	ClamAVSignatureStatus(ctx context.Context) (scanning.ClamAVSignatureStatus, error)
 	UpdateClamAVSignatures(ctx context.Context) (string, error)
 	Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
+	ListJobs(ctx context.Context, scanType, targetPrefix string, limit int) ([]gen.ScanJobStatus, error)
 	LatestSummary(ctx context.Context) (*gen.ScanSummary, error)
 	LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error)
 	LatestDetailsForTarget(ctx context.Context, target string) (*gen.TrivyScanDetails, error)
@@ -201,6 +202,13 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	scanStore := scanning.NewStore(db)
 	if err := scanStore.Init(context.Background()); err != nil {
 		return nil, nil, fmt.Errorf("init scanning store: %w", err)
+	}
+	if recovered, err := scanStore.MarkRunningJobsFailed(context.Background(), "scan interrupted by HarborWatch restart"); err == nil {
+		if recovered > 0 && diagService != nil {
+			diagService.Log("WARN", "Scanner", fmt.Sprintf("Recovered %d stale running scan jobs after restart", recovered))
+		}
+	} else if diagService != nil {
+		diagService.Log("ERROR", "Scanner", fmt.Sprintf("Failed to reconcile stale scan jobs on startup: %v", err))
 	}
 	scanService := scanning.NewService(scanning.NewTrivyScanner(), scanning.NewClamAVScanner(), scanStore, diagService)
 
@@ -1115,6 +1123,42 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					"status":      "queued",
 					"containerId": containerID,
 				})
+			})
+
+			r.Get("/malware/container/{id}/summary", func(w http.ResponseWriter, r *http.Request) {
+				if scanService == nil {
+					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+					return
+				}
+				containerID := strings.TrimSpace(chi.URLParam(r, "id"))
+				if containerID == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "container id is required")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				summaries, err := scanService.MalwareSummariesForContainer(ctx, containerID)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "malware_scan_read_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, summaries)
+			})
+
+			r.Get("/jobs", func(w http.ResponseWriter, r *http.Request) {
+				if scanService == nil {
+					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+					return
+				}
+				limit := parseIntQuery(r.URL.Query().Get("limit"), 50, 1, 500)
+				scanType := strings.TrimSpace(r.URL.Query().Get("type"))
+				prefix := strings.TrimSpace(r.URL.Query().Get("prefix"))
+				jobs, err := scanService.ListJobs(r.Context(), scanType, prefix, limit)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "scan_jobs_list_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, jobs)
 			})
 
 			r.Get("/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {

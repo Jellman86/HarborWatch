@@ -85,6 +85,9 @@ These are managed in Settings -> Automations -> Upgrades.
 - `HW_AUTO_UPGRADE_MIN_RETRY_MINUTES`
   - Cooldown before retrying auto-apply after failed/rolled-back runs.
   - Default: `60`
+- `HW_AI_BLOCK_RISK_THRESHOLD`
+  - AI risk score threshold that blocks update execution during `release_analysis`.
+  - Default: `80`
 
 ## UI Hooks
 
