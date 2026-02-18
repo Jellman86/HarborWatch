@@ -57,6 +57,14 @@
         }
     }
 
+    function routePreset(raw?: string): PresetID | null {
+        const trimmed = String(raw || "").trim();
+        if (!trimmed) {
+            return null;
+        }
+        return normalizePreset(trimmed);
+    }
+
     function logsEndpoint(): string {
         const params = new URLSearchParams({ limit: "50" });
         const query = String(logSearch || "").trim();
@@ -84,16 +92,18 @@
     }
 
     onMount(() => {
-        const preset = normalizePreset(params?.preset);
-        applyPreset(preset, false);
+        const preset = routePreset(params?.preset);
+        if (preset) {
+            applyPreset(preset, false);
+        }
         loadData();
         const interval = setInterval(loadData, 5000);
         return () => clearInterval(interval);
     });
 
     $effect(() => {
-        const preset = normalizePreset(params?.preset);
-        if (preset !== selectedPreset) {
+        const preset = routePreset(params?.preset);
+        if (preset && preset !== selectedPreset) {
             applyPreset(preset);
         }
     });
@@ -252,9 +262,6 @@
                     </button>
                 {/each}
             </div>
-        </div>
-        <div class="text-[11px] text-slate-500">
-            Audit Trail now maps to the <span class="font-bold text-slate-300">System Health</span> stream via the <span class="font-bold text-brand-400">Audit Trail</span> preset.
         </div>
         <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px]">
             <div class="flex items-center gap-2">

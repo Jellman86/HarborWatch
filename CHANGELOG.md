@@ -41,6 +41,7 @@ All notable changes to HarborWatch are documented in this file.
 - **System Health Preset Feedback & Classification:**
   - Added explicit active-preset UI feedback, filtered row counts, and refresh status messaging so preset button presses are visibly acknowledged.
   - Added derived log class badges (`Security`, `Automation`, `Updates`, `Audit`, `Error`, `General`) to make event categorization clear at a glance.
+  - Fixed preset state synchronization so route params no longer reset manual preset selections back to `All Logs`.
   - Updated empty-state messaging to explain when preset/filter criteria exclude all rows.
 - **Image Security Scan Correlation:**
   - Fixed image intelligence matching across tagless, tagged, and digest-style references so scans recorded under `repo` are correctly surfaced for `repo:latest` images (and vice versa).
