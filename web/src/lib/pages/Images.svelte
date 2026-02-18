@@ -147,6 +147,21 @@
     const safeRows = $derived((imageRows && imageRows.length > 0) ? imageRows : (images as ImageIntelligenceRow[] || []));
     const imageRepo = (row: ImageIntelligenceRow) => parseImageRef(row.repoTags?.[0] || row.primaryRef || "").repository;
     const imageQualifier = (row: ImageIntelligenceRow) => parseImageRef(row.repoTags?.[0] || row.primaryRef || "").qualifier || ":latest";
+
+    function securitySummary(img: ImageIntelligenceRow): string {
+        if (img.malwareInfected) return `Malware ${img.malwareThreatCount || 0}`;
+        if ((img.vulnerabilityCritical || 0) > 0) return `Critical CVE ${img.vulnerabilityCritical}`;
+        if ((img.vulnerabilityHigh || 0) > 0) return `High CVE ${img.vulnerabilityHigh}`;
+        if ((img.vulnerabilityTotal || 0) > 0) return `CVE ${img.vulnerabilityTotal}`;
+        if ((img.securityScannedAt || 0) > 0) return "No findings";
+        return "Not scanned";
+    }
+
+    function lifecycleSummary(img: ImageIntelligenceRow): string {
+        if (img.pruneCandidate) return "Prune next run";
+        if (img.outdated) return "Outdated";
+        return "In use";
+    }
 </script>
 
 <div class="space-y-6">
@@ -216,7 +231,29 @@
             <p class="text-slate-400 italic font-medium">No images found in local repository.</p>
         </div>
     {:else}
-        <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden opacity-0 animate-reveal stagger-1">
+        <div class="md:hidden space-y-3 opacity-0 animate-reveal stagger-1">
+            {#each safeRows as img, i}
+                <article
+                    class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-4 space-y-2 opacity-0 animate-reveal"
+                    style="animation-delay: {0.08 + (i * 0.02)}s"
+                >
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-900 dark:text-white truncate">{imageRepo(img)}</p>
+                            <p class="text-[10px] font-black text-brand-600 uppercase tracking-widest">{imageQualifier(img)}</p>
+                        </div>
+                        <p class="text-[10px] font-mono text-slate-500">{formatSize(img.size)}</p>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-200">{securitySummary(img)}</span>
+                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-200">{lifecycleSummary(img)}</span>
+                    </div>
+                    <p class="text-[10px] text-slate-400 font-mono">{formatId(img.id)}</p>
+                </article>
+            {/each}
+        </div>
+
+        <div class="hidden md:block bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden opacity-0 animate-reveal stagger-1">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">

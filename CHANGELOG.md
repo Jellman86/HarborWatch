@@ -2,6 +2,30 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.17] - 2026-02-18
+
+### Changed
+- **UI Foundation Refinement (Signpost Theme):**
+  - Tightened global radius scale to reduce over-rounded surfaces and improve visual precision.
+  - Tuned light/dark background treatments for lower visual noise and better content separation.
+  - Reduced heavy shadow intensity across the app for a cleaner, more modern data-first look.
+- **Dashboard Visual Density:**
+  - Reduced oversized heading/stat card proportions and softened oversized hero geometry.
+  - Improved hierarchy between summary cards and AI advisor panel.
+- **Fleet View Responsiveness:**
+  - Added compact viewport behavior that forces card mode on narrow screens.
+  - Disabled list/card toggle interaction in compact mode and surfaced a `Mobile Cards` indicator.
+- **Image Repository Mobile UX:**
+  - Added dedicated mobile card rendering for image rows to avoid compressed desktop-table presentation on phones.
+  - Preserved full desktop table for medium+ breakpoints.
+- **System Health Readability Overhaul:**
+  - Reworked log control surfaces for better light-mode readability and stronger contrast balance.
+  - Added mobile-first log cards (timestamp/level/class/source/message) and kept table mode for desktop.
+  - Reduced stat-card bulk and improved filter/control ergonomics.
+
+### Tests
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.16] - 2026-02-18
 
 ### Added

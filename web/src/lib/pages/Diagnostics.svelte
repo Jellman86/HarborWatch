@@ -168,17 +168,17 @@
         const cls = classifyLog(log);
         switch (cls) {
             case "security":
-                return "bg-emerald-950/50 text-emerald-300 border border-emerald-800/60";
+                return "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60";
             case "automation":
-                return "bg-blue-950/50 text-blue-300 border border-blue-800/60";
+                return "bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800/60";
             case "updates":
-                return "bg-violet-950/50 text-violet-300 border border-violet-800/60";
+                return "bg-violet-100 text-violet-700 border border-violet-200 dark:bg-violet-950/50 dark:text-violet-300 dark:border-violet-800/60";
             case "errors":
-                return "bg-rose-950/50 text-rose-300 border border-rose-800/60";
+                return "bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60";
             case "audit":
-                return "bg-amber-950/50 text-amber-300 border border-amber-800/60";
+                return "bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60";
             default:
-                return "bg-slate-800 text-slate-300 border border-slate-700";
+                return "bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
         }
     }
 
@@ -222,20 +222,20 @@
     </div>
 
     {#if status}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 opacity-0 animate-reveal stagger-1">
-            <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 opacity-0 animate-reveal stagger-1">
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl">
                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Uptime</p>
                 <p class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{formatUptime(status.uptime)}</p>
             </div>
-            <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl">
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl">
                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Memory (Alloc)</p>
                 <p class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{formatBytes(status.memoryAlloc)}</p>
             </div>
-            <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl">
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl">
                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Database Size</p>
                 <p class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{formatBytes(status.dbSize)}</p>
             </div>
-            <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl">
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl">
                 <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Routines</p>
                 <p class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{status.numGoroutine}</p>
             </div>
@@ -256,20 +256,20 @@
                         type="button"
                         onclick={() => applyPreset(preset.id)}
                         aria-pressed={selectedPreset === preset.id}
-                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {(selectedPreset === preset.id) ? 'bg-brand-600 text-white ring-2 ring-brand-300/70 scale-[1.02]' : 'bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700'}"
+                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {(selectedPreset === preset.id) ? 'bg-brand-600 text-white ring-2 ring-brand-300/70 scale-[1.02]' : 'bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}"
                     >
                         {preset.label}
                     </button>
                 {/each}
             </div>
         </div>
-        <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px]">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/40 px-3 py-2 text-[11px]">
             <div class="flex items-center gap-2">
                 <span class="px-2 py-1 rounded-md bg-brand-600/30 text-brand-300 font-black uppercase tracking-widest">{activePresetLabel}</span>
-                <span class="text-slate-400">Showing {visibleLogs.length} of {logs.length} log entries</span>
+                <span class="text-slate-500 dark:text-slate-400">Showing {visibleLogs.length} of {logs.length} log entries</span>
             </div>
             {#if loading}
-                <span class="text-slate-400 font-black uppercase tracking-widest animate-pulse">Refreshing...</span>
+                <span class="text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest animate-pulse">Refreshing...</span>
             {/if}
         </div>
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -283,11 +283,11 @@
                 <input
                     bind:value={logSearch}
                     placeholder="Search logs..."
-                    class="w-56 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
+                    class="w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
                 />
                 <select
                     bind:value={logLevel}
-                    class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
+                    class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
                 >
                     <option value="">All Levels</option>
                     <option value="ERROR">ERROR</option>
@@ -296,7 +296,7 @@
                 </select>
                 <select
                     bind:value={logSource}
-                    class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
+                    class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
                 >
                     <option value="">All Sources</option>
                     <option value="scanner">Scanner</option>
@@ -306,15 +306,35 @@
                     <option value="system">System</option>
                 </select>
                 <button type="submit" class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-black uppercase tracking-widest">Search</button>
-                <button type="button" onclick={() => applyPreset("all")} class="px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-widest hover:bg-slate-800/60">Clear</button>
+                <button type="button" onclick={() => applyPreset("all")} class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800/60">Clear</button>
             </form>
         </div>
-        
-        <div class="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
+
+        <div class="md:hidden space-y-2">
+            {#each visibleLogs as log}
+                <article class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-1.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <p class="text-[10px] font-mono text-slate-500">{new Date(log.timestamp * 1000).toISOString().replace('T', ' ').split('.')[0]}</p>
+                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest {classColor(log)}">{classBadge(log)}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-black uppercase {levelColor(log.level)}">{log.level}</span>
+                        <span class="text-[10px] text-brand-600 dark:text-brand-300 font-bold">{log.source}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-700 dark:text-slate-300">{log.message}</p>
+                </article>
+            {:else}
+                <div class="px-4 py-8 text-center text-slate-500 italic text-sm bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                    No logs matched the current preset/filters.
+                </div>
+            {/each}
+        </div>
+
+        <div class="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
-                        <tr class="bg-slate-950/50 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800">
+                        <tr class="bg-slate-100 dark:bg-slate-950/50 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-800">
                             <th class="px-6 py-3 w-48">Timestamp</th>
                             <th class="px-6 py-3 w-24">Level</th>
                             <th class="px-6 py-3 w-28">Class</th>
@@ -322,9 +342,9 @@
                             <th class="px-6 py-3">Message</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-800/50 font-mono text-[11px]">
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-800/50 font-mono text-[11px]">
                         {#each visibleLogs as log}
-                            <tr class="hover:bg-slate-800/30 transition-colors">
+                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                                 <td class="px-6 py-2 text-slate-500">
                                     {new Date(log.timestamp * 1000).toISOString().replace('T', ' ').split('.')[0]}
                                 </td>
@@ -339,14 +359,12 @@
                                 <td class="px-6 py-2 text-brand-500 font-bold">
                                     {log.source}
                                 </td>
-                                <td class="px-6 py-2 text-slate-300">
+                                <td class="px-6 py-2 text-slate-700 dark:text-slate-300">
                                     {log.message}
                                 </td>
                             </tr>
                         {:else}
-                            <tr>
-                                <td colspan="5" class="px-6 py-12 text-center text-slate-600 italic">No logs matched the current preset/filters.</td>
-                            </tr>
+                            <tr><td colspan="5" class="px-6 py-12 text-center text-slate-500 italic">No logs matched the current preset/filters.</td></tr>
                         {/each}
                     </tbody>
                 </table>

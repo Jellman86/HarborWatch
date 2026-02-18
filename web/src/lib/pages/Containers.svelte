@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import type { ContainerSummary, Metric } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
     import Sparkline from "../components/Sparkline.svelte";
@@ -10,6 +11,7 @@
     }>();
 
     let viewMode = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('hw_container_view') ?? 'list') : 'list');
+    let compactLayout = $state(false);
     let expandedContainer = $state<string | null>(null);
     let metrics = $state<Metric[]>([]);
     let loadingMetrics = $state(false);
@@ -97,6 +99,7 @@
     const imageQualifier = (image: string) => parseImageRef(image).qualifier || ":latest";
 
     let safeContainers = $derived(containers || []);
+    let effectiveViewMode = $derived(compactLayout ? 'cards' : viewMode);
 
     async function loadSparklineMetrics(ids: string[]) {
         if (ids.length === 0) {
@@ -124,6 +127,15 @@
         lastSparklineKey = key;
         loadSparklineMetrics(ids);
     });
+
+    onMount(() => {
+        const syncViewportMode = () => {
+            compactLayout = window.innerWidth < 1024;
+        };
+        syncViewportMode();
+        window.addEventListener("resize", syncViewportMode);
+        return () => window.removeEventListener("resize", syncViewportMode);
+    });
 </script>
 
 <div class="space-y-6">
@@ -135,8 +147,9 @@
         <div class="flex items-center gap-3">
             <div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-inner">
                 <button 
-                    onclick={() => { if(viewMode !== 'list') toggleView() }}
-                    class="p-1.5 rounded-lg transition-all {viewMode === 'list' ? 'bg-white dark:bg-slate-700 shadow-md text-brand-600' : 'text-slate-400 hover:text-slate-600'}"
+                    onclick={() => { if(!compactLayout && viewMode !== 'list') toggleView() }}
+                    disabled={compactLayout}
+                    class="p-1.5 rounded-lg transition-all disabled:opacity-45 {effectiveViewMode === 'list' ? 'bg-white dark:bg-slate-700 shadow-md text-brand-600' : 'text-slate-400 hover:text-slate-600'}"
                     title="List View"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -144,8 +157,9 @@
                     </svg>
                 </button>
                 <button 
-                    onclick={() => { if(viewMode !== 'cards') toggleView() }}
-                    class="p-1.5 rounded-lg transition-all {viewMode === 'cards' ? 'bg-white dark:bg-slate-700 shadow-md text-brand-600' : 'text-slate-400 hover:text-slate-600'}"
+                    onclick={() => { if(!compactLayout && viewMode !== 'cards') toggleView() }}
+                    disabled={compactLayout}
+                    class="p-1.5 rounded-lg transition-all disabled:opacity-45 {effectiveViewMode === 'cards' ? 'bg-white dark:bg-slate-700 shadow-md text-brand-600' : 'text-slate-400 hover:text-slate-600'}"
                     title="Card View"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -153,13 +167,18 @@
                     </svg>
                 </button>
             </div>
+            {#if compactLayout}
+                <span class="px-2.5 py-1 bg-brand-50 dark:bg-brand-900/30 rounded-full text-[9px] font-black text-brand-700 dark:text-brand-300 uppercase tracking-widest border border-brand-200 dark:border-brand-700/50">
+                    Mobile Cards
+                </span>
+            {/if}
             <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
                 {safeContainers.length} Total
             </span>
         </div>
     </div>
 
-    {#if viewMode === 'list'}
+    {#if effectiveViewMode === 'list'}
     <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden opacity-0 animate-reveal stagger-1">
         <table class="w-full text-left border-collapse">
             <thead>
