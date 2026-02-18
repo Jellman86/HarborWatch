@@ -1,20 +1,84 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import type { ImageSummary } from "../api-types";
+    import { toasts } from "../stores/ToastStore";
 
     let { images = $bindable([]) } = $props<{ images: ImageSummary[] }>();
     let loading = $state(false);
     let error = $state("");
     let pruning = $state(false);
+    let cleanupLogVisible = $state(false);
+    let cleanupLog = $state<Array<{ ts: number; level: "info" | "success" | "error"; message: string }>>([]);
+    let cleanupSeen = $state(new Set<string>());
+
+    interface ImageIntelligenceRow extends ImageSummary {
+        primaryRef?: string;
+        inUse?: boolean;
+        outdated?: boolean;
+        pruneCandidate?: boolean;
+        vulnerabilityTotal?: number;
+        vulnerabilityCritical?: number;
+        vulnerabilityHigh?: number;
+        malwareInfected?: boolean;
+        malwareThreatCount?: number;
+        securityScannedAt?: number;
+    }
+
+    let imageRows = $state<ImageIntelligenceRow[]>([]);
+
+    function appendCleanupLog(level: "info" | "success" | "error", message: string, ts = Math.floor(Date.now() / 1000)) {
+        cleanupLog = [...cleanupLog, { ts, level, message }];
+    }
+
+    function consumeSchedulerLogs(rows: Array<{ timestamp: number; source: string; message: string }>): boolean {
+        let sawCompletion = false;
+        const ordered = [...rows].sort((a, b) => a.timestamp - b.timestamp);
+        for (const entry of ordered) {
+            const message = String(entry?.message || "").trim();
+            const source = String(entry?.source || "").toLowerCase();
+            if (!message || !source.includes("scheduler")) continue;
+            const tracked = /prune|docker_system_prune|space reclaimed/i.test(message);
+            if (!tracked) continue;
+            const key = `${entry.timestamp}:${message}`;
+            if (cleanupSeen.has(key)) continue;
+            cleanupSeen.add(key);
+            const level = /error|failed/i.test(message) ? "error" : "info";
+            appendCleanupLog(level, message, entry.timestamp || Math.floor(Date.now() / 1000));
+            if (/Pruned .*images|Pruned .*containers|image prune failed|container prune failed/i.test(message)) {
+                sawCompletion = true;
+            }
+        }
+        return sawCompletion;
+    }
+
+    async function pollCleanupFeedback(startedAt: number) {
+        for (let i = 0; i < 15; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 2500));
+            try {
+                const res = await fetch(`/api/system/logs?limit=250&source=scheduler&since=${startedAt}`);
+                if (!res.ok) continue;
+                const logs = await res.json();
+                if (consumeSchedulerLogs(Array.isArray(logs) ? logs : [])) {
+                    appendCleanupLog("success", "Cleanup workflow completed.");
+                    return;
+                }
+            } catch {
+                // Keep polling to avoid transient log endpoint errors.
+            }
+        }
+        appendCleanupLog("info", "Cleanup still running in background. Refresh logs shortly.");
+    }
 
     async function loadImages() {
         loading = true;
         error = "";
         try {
-            const res = await fetch("/api/docker/images");
+            const res = await fetch("/api/docker/images/intelligence");
             if (res.ok) {
                 const data = await res.json();
-                images = data || [];
+                const rows = Array.isArray(data) ? data : [];
+                imageRows = rows;
+                images = rows;
             } else {
                 error = "Failed to load images";
             }
@@ -27,15 +91,29 @@
 
     async function pruneImages() {
         if (!confirm("Are you sure you want to trigger a system-wide image prune? This will remove all unused images.")) return;
-        
+        const startedAt = Math.floor(Date.now() / 1000);
+        cleanupLogVisible = true;
+        cleanupLog = [];
+        cleanupSeen = new Set<string>();
+        appendCleanupLog("info", "Submitting cleanup request...");
+
         pruning = true;
         try {
             const res = await fetch("/api/docker/prune", { method: "POST" });
             if (res.ok) {
+                appendCleanupLog("success", "Cleanup task triggered (docker_system_prune).");
+                await pollCleanupFeedback(startedAt);
                 await loadImages();
+                toasts.success("Repository cleanup triggered.");
+            } else {
+                const body = await res.json().catch(() => ({}));
+                const msg = body?.message || `Cleanup request failed (${res.status})`;
+                appendCleanupLog("error", msg);
+                toasts.error(msg);
             }
         } catch (e) {
-            console.error("Prune failed", e);
+            appendCleanupLog("error", "Cleanup request failed due to connection error.");
+            toasts.error("Cleanup request failed.");
         } finally {
             pruning = false;
         }
@@ -53,6 +131,7 @@
     };
 
     const formatId = (id: string) => id.replace('sha256:', '').slice(0, 12);
+    const safeRows = $derived((imageRows && imageRows.length > 0) ? imageRows : (images as ImageIntelligenceRow[] || []));
 </script>
 
 <div class="space-y-6">
@@ -84,6 +163,30 @@
         </div>
     </div>
 
+    {#if cleanupLogVisible}
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/70 p-4 space-y-3">
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Cleanup Log</p>
+                <button
+                    onclick={() => cleanupLogVisible = false}
+                    class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                >Hide</button>
+            </div>
+            <div class="max-h-[160px] overflow-y-auto rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                {#if cleanupLog.length === 0}
+                    <p class="text-[11px] text-slate-500 italic">No cleanup events yet.</p>
+                {:else}
+                    {#each cleanupLog as entry}
+                        <div class="text-[11px] flex items-start gap-2">
+                            <span class="font-mono text-slate-400 min-w-[72px]">{new Date(entry.ts * 1000).toLocaleTimeString()}</span>
+                            <span class={entry.level === "error" ? "text-rose-600 dark:text-rose-300" : entry.level === "success" ? "text-emerald-600 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}>{entry.message}</span>
+                        </div>
+                    {/each}
+                {/if}
+            </div>
+        </div>
+    {/if}
+
     {#if loading}
         <div class="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
             <div class="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
@@ -93,7 +196,7 @@
         <div class="bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/30 rounded-3xl p-12 text-center animate-reveal">
             <p class="text-rose-600 font-bold uppercase tracking-widest text-xs">{error}</p>
         </div>
-    {:else if images.length === 0}
+    {:else if safeRows.length === 0}
         <div class="bg-white dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-16 text-center animate-reveal">
             <p class="text-slate-400 italic font-medium">No images found in local repository.</p>
         </div>
@@ -104,11 +207,13 @@
                     <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">
                         <th class="px-8 py-4">Artifact ID</th>
                         <th class="px-8 py-4">Repository / Tag</th>
+                        <th class="px-8 py-4">Security</th>
+                        <th class="px-8 py-4">Lifecycle</th>
                         <th class="px-8 py-4 text-right">Storage Size</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-                    {#each images as img, i}
+                    {#each safeRows as img, i}
                         <tr 
                             class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors opacity-0 animate-reveal"
                             style="animation-delay: {0.1 + (i * 0.03)}s"
@@ -122,6 +227,36 @@
                                     <span class="text-[10px] font-black text-brand-600 uppercase tracking-tighter">
                                         {img.repoTags?.[0]?.split(':')[1] || 'latest'}
                                     </span>
+                                </div>
+                            </td>
+                            <td class="px-8 py-4">
+                                <div class="flex flex-wrap gap-1.5">
+                                    {#if img.malwareInfected}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">Malware {img.malwareThreatCount || 0}</span>
+                                    {/if}
+                                    {#if (img.vulnerabilityCritical || 0) > 0}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">Critical CVE {img.vulnerabilityCritical}</span>
+                                    {:else if (img.vulnerabilityHigh || 0) > 0}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">High CVE {img.vulnerabilityHigh}</span>
+                                    {:else if (img.vulnerabilityTotal || 0) > 0}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">CVE {img.vulnerabilityTotal}</span>
+                                    {:else if (img.securityScannedAt || 0) > 0}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">No findings</span>
+                                    {:else}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">Not scanned</span>
+                                    {/if}
+                                </div>
+                            </td>
+                            <td class="px-8 py-4">
+                                <div class="flex flex-wrap gap-1.5">
+                                    {#if img.outdated}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Outdated</span>
+                                    {/if}
+                                    {#if img.pruneCandidate}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">Prune Next Run</span>
+                                    {:else}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">In Use</span>
+                                    {/if}
                                 </div>
                             </td>
                             <td class="px-8 py-4 font-mono text-[10px] text-slate-500 text-right">{formatSize(img.size)}</td>

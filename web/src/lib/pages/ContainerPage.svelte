@@ -7,6 +7,19 @@
     import TrivyFindingsPanel from "../components/TrivyFindingsPanel.svelte";
     import { toasts } from "../stores/ToastStore";
 
+    interface ContainerIntelRecord {
+        containerId: string;
+        containerName?: string;
+        image?: string;
+        overrideRepositoryUrl?: string;
+        overrideChangelogUrl?: string;
+        derivedRepositoryUrl?: string;
+        derivedChangelogUrl?: string;
+        effectiveRepositoryUrl?: string;
+        effectiveChangelogUrl?: string;
+        updatedAt?: number;
+    }
+
     let { id, onNavigate } = $props<{
         id: string;
         onNavigate: (route: string, params?: any) => void;
@@ -31,6 +44,9 @@
     let loadingVulnerabilityDetails = $state(false);
     let malwareDetails = $state<MalwareScanDetail[]>([]);
     let loadingMalwareDetails = $state(false);
+    let intel = $state<ContainerIntelRecord | null>(null);
+    let loadingIntel = $state(false);
+    let savingIntel = $state(false);
 
     async function loadDetail(silent = false) {
         if (!silent) {
@@ -56,7 +72,8 @@
                 await Promise.all([
                     loadVulnerabilityDetails(data?.summary?.image || ""),
                     loadMalwareDetailsForContainer(),
-                    loadUpdateHistory()
+                    loadUpdateHistory(),
+                    loadContainerIntel()
                 ]);
             } else {
                 const body = await res.json().catch(() => ({}));
@@ -66,6 +83,7 @@
                 vulnerabilityDetails = null;
                 malwareDetails = [];
                 updateHistory = [];
+                intel = null;
             }
         } catch (e) {
             if (!silent) {
@@ -74,6 +92,7 @@
             vulnerabilityDetails = null;
             malwareDetails = [];
             updateHistory = [];
+            intel = null;
         } finally {
             if (!silent) {
                 loading = false;
@@ -134,6 +153,54 @@
             updateHistory = [];
         } finally {
             loadingUpdateHistory = false;
+        }
+    }
+
+    async function loadContainerIntel() {
+        loadingIntel = true;
+        try {
+            const res = await fetch(`/api/docker/${encodeURIComponent(id)}/intel`);
+            if (!res.ok) {
+                intel = null;
+                return;
+            }
+            const payload = await res.json();
+            intel = {
+                ...payload,
+                overrideRepositoryUrl: payload?.overrideRepositoryUrl || "",
+                overrideChangelogUrl: payload?.overrideChangelogUrl || ""
+            };
+        } catch {
+            intel = null;
+        } finally {
+            loadingIntel = false;
+        }
+    }
+
+    async function saveContainerIntel() {
+        if (!intel) return;
+        savingIntel = true;
+        try {
+            const res = await fetch(`/api/docker/${encodeURIComponent(id)}/intel`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    repositoryUrl: intel.overrideRepositoryUrl || "",
+                    changelogUrl: intel.overrideChangelogUrl || ""
+                })
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body?.message || `Failed to save intelligence (${res.status})`);
+            intel = {
+                ...body,
+                overrideRepositoryUrl: body?.overrideRepositoryUrl || "",
+                overrideChangelogUrl: body?.overrideChangelogUrl || ""
+            };
+            toasts.success("Container intelligence saved.");
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "Failed to save container intelligence");
+        } finally {
+            savingIntel = false;
         }
     }
 
@@ -381,7 +448,7 @@
 
         <!-- Navigation Tabs -->
         <div class="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-200 dark:border-slate-800">
-            {#each ['insights', 'security', 'lifecycle', 'configuration'] as tab}
+            {#each ['insights', 'security', 'lifecycle', 'intelligence', 'configuration'] as tab}
                 <button 
                     onclick={() => activeTab = tab}
                     class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {activeTab === tab ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
@@ -561,6 +628,73 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            {:else if activeTab === 'intelligence'}
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                        <div>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Repository Intelligence Overrides</h3>
+                            <p class="text-[11px] text-slate-500 mt-1">Set repository/changelog overrides when container labels are missing or incorrect.</p>
+                        </div>
+                        {#if loadingIntel}
+                            <p class="text-sm text-slate-500">Loading intelligence data...</p>
+                        {:else if intel}
+                            <div class="space-y-2">
+                                <label for="intel-repo" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Repository URL Override</label>
+                                <input
+                                    id="intel-repo"
+                                    type="url"
+                                    bind:value={intel.overrideRepositoryUrl}
+                                    placeholder="https://github.com/org/repo"
+                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                />
+                            </div>
+                            <div class="space-y-2">
+                                <label for="intel-changelog" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Changelog URL Override</label>
+                                <input
+                                    id="intel-changelog"
+                                    type="url"
+                                    bind:value={intel.overrideChangelogUrl}
+                                    placeholder="https://github.com/org/repo/releases"
+                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                />
+                            </div>
+                            <button
+                                onclick={saveContainerIntel}
+                                disabled={savingIntel}
+                                class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                            >
+                                {savingIntel ? "Saving..." : "Save Intelligence"}
+                            </button>
+                        {:else}
+                            <p class="text-sm text-slate-500">Intelligence endpoint unavailable.</p>
+                        {/if}
+                    </div>
+
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Effective Metadata</h3>
+                        {#if intel}
+                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Derived Repository</p>
+                                <p class="text-xs text-slate-700 dark:text-slate-300 break-all mt-1">{intel.derivedRepositoryUrl || "None"}</p>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Derived Changelog</p>
+                                <p class="text-xs text-slate-700 dark:text-slate-300 break-all mt-1">{intel.derivedChangelogUrl || "None"}</p>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-brand-50 dark:bg-brand-900/20 p-3">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-brand-700 dark:text-brand-300">Effective Repository</p>
+                                <p class="text-xs text-brand-800 dark:text-brand-200 break-all mt-1">{intel.effectiveRepositoryUrl || "None"}</p>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-brand-50 dark:bg-brand-900/20 p-3">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-brand-700 dark:text-brand-300">Effective Changelog</p>
+                                <p class="text-xs text-brand-800 dark:text-brand-200 break-all mt-1">{intel.effectiveChangelogUrl || "None"}</p>
+                            </div>
+                            <p class="text-[11px] text-slate-500">Last override update: {intel.updatedAt ? new Date(intel.updatedAt * 1000).toLocaleString() : "Never"}</p>
+                        {:else}
+                            <p class="text-sm text-slate-500">No metadata available.</p>
+                        {/if}
                     </div>
                 </div>
             {:else if activeTab === 'configuration'}
