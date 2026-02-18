@@ -570,6 +570,21 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				writeJSON(w, http.StatusOK, images)
 			})
 
+			r.Get("/images/intelligence", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+				defer cancel()
+				images, err := buildImageIntelligence(ctx, dockerClient, scanService)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "docker_error", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, images)
+			})
+
 			r.Post("/prune", func(w http.ResponseWriter, r *http.Request) {
 				if schedSvc == nil {
 					writeError(w, http.StatusServiceUnavailable, "scheduler_unavailable", "Scheduler not initialized")
