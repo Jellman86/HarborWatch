@@ -21,6 +21,8 @@ All notable changes to HarborWatch are documented in this file.
 - **Container Intelligence UX Placement:**
   - Moved Repository URL and Changelog URL override controls from global Settings into a new per-container `intelligence` tab in Container Detail.
   - Added effective/derived metadata display directly in the container context where upgrade decisions are made.
+- **Image Reference Normalization (Web UI):**
+  - Added a centralized frontend image-reference parser utility and switched Fleet/Images views to use it for consistent repo/tag/digest rendering.
 - **Audit Trail Consolidation:**
   - Retired the standalone Audit page in the web UI.
   - System Health now acts as the canonical operational timeline with reusable presets (including an `Audit Trail` preset) plus source/level/search filters.
@@ -46,9 +48,12 @@ All notable changes to HarborWatch are documented in this file.
 - **Image Security Scan Correlation:**
   - Fixed image intelligence matching across tagless, tagged, and digest-style references so scans recorded under `repo` are correctly surfaced for `repo:latest` images (and vice versa).
   - Resolved false `Not scanned` states and incorrect prune-candidate flags caused by strict tag matching.
+  - Added default-registry alias normalization (`docker.io` / `index.docker.io` / `registry-1.docker.io`) so running images are no longer incorrectly flagged `Prune Next Run` when container/image refs use different Docker Hub prefix styles.
 - **Image Intelligence First-Render Hydration:**
   - Fixed Image Repository startup behavior so intelligence rows are fetched on initial page load even when base image inventory is already preloaded.
   - Resolves missing security/lifecycle tags on first open that previously appeared only after manual refresh.
+- **Fleet Inventory Tag Visibility:**
+  - Fixed Fleet Inventory image display to prevent tags from being visually lost due truncation by rendering repository and qualifier (`:tag` or digest) separately.
 - **Security UI Job Locking:**
   - Fixed Security Suite action locking so completed/cancelled jobs no longer block starting subsequent scans.
 

@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import type { ImageSummary } from "../api-types";
     import { toasts } from "../stores/ToastStore";
+    import { parseImageRef } from "../utils/image-ref";
 
     let { images = $bindable([]) } = $props<{ images: ImageSummary[] }>();
     let loading = $state(false);
@@ -144,6 +145,8 @@
 
     const formatId = (id: string) => id.replace('sha256:', '').slice(0, 12);
     const safeRows = $derived((imageRows && imageRows.length > 0) ? imageRows : (images as ImageIntelligenceRow[] || []));
+    const imageRepo = (row: ImageIntelligenceRow) => parseImageRef(row.repoTags?.[0] || row.primaryRef || "").repository;
+    const imageQualifier = (row: ImageIntelligenceRow) => parseImageRef(row.repoTags?.[0] || row.primaryRef || "").qualifier || ":latest";
 </script>
 
 <div class="space-y-6">
@@ -233,12 +236,8 @@
                             <td class="px-8 py-4 font-mono text-[10px] text-slate-400">{formatId(img.id)}</td>
                             <td class="px-8 py-4">
                                 <div class="flex flex-col">
-                                    <span class="font-bold text-slate-900 dark:text-white truncate max-w-[300px]">
-                                        {img.repoTags?.[0]?.split(':')[0] || '<none>'}
-                                    </span>
-                                    <span class="text-[10px] font-black text-brand-600 uppercase tracking-tighter">
-                                        {img.repoTags?.[0]?.split(':')[1] || 'latest'}
-                                    </span>
+                                    <span class="font-bold text-slate-900 dark:text-white truncate max-w-[300px]">{imageRepo(img)}</span>
+                                    <span class="text-[10px] font-black text-brand-600 uppercase tracking-tighter">{imageQualifier(img)}</span>
                                 </div>
                             </td>
                             <td class="px-8 py-4">

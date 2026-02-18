@@ -8,6 +8,43 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 )
 
+func normalizedImageRefKey(ref string) string {
+	raw := strings.ToLower(strings.TrimSpace(ref))
+	if raw == "" {
+		return ""
+	}
+	if at := strings.Index(raw, "@"); at > 0 {
+		raw = raw[:at]
+	}
+	raw = strings.TrimPrefix(raw, "docker.io/")
+	raw = strings.TrimPrefix(raw, "index.docker.io/")
+	raw = strings.TrimPrefix(raw, "registry-1.docker.io/")
+	raw = strings.TrimPrefix(raw, "library/")
+	return raw
+}
+
+func hasExplicitRegistry(ref string) bool {
+	raw := strings.TrimSpace(ref)
+	if raw == "" {
+		return false
+	}
+	if at := strings.Index(raw, "@"); at > 0 {
+		raw = raw[:at]
+	}
+	lastSlash := strings.LastIndex(raw, "/")
+	lastColon := strings.LastIndex(raw, ":")
+	path := raw
+	if lastColon > lastSlash {
+		path = raw[:lastColon]
+	}
+	slash := strings.Index(path, "/")
+	if slash <= 0 {
+		return false
+	}
+	first := path[:slash]
+	return strings.Contains(first, ".") || strings.Contains(first, ":") || first == "localhost"
+}
+
 func taglessImageRef(ref string) string {
 	raw := strings.TrimSpace(ref)
 	if raw == "" {
@@ -45,6 +82,13 @@ func imageRefVariants(ref string) []string {
 	}
 
 	add(raw)
+	add(normalizedImageRefKey(raw))
+	if !hasExplicitRegistry(raw) {
+		add("docker.io/" + raw)
+		if !strings.Contains(strings.TrimSpace(raw), "/") {
+			add("docker.io/library/" + raw)
+		}
+	}
 	base := taglessImageRef(raw)
 	add(base)
 	if !strings.Contains(raw, "@") {
@@ -121,7 +165,7 @@ func buildImageIntelligence(ctx context.Context, dockerClient DockerClient, scan
 	outdatedByImage := map[string]bool{}
 	for _, c := range containers {
 		for _, key := range imageRefVariants(c.Image) {
-			k := strings.ToLower(strings.TrimSpace(key))
+			k := normalizedImageRefKey(key)
 			if k == "" {
 				continue
 			}
@@ -160,7 +204,7 @@ func buildImageIntelligence(ctx context.Context, dockerClient DockerClient, scan
 		inUse := false
 		outdated := false
 		for _, candidate := range lookupCandidates {
-			key := strings.ToLower(strings.TrimSpace(candidate))
+			key := normalizedImageRefKey(candidate)
 			if inUseByImage[key] {
 				inUse = true
 			}

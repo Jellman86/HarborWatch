@@ -2,6 +2,7 @@
     import type { ContainerSummary, Metric } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
     import Sparkline from "../components/Sparkline.svelte";
+    import { parseImageRef } from "../utils/image-ref";
 
     let { containers, onNavigate } = $props<{
         containers: ContainerSummary[];
@@ -91,6 +92,9 @@
     function handleTriggerScan(image: string) {
         onNavigate('security', { target: image });
     }
+
+    const imageRepo = (image: string) => parseImageRef(image).repository;
+    const imageQualifier = (image: string) => parseImageRef(image).qualifier || ":latest";
 
     let safeContainers = $derived(containers || []);
 
@@ -205,8 +209,11 @@
                                 {/if}
                             </div>
                         </td>
-                        <td class="px-6 py-4 text-xs text-slate-600 dark:text-slate-400 truncate max-w-[150px]" title={c.image}>
-                            {c.image}
+                        <td class="px-6 py-4" title={c.image}>
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="text-xs text-slate-600 dark:text-slate-400 truncate max-w-[170px] font-semibold">{imageRepo(c.image)}</span>
+                                <span class="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-[9px] font-black uppercase tracking-tight text-slate-600 dark:text-slate-300 whitespace-nowrap">{imageQualifier(c.image)}</span>
+                            </div>
                         </td>
                         <td class="px-6 py-4">
                             {#if getIntelURL(c.labels)}
@@ -338,7 +345,10 @@
                     <div class="space-y-6">
                         <div class="flex flex-col">
                             <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Image Artifact</span>
-                            <span class="text-xs text-slate-600 dark:text-slate-300 truncate font-bold" title={c.image}>{c.image}</span>
+                            <div class="flex items-center gap-2 min-w-0" title={c.image}>
+                                <span class="text-xs text-slate-600 dark:text-slate-300 truncate font-bold">{imageRepo(c.image)}</span>
+                                <span class="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-[9px] font-black uppercase tracking-tight text-slate-600 dark:text-slate-300 whitespace-nowrap">{imageQualifier(c.image)}</span>
+                            </div>
                         </div>
 
                         <div class="flex flex-col h-[40px] justify-center bg-slate-50 dark:bg-slate-900/50 rounded-xl p-2 border border-slate-100 dark:border-slate-800">

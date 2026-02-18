@@ -99,3 +99,70 @@ func TestBuildImageIntelligence_ScanFallbackToTaglessTarget(t *testing.T) {
 		t.Fatalf("expected securityScannedAt to be set from matched tagless scan target")
 	}
 }
+
+func TestBuildImageIntelligence_DefaultRegistryPrefixContainerMatchesRepoTag(t *testing.T) {
+	docker := fakeDockerClient{
+		images: []gen.ImageSummary{
+			{ID: "img1", RepoTags: []string{"clamav/clamav:latest"}, Size: 100},
+		},
+		containers: []gen.ContainerSummary{
+			{ID: "c1", Image: "docker.io/clamav/clamav:latest"},
+		},
+	}
+
+	rows, err := buildImageIntelligence(context.Background(), docker, fakeImageScanLookup{})
+	if err != nil {
+		t.Fatalf("buildImageIntelligence error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	row := rows[0]
+	if !row.InUse {
+		t.Fatalf("expected inUse=true for docker.io-prefixed container image")
+	}
+	if row.PruneCandidate {
+		t.Fatalf("expected pruneCandidate=false for running docker.io image")
+	}
+}
+
+func TestBuildImageIntelligence_ScanFallbackAcrossDefaultRegistryPrefix(t *testing.T) {
+	docker := fakeDockerClient{
+		images: []gen.ImageSummary{
+			{ID: "img1", RepoTags: []string{"clamav/clamav:latest"}, Size: 100},
+		},
+		containers: []gen.ContainerSummary{
+			{ID: "c1", Image: "clamav/clamav:latest"},
+		},
+	}
+	scans := fakeImageScanLookup{
+		summaryByTarget: map[string]*gen.ScanSummary{
+			"docker.io/clamav/clamav:latest": {
+				Target:    "docker.io/clamav/clamav:latest",
+				ScannedAt: 1771414793,
+				Total:     4,
+				Critical:  1,
+				High:      1,
+				Medium:    1,
+				Low:       1,
+				RiskScore: 40,
+				Source:    "trivy",
+			},
+		},
+	}
+
+	rows, err := buildImageIntelligence(context.Background(), docker, scans)
+	if err != nil {
+		t.Fatalf("buildImageIntelligence error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	row := rows[0]
+	if row.VulnerabilityTotal != 4 {
+		t.Fatalf("expected vulnerabilityTotal=4 from docker.io scan match, got %d", row.VulnerabilityTotal)
+	}
+	if row.SecurityScannedAt == 0 {
+		t.Fatalf("expected securityScannedAt to be set from docker.io scan target")
+	}
+}
