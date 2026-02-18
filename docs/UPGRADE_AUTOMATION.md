@@ -89,6 +89,14 @@ These are managed in Settings -> Automations -> Upgrades.
   - AI risk score threshold that blocks update execution during `release_analysis`.
   - Default: `80`
 
+### Settings UI Mapping
+
+These runtime values can be configured from Settings unless pinned by environment overrides:
+
+- `aiBlockRiskThreshold` -> Settings -> AI
+- `autoUpgradeMaxConcurrency` -> Settings -> Automations -> Upgrades
+- `autoUpgradeMinRetryMinutes` -> Settings -> Automations -> Upgrades
+
 ## UI Hooks
 
 ### Settings -> Automations -> Upgrades

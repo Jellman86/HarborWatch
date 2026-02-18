@@ -92,6 +92,7 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - `HW_AI_BLOCK_RISK_THRESHOLD` sets the AI risk-score block threshold used during update `release_analysis` (default `80`).
 - `HW_AUTO_UPGRADE_MAX_CONCURRENCY` limits auto-apply starts per scheduler run (default `1`).
 - `HW_AUTO_UPGRADE_MIN_RETRY_MINUTES` sets auto-apply retry cooldown after failed/rolled-back jobs (default `60`).
+- These controls are available in Settings (`AI` and `Automations -> Upgrades`) unless locked by environment overrides.
 
 ## AI Provider Configuration
 

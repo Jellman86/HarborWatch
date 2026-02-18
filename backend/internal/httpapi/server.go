@@ -1118,7 +1118,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					writeError(w, http.StatusNotFound, "container_not_found", err.Error())
 					return
 				}
-				go triggerContainerMalwareScans(containerID, scanService, diagService)
+				go triggerContainerMalwareScans(containerID, scanService, settingsService, diagService)
 				writeJSON(w, http.StatusAccepted, map[string]string{
 					"status":      "queued",
 					"containerId": containerID,

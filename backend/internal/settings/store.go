@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -15,18 +16,19 @@ type Settings struct {
 	DiscordEnabled    bool   `json:"discordEnabled"`
 
 	// API Keys / Integrations
-	PortainerURL     string `json:"portainerUrl"`
-	PortainerApiKey  string `json:"portainerApiKey"`
-	PortainerEnabled bool   `json:"portainerEnabled"`
-	AIEnabled        bool   `json:"aiEnabled"`
-	AIProvider       string `json:"aiProvider"`
-	OpenAIKey        string `json:"openaiKey"`
-	OpenAIModel      string `json:"openaiModel"`
-	AnthropicKey     string `json:"anthropicKey"`
-	AnthropicModel   string `json:"anthropicModel"`
-	GeminiKey        string `json:"geminiKey"`
-	GeminiModel      string `json:"geminiModel"`
-	AIPricingJSON    string `json:"aiPricingJson"`
+	PortainerURL         string `json:"portainerUrl"`
+	PortainerApiKey      string `json:"portainerApiKey"`
+	PortainerEnabled     bool   `json:"portainerEnabled"`
+	AIEnabled            bool   `json:"aiEnabled"`
+	AIProvider           string `json:"aiProvider"`
+	AIBlockRiskThreshold int    `json:"aiBlockRiskThreshold"`
+	OpenAIKey            string `json:"openaiKey"`
+	OpenAIModel          string `json:"openaiModel"`
+	AnthropicKey         string `json:"anthropicKey"`
+	AnthropicModel       string `json:"anthropicModel"`
+	GeminiKey            string `json:"geminiKey"`
+	GeminiModel          string `json:"geminiModel"`
+	AIPricingJSON        string `json:"aiPricingJson"`
 
 	// System
 	InstanceURL                 string `json:"instanceUrl"`
@@ -34,6 +36,9 @@ type Settings struct {
 	UIAnimationsEnabled         bool   `json:"uiAnimationsEnabled"`
 	AutomationIgnoredContainers string `json:"automationIgnoredContainers"`
 	MalwareIgnoredMounts        string `json:"malwareIgnoredMounts"`
+	AutoUpgradeMaxConcurrency   int    `json:"autoUpgradeMaxConcurrency"`
+	AutoUpgradeMinRetryMinutes  int    `json:"autoUpgradeMinRetryMinutes"`
+	ClamAVSnapshotMaxBytes      int64  `json:"clamavSnapshotMaxBytes"`
 
 	// Metadata (read-only info for UI)
 	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
@@ -64,10 +69,14 @@ CREATE TABLE IF NOT EXISTS app_settings (
 func (s *Store) Get(ctx context.Context) (Settings, error) {
 	st := Settings{
 		AIEnabled:                   true,
+		AIBlockRiskThreshold:        80,
 		DiscordEnabled:              true,
 		PortainerEnabled:            true,
 		UIAnimationsEnabled:         true,
 		AutomationIgnoredContainers: "harborwatch",
+		AutoUpgradeMaxConcurrency:   1,
+		AutoUpgradeMinRetryMinutes:  60,
+		ClamAVSnapshotMaxBytes:      2 << 30,
 		EnvironmentOverrides:        make(map[string]bool),
 	}
 
@@ -102,6 +111,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.OpenAIModel = value
 		case "ai_provider":
 			st.AIProvider = value
+		case "ai_block_risk_threshold":
+			st.AIBlockRiskThreshold = parseStoredInt(value, st.AIBlockRiskThreshold, 0, 100)
 		case "anthropic_key":
 			st.AnthropicKey = value
 		case "anthropic_model":
@@ -122,6 +133,12 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.AutomationIgnoredContainers = value
 		case "malware_ignored_mounts":
 			st.MalwareIgnoredMounts = value
+		case "auto_upgrade_max_concurrency":
+			st.AutoUpgradeMaxConcurrency = parseStoredInt(value, st.AutoUpgradeMaxConcurrency, 1, 20)
+		case "auto_upgrade_min_retry_minutes":
+			st.AutoUpgradeMinRetryMinutes = parseStoredInt(value, st.AutoUpgradeMinRetryMinutes, 1, 24*60)
+		case "clamav_snapshot_max_bytes":
+			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
 		}
 	}
 
@@ -175,6 +192,26 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.EnvironmentOverrides[jsonKey] = true
 		}
 	}
+	intEnvMap := map[string]struct {
+		ptr      *int
+		envKey   string
+		minValue int
+		maxValue int
+	}{
+		"aiBlockRiskThreshold":       {&st.AIBlockRiskThreshold, "HW_AI_BLOCK_RISK_THRESHOLD", 0, 100},
+		"autoUpgradeMaxConcurrency":  {&st.AutoUpgradeMaxConcurrency, "HW_AUTO_UPGRADE_MAX_CONCURRENCY", 1, 20},
+		"autoUpgradeMinRetryMinutes": {&st.AutoUpgradeMinRetryMinutes, "HW_AUTO_UPGRADE_MIN_RETRY_MINUTES", 1, 24 * 60},
+	}
+	for jsonKey, mapping := range intEnvMap {
+		if val := strings.TrimSpace(os.Getenv(mapping.envKey)); val != "" {
+			*mapping.ptr = parseStoredInt(val, *mapping.ptr, mapping.minValue, mapping.maxValue)
+			st.EnvironmentOverrides[jsonKey] = true
+		}
+	}
+	if val := strings.TrimSpace(os.Getenv("HW_CLAMAV_SNAPSHOT_MAX_BYTES")); val != "" {
+		st.ClamAVSnapshotMaxBytes = parseStoredInt64(val, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
+		st.EnvironmentOverrides["clamavSnapshotMaxBytes"] = true
+	}
 
 	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
 	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
@@ -188,6 +225,10 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	current, _ := s.Get(ctx)
 	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
 	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
+	st.AIBlockRiskThreshold = parseStoredInt(strconv.Itoa(st.AIBlockRiskThreshold), 80, 0, 100)
+	st.AutoUpgradeMaxConcurrency = parseStoredInt(strconv.Itoa(st.AutoUpgradeMaxConcurrency), 1, 1, 20)
+	st.AutoUpgradeMinRetryMinutes = parseStoredInt(strconv.Itoa(st.AutoUpgradeMinRetryMinutes), 60, 1, 24*60)
+	st.ClamAVSnapshotMaxBytes = parseStoredInt64(strconv.FormatInt(st.ClamAVSnapshotMaxBytes, 10), 2<<30, 1, 32<<30)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -196,25 +237,29 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	defer tx.Rollback()
 
 	keys := map[string]string{
-		"discord_webhook_url":           st.DiscordWebhookURL,
-		"discord_enabled":               boolString(st.DiscordEnabled),
-		"portainer_url":                 st.PortainerURL,
-		"portainer_api_key":             st.PortainerApiKey,
-		"portainer_enabled":             boolString(st.PortainerEnabled),
-		"ai_enabled":                    boolString(st.AIEnabled),
-		"ai_provider":                   st.AIProvider,
-		"openai_key":                    st.OpenAIKey,
-		"openai_model":                  st.OpenAIModel,
-		"anthropic_key":                 st.AnthropicKey,
-		"anthropic_model":               st.AnthropicModel,
-		"gemini_key":                    st.GeminiKey,
-		"gemini_model":                  st.GeminiModel,
-		"ai_pricing_json":               st.AIPricingJSON,
-		"instance_url":                  st.InstanceURL,
-		"validate_url_pattern":          st.ValidateURLPattern,
-		"ui_animations_enabled":         boolString(st.UIAnimationsEnabled),
-		"automation_ignored_containers": st.AutomationIgnoredContainers,
-		"malware_ignored_mounts":        st.MalwareIgnoredMounts,
+		"discord_webhook_url":            st.DiscordWebhookURL,
+		"discord_enabled":                boolString(st.DiscordEnabled),
+		"portainer_url":                  st.PortainerURL,
+		"portainer_api_key":              st.PortainerApiKey,
+		"portainer_enabled":              boolString(st.PortainerEnabled),
+		"ai_enabled":                     boolString(st.AIEnabled),
+		"ai_provider":                    st.AIProvider,
+		"ai_block_risk_threshold":        intString(st.AIBlockRiskThreshold),
+		"openai_key":                     st.OpenAIKey,
+		"openai_model":                   st.OpenAIModel,
+		"anthropic_key":                  st.AnthropicKey,
+		"anthropic_model":                st.AnthropicModel,
+		"gemini_key":                     st.GeminiKey,
+		"gemini_model":                   st.GeminiModel,
+		"ai_pricing_json":                st.AIPricingJSON,
+		"instance_url":                   st.InstanceURL,
+		"validate_url_pattern":           st.ValidateURLPattern,
+		"ui_animations_enabled":          boolString(st.UIAnimationsEnabled),
+		"automation_ignored_containers":  st.AutomationIgnoredContainers,
+		"malware_ignored_mounts":         st.MalwareIgnoredMounts,
+		"auto_upgrade_max_concurrency":   intString(st.AutoUpgradeMaxConcurrency),
+		"auto_upgrade_min_retry_minutes": intString(st.AutoUpgradeMinRetryMinutes),
+		"clamav_snapshot_max_bytes":      int64String(st.ClamAVSnapshotMaxBytes),
 	}
 
 	jsonToDbKey := map[string]string{
@@ -225,6 +270,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"portainerEnabled":            "portainer_enabled",
 		"aiEnabled":                   "ai_enabled",
 		"aiProvider":                  "ai_provider",
+		"aiBlockRiskThreshold":        "ai_block_risk_threshold",
 		"openaiKey":                   "openai_key",
 		"openaiModel":                 "openai_model",
 		"anthropicKey":                "anthropic_key",
@@ -237,6 +283,9 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"uiAnimationsEnabled":         "ui_animations_enabled",
 		"automationIgnoredContainers": "automation_ignored_containers",
 		"malwareIgnoredMounts":        "malware_ignored_mounts",
+		"autoUpgradeMaxConcurrency":   "auto_upgrade_max_concurrency",
+		"autoUpgradeMinRetryMinutes":  "auto_upgrade_min_retry_minutes",
+		"clamavSnapshotMaxBytes":      "clamav_snapshot_max_bytes",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {
@@ -276,6 +325,42 @@ func boolString(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func intString(value int) string {
+	return strconv.Itoa(value)
+}
+
+func int64String(value int64) string {
+	return strconv.FormatInt(value, 10)
+}
+
+func parseStoredInt(value string, defaultValue, minValue, maxValue int) int {
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return defaultValue
+	}
+	if parsed < minValue {
+		return minValue
+	}
+	if parsed > maxValue {
+		return maxValue
+	}
+	return parsed
+}
+
+func parseStoredInt64(value string, defaultValue, minValue, maxValue int64) int64 {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return defaultValue
+	}
+	if parsed < minValue {
+		return minValue
+	}
+	if parsed > maxValue {
+		return maxValue
+	}
+	return parsed
 }
 
 func normalizeContainerIgnoreList(raw string) string {

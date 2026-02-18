@@ -96,6 +96,7 @@
         portainerEnabled: true,
         aiEnabled: true,
         aiProvider: "",
+        aiBlockRiskThreshold: 80,
         openaiKey: "",
         openaiModel: "",
         anthropicKey: "",
@@ -108,6 +109,9 @@
         uiAnimationsEnabled: true,
         automationIgnoredContainers: "harborwatch",
         malwareIgnoredMounts: "",
+        autoUpgradeMaxConcurrency: 1,
+        autoUpgradeMinRetryMinutes: 60,
+        clamavSnapshotMaxBytes: 2147483648,
         environmentOverrides: {}
     };
 
@@ -566,6 +570,10 @@
     async function saveSettings() {
         saving = true;
         try {
+            settings.aiBlockRiskThreshold = Math.max(0, Math.min(100, Number(settings.aiBlockRiskThreshold || 80)));
+            settings.autoUpgradeMaxConcurrency = Math.max(1, Math.min(20, Number(settings.autoUpgradeMaxConcurrency || 1)));
+            settings.autoUpgradeMinRetryMinutes = Math.max(1, Math.min(1440, Number(settings.autoUpgradeMinRetryMinutes || 60)));
+            settings.clamavSnapshotMaxBytes = Math.max(1, Number(settings.clamavSnapshotMaxBytes || 2147483648));
             const res = await fetch("/api/settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -730,6 +738,19 @@
 
     function formatUSDCompact(value: number | undefined): string {
         return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(Number(value || 0));
+    }
+
+    function formatBytesCompact(value: number | undefined): string {
+        const bytes = Number(value || 0);
+        if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let idx = 0;
+        let size = bytes;
+        while (size >= 1024 && idx < units.length - 1) {
+            size /= 1024;
+            idx += 1;
+        }
+        return `${size.toFixed(idx === 0 ? 0 : 2)} ${units[idx]}`;
     }
 
     function formatDayLabel(day: string | undefined): string {
@@ -950,6 +971,41 @@
                         </p>
                     </div>
 
+                    {#if activeAutomationTab === "upgrades"}
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Upgrade Runtime Controls</p>
+                                <p class="text-[11px] text-slate-500 mt-1">Tune how aggressively auto-apply runs and how long failed containers wait before retry.</p>
+                            </div>
+                            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                <div class="space-y-2">
+                                    <label for="auto-upgrade-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Auto-Apply Max Starts Per Run</label>
+                                    <input
+                                        id="auto-upgrade-max-concurrency"
+                                        type="number"
+                                        min="1"
+                                        max="20"
+                                        bind:value={settings.autoUpgradeMaxConcurrency}
+                                        disabled={isLocked("autoUpgradeMaxConcurrency")}
+                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                    />
+                                </div>
+                                <div class="space-y-2">
+                                    <label for="auto-upgrade-min-retry" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retry Cooldown (minutes)</label>
+                                    <input
+                                        id="auto-upgrade-min-retry"
+                                        type="number"
+                                        min="1"
+                                        max="1440"
+                                        bind:value={settings.autoUpgradeMinRetryMinutes}
+                                        disabled={isLocked("autoUpgradeMinRetryMinutes")}
+                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
+
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
                         {#each schedulesForDomain(activeAutomationTab) as task}
                             {@const draft = draftForTask(task)}
@@ -1076,6 +1132,20 @@
                             <option value="gemini">Gemini</option>
                         </select>
                     </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-2">
+                    <label for="ai-block-risk-threshold" class="text-[10px] font-black uppercase text-slate-400 ml-1">AI Update Block Risk Threshold</label>
+                    <input
+                        id="ai-block-risk-threshold"
+                        type="number"
+                        min="0"
+                        max="100"
+                        bind:value={settings.aiBlockRiskThreshold}
+                        disabled={isLocked("aiBlockRiskThreshold") || !settings.aiEnabled}
+                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                    />
+                    <p class="text-[11px] text-slate-500">Updates are blocked when AI release analysis risk score is greater than or equal to this value.</p>
                 </div>
 
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
@@ -1415,6 +1485,19 @@
                             Signature update scheduler task is not registered.
                         {/if}
                     </p>
+
+                    <div class="space-y-2">
+                        <label for="clamav-snapshot-max-bytes" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Container Snapshot Max Bytes</label>
+                        <input
+                            id="clamav-snapshot-max-bytes"
+                            type="number"
+                            min="1"
+                            bind:value={settings.clamavSnapshotMaxBytes}
+                            disabled={isLocked("clamavSnapshotMaxBytes")}
+                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                        />
+                        <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes)}</span>. Increase if large container mount snapshots are skipped.</p>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">

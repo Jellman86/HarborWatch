@@ -19,19 +19,20 @@ import (
 )
 
 type Request struct {
-	ContainerID         string
-	TargetImage         string
-	ValidateURL         string
-	CurrentImage        string
-	ContainerName       string
-	Labels              map[string]string
-	RepositoryURL       string
-	ChangelogURL        string
-	ReleaseContext      string
-	ValidateMode        string
-	ValidateTimeoutSec  int
-	ValidateIntervalSec int
-	AIValidateLogs      bool
+	ContainerID          string
+	TargetImage          string
+	ValidateURL          string
+	CurrentImage         string
+	ContainerName        string
+	Labels               map[string]string
+	RepositoryURL        string
+	ChangelogURL         string
+	ReleaseContext       string
+	ValidateMode         string
+	ValidateTimeoutSec   int
+	ValidateIntervalSec  int
+	AIValidateLogs       bool
+	AIBlockRiskThreshold int
 }
 
 type DiagService interface {
@@ -157,7 +158,10 @@ func (s *Service) execute(jobID string, req Request) {
 			}
 			_ = s.store.SaveAIAnalysis(ctx, jobID, summary)
 
-			threshold := envInt("HW_AI_BLOCK_RISK_THRESHOLD", 80, 0, 100)
+			threshold := req.AIBlockRiskThreshold
+			if threshold < 0 || threshold > 100 {
+				threshold = envInt("HW_AI_BLOCK_RISK_THRESHOLD", 80, 0, 100)
+			}
 			if blocked, reason := shouldBlockForAI(analysis, threshold); blocked {
 				if s.notif != nil {
 					s.notif.Dispatch(ctx, notifications.Message{

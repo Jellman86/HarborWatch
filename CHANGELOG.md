@@ -2,6 +2,35 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.14] - 2026-02-18
+
+### Added
+- **Settings UI Controls for Upgrade/Security Runtime Knobs:**
+  - Added Settings -> AI control for `AI Update Block Risk Threshold` (`aiBlockRiskThreshold`).
+  - Added Settings -> Automations -> Upgrades controls for:
+    - `autoUpgradeMaxConcurrency`
+    - `autoUpgradeMinRetryMinutes`
+  - Added Settings -> System control for:
+    - `clamavSnapshotMaxBytes` with human-readable size preview.
+- **Persisted Runtime Settings + Env Locking:**
+  - Extended settings persistence and environment override locking for:
+    - `HW_AI_BLOCK_RISK_THRESHOLD`
+    - `HW_AUTO_UPGRADE_MAX_CONCURRENCY`
+    - `HW_AUTO_UPGRADE_MIN_RETRY_MINUTES`
+    - `HW_CLAMAV_SNAPSHOT_MAX_BYTES`
+
+### Changed
+- **Runtime Wiring:**
+  - Update AI risk gate now consumes persisted `aiBlockRiskThreshold` when configured.
+  - Auto-apply scheduler now consumes persisted concurrency/retry values per run.
+  - Container malware snapshot cap now consumes persisted `clamavSnapshotMaxBytes`.
+- **API Contract Types:**
+  - Regenerated shared Go/TypeScript API settings types to include new runtime fields.
+
+### Tests
+- `go test ./...` (backend)
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.13] - 2026-02-18
 
 ### Added

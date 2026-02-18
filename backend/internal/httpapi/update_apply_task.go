@@ -14,16 +14,16 @@ import (
 )
 
 type automatedUpdateApplyTask struct {
-	dockerClient    DockerClient
-	updateService   UpdateService
-	rulesService    RulesService
-	settingsService SettingsService
-	intelService    ContainerIntelService
-	releaseService  ReleaseService
-	diagService     DiagService
-	allow           func(ctx context.Context, containerID string) bool
-	maxPerRun       int
-	minRetryWindow  time.Duration
+	dockerClient          DockerClient
+	updateService         UpdateService
+	rulesService          RulesService
+	settingsService       SettingsService
+	intelService          ContainerIntelService
+	releaseService        ReleaseService
+	diagService           DiagService
+	allow                 func(ctx context.Context, containerID string) bool
+	defaultMaxPerRun      int
+	defaultMinRetryWindow time.Duration
 }
 
 func newAutomatedUpdateApplyTask(
@@ -37,16 +37,16 @@ func newAutomatedUpdateApplyTask(
 	allow func(ctx context.Context, containerID string) bool,
 ) scheduler.Task {
 	return &automatedUpdateApplyTask{
-		dockerClient:    dockerClient,
-		updateService:   updateService,
-		rulesService:    rulesService,
-		settingsService: settingsService,
-		intelService:    intelService,
-		releaseService:  releaseService,
-		diagService:     diagService,
-		allow:           allow,
-		maxPerRun:       envIntWithBounds("HW_AUTO_UPGRADE_MAX_CONCURRENCY", 1, 1, 20),
-		minRetryWindow:  time.Duration(envIntWithBounds("HW_AUTO_UPGRADE_MIN_RETRY_MINUTES", 60, 1, 24*60)) * time.Minute,
+		dockerClient:          dockerClient,
+		updateService:         updateService,
+		rulesService:          rulesService,
+		settingsService:       settingsService,
+		intelService:          intelService,
+		releaseService:        releaseService,
+		diagService:           diagService,
+		allow:                 allow,
+		defaultMaxPerRun:      envIntWithBounds("HW_AUTO_UPGRADE_MAX_CONCURRENCY", 1, 1, 20),
+		defaultMinRetryWindow: time.Duration(envIntWithBounds("HW_AUTO_UPGRADE_MIN_RETRY_MINUTES", 60, 1, 24*60)) * time.Minute,
 	}
 }
 
@@ -56,6 +56,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 	if t.dockerClient == nil || t.updateService == nil {
 		return nil
 	}
+	maxPerRun, minRetryWindow := t.loadRunConfig(ctx)
 
 	containersCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	containers, err := t.dockerClient.ListContainers(containersCtx)
@@ -67,7 +68,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 	started := 0
 	skipped := 0
 	for _, summary := range containers {
-		if t.maxPerRun > 0 && started >= t.maxPerRun {
+		if maxPerRun > 0 && started >= maxPerRun {
 			break
 		}
 		if strings.TrimSpace(summary.ID) == "" || !summary.UpdateAvailable {
@@ -106,7 +107,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 			}
 		}
 
-		canStart, reason := t.canStartUpdate(ctx, built.Summary.ID)
+		canStart, reason := t.canStartUpdate(ctx, built.Summary.ID, minRetryWindow)
 		if !canStart {
 			skipped++
 			if reason != "" {
@@ -130,7 +131,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 	return nil
 }
 
-func (t *automatedUpdateApplyTask) canStartUpdate(ctx context.Context, containerID string) (bool, string) {
+func (t *automatedUpdateApplyTask) canStartUpdate(ctx context.Context, containerID string, minRetryWindow time.Duration) (bool, string) {
 	historyCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	runs, err := t.updateService.ListContainerJobs(historyCtx, containerID, 1)
@@ -142,10 +143,10 @@ func (t *automatedUpdateApplyTask) canStartUpdate(ctx context.Context, container
 	if status == "running" {
 		return false, "an update job is already running"
 	}
-	if (status == "failed" || status == "rolled_back") && t.minRetryWindow > 0 {
+	if (status == "failed" || status == "rolled_back") && minRetryWindow > 0 {
 		lastUpdated := time.Unix(last.UpdatedAt, 0)
-		if !lastUpdated.IsZero() && time.Since(lastUpdated) < t.minRetryWindow {
-			remaining := t.minRetryWindow - time.Since(lastUpdated)
+		if !lastUpdated.IsZero() && time.Since(lastUpdated) < minRetryWindow {
+			remaining := minRetryWindow - time.Since(lastUpdated)
 			if remaining < 0 {
 				remaining = 0
 			}
@@ -153,6 +154,27 @@ func (t *automatedUpdateApplyTask) canStartUpdate(ctx context.Context, container
 		}
 	}
 	return true, ""
+}
+
+func (t *automatedUpdateApplyTask) loadRunConfig(ctx context.Context) (int, time.Duration) {
+	maxPerRun := t.defaultMaxPerRun
+	minRetryWindow := t.defaultMinRetryWindow
+	if t.settingsService == nil {
+		return maxPerRun, minRetryWindow
+	}
+	settingsCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	st, err := t.settingsService.Get(settingsCtx)
+	if err != nil {
+		return maxPerRun, minRetryWindow
+	}
+	if st.AutoUpgradeMaxConcurrency >= 1 && st.AutoUpgradeMaxConcurrency <= 20 {
+		maxPerRun = st.AutoUpgradeMaxConcurrency
+	}
+	if st.AutoUpgradeMinRetryMinutes >= 1 && st.AutoUpgradeMinRetryMinutes <= 24*60 {
+		minRetryWindow = time.Duration(st.AutoUpgradeMinRetryMinutes) * time.Minute
+	}
+	return maxPerRun, minRetryWindow
 }
 
 func (t *automatedUpdateApplyTask) log(level, message string) {

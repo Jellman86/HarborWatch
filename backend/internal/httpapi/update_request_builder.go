@@ -107,6 +107,17 @@ func buildUpdateRequestForContainer(
 		return out, errors.New("targetImage and validateUrl could not be auto-derived; provide explicit values")
 	}
 
+	aiBlockRiskThreshold := -1
+	if settingsService != nil {
+		settingsCtx, settingsCancel := context.WithTimeout(ctx, 2*time.Second)
+		if st, err := settingsService.Get(settingsCtx); err == nil {
+			if st.AIBlockRiskThreshold >= 0 && st.AIBlockRiskThreshold <= 100 {
+				aiBlockRiskThreshold = st.AIBlockRiskThreshold
+			}
+		}
+		settingsCancel()
+	}
+
 	repoURL := deriveRepositoryURL(out.Summary)
 	changelogURL := deriveChangelogURL(out.Summary, repoURL)
 	if intelService != nil {
@@ -130,19 +141,20 @@ func buildUpdateRequestForContainer(
 	}
 
 	out.Request = updates.Request{
-		ContainerID:         containerID,
-		TargetImage:         targetImage,
-		ValidateURL:         validateURL,
-		CurrentImage:        strings.TrimSpace(out.Summary.Image),
-		ContainerName:       trimContainerName(out.Summary.Names),
-		Labels:              out.Summary.Labels,
-		RepositoryURL:       repoURL,
-		ChangelogURL:        changelogURL,
-		ReleaseContext:      releaseContext,
-		ValidateMode:        effectiveRules.ValidateMode,
-		ValidateTimeoutSec:  effectiveRules.ValidateTimeoutSec,
-		ValidateIntervalSec: effectiveRules.ValidateIntervalSec,
-		AIValidateLogs:      effectiveRules.AIValidateLogs,
+		ContainerID:          containerID,
+		TargetImage:          targetImage,
+		ValidateURL:          validateURL,
+		CurrentImage:         strings.TrimSpace(out.Summary.Image),
+		ContainerName:        trimContainerName(out.Summary.Names),
+		Labels:               out.Summary.Labels,
+		RepositoryURL:        repoURL,
+		ChangelogURL:         changelogURL,
+		ReleaseContext:       releaseContext,
+		ValidateMode:         effectiveRules.ValidateMode,
+		ValidateTimeoutSec:   effectiveRules.ValidateTimeoutSec,
+		ValidateIntervalSec:  effectiveRules.ValidateIntervalSec,
+		AIValidateLogs:       effectiveRules.AIValidateLogs,
+		AIBlockRiskThreshold: aiBlockRiskThreshold,
 	}
 	return out, nil
 }

@@ -61,3 +61,40 @@ func TestSaveNormalizesIgnoreLists(t *testing.T) {
 		t.Fatalf("expected deduplicated mount patterns, got %q", got.MalwareIgnoredMounts)
 	}
 }
+
+func TestGetAppliesRuntimeEnvOverridesForNumericSettings(t *testing.T) {
+	t.Setenv("HW_AI_BLOCK_RISK_THRESHOLD", "65")
+	t.Setenv("HW_AUTO_UPGRADE_MAX_CONCURRENCY", "3")
+	t.Setenv("HW_AUTO_UPGRADE_MIN_RETRY_MINUTES", "90")
+	t.Setenv("HW_CLAMAV_SNAPSHOT_MAX_BYTES", "3221225472")
+
+	store := newTestStore(t)
+	got, err := store.Get(context.Background())
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if got.AIBlockRiskThreshold != 65 {
+		t.Fatalf("expected AIBlockRiskThreshold=65, got %d", got.AIBlockRiskThreshold)
+	}
+	if got.AutoUpgradeMaxConcurrency != 3 {
+		t.Fatalf("expected AutoUpgradeMaxConcurrency=3, got %d", got.AutoUpgradeMaxConcurrency)
+	}
+	if got.AutoUpgradeMinRetryMinutes != 90 {
+		t.Fatalf("expected AutoUpgradeMinRetryMinutes=90, got %d", got.AutoUpgradeMinRetryMinutes)
+	}
+	if got.ClamAVSnapshotMaxBytes != 3221225472 {
+		t.Fatalf("expected ClamAVSnapshotMaxBytes=3221225472, got %d", got.ClamAVSnapshotMaxBytes)
+	}
+	if !got.EnvironmentOverrides["aiBlockRiskThreshold"] {
+		t.Fatalf("expected aiBlockRiskThreshold override to be locked")
+	}
+	if !got.EnvironmentOverrides["autoUpgradeMaxConcurrency"] {
+		t.Fatalf("expected autoUpgradeMaxConcurrency override to be locked")
+	}
+	if !got.EnvironmentOverrides["autoUpgradeMinRetryMinutes"] {
+		t.Fatalf("expected autoUpgradeMinRetryMinutes override to be locked")
+	}
+	if !got.EnvironmentOverrides["clamavSnapshotMaxBytes"] {
+		t.Fatalf("expected clamavSnapshotMaxBytes override to be locked")
+	}
+}

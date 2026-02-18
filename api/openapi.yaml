@@ -1008,6 +1008,7 @@ components:
         aiProvider:
           type: string
           enum: [openai, anthropic, gemini]
+        aiBlockRiskThreshold: { type: integer, minimum: 0, maximum: 100 }
         openaiKey: { type: string }
         openaiModel: { type: string }
         anthropicKey: { type: string }
@@ -1019,6 +1020,9 @@ components:
         uiAnimationsEnabled: { type: boolean }
         automationIgnoredContainers: { type: string }
         malwareIgnoredMounts: { type: string }
+        autoUpgradeMaxConcurrency: { type: integer, minimum: 1, maximum: 20 }
+        autoUpgradeMinRetryMinutes: { type: integer, minimum: 1, maximum: 1440 }
+        clamavSnapshotMaxBytes: { type: integer, format: int64, minimum: 1 }
         environmentOverrides:
           type: object
           additionalProperties: { type: boolean }
