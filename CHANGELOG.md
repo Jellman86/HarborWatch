@@ -20,6 +20,14 @@ All notable changes to HarborWatch are documented in this file.
   - Added effective/derived metadata display directly in the container context where upgrade decisions are made.
 - **Settings Simplification:**
   - Removed the global Settings `Containers` intelligence tab now that overrides are managed at container level.
+- **Scheduler Diagnostics Visibility:**
+  - Scheduler start/run/completion/error events now write into diagnostics logs (`/api/system/logs`) instead of stdout-only paths.
+  - Docker prune task now logs start/result/error details into diagnostics so System Health and cleanup feedback panels show concrete outcomes.
+
+### Fixed
+- **System Health Log Searchability:**
+  - Added backend `search`/`q` query filtering support for `GET /api/system/logs`.
+  - Added System Health log search controls in Diagnostics UI for quick filtering by message/source/level content.
 
 ### Tests
 - `go test ./...` (backend)
