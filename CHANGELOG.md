@@ -46,6 +46,9 @@ All notable changes to HarborWatch are documented in this file.
 - **Image Security Scan Correlation:**
   - Fixed image intelligence matching across tagless, tagged, and digest-style references so scans recorded under `repo` are correctly surfaced for `repo:latest` images (and vice versa).
   - Resolved false `Not scanned` states and incorrect prune-candidate flags caused by strict tag matching.
+- **Image Intelligence First-Render Hydration:**
+  - Fixed Image Repository startup behavior so intelligence rows are fetched on initial page load even when base image inventory is already preloaded.
+  - Resolves missing security/lifecycle tags on first open that previously appeared only after manual refresh.
 - **Security UI Job Locking:**
   - Fixed Security Suite action locking so completed/cancelled jobs no longer block starting subsequent scans.
 

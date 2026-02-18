@@ -69,9 +69,12 @@
         appendCleanupLog("info", "Cleanup still running in background. Refresh logs shortly.");
     }
 
-    async function loadImages() {
-        loading = true;
-        error = "";
+    async function loadImages(opts?: { silent?: boolean }) {
+        const silent = !!opts?.silent;
+        if (!silent) {
+            loading = true;
+            error = "";
+        }
         try {
             const res = await fetch("/api/docker/images/intelligence");
             if (res.ok) {
@@ -80,12 +83,18 @@
                 imageRows = rows;
                 images = rows;
             } else {
-                error = "Failed to load images";
+                if (!silent) {
+                    error = "Failed to load images";
+                }
             }
         } catch (e) {
-            error = "Could not connect to backend";
+            if (!silent) {
+                error = "Could not connect to backend";
+            }
         } finally {
-            loading = false;
+            if (!silent) {
+                loading = false;
+            }
         }
     }
 
@@ -120,9 +129,12 @@
     }
 
     onMount(() => {
-        if (images.length === 0) {
-            loadImages();
+        if (images.length > 0) {
+            imageRows = images as ImageIntelligenceRow[];
+            void loadImages({ silent: true });
+            return;
         }
+        void loadImages();
     });
 
     const formatSize = (bytes: number) => {
