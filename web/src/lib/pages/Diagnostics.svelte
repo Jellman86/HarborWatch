@@ -19,9 +19,6 @@
     interface LogPreset {
         id: PresetID;
         label: string;
-        level?: string;
-        source?: string;
-        search?: string;
     }
 
     let { params } = $props<{
@@ -30,11 +27,11 @@
 
     const presets: LogPreset[] = [
         { id: "all", label: "All Logs" },
-        { id: "audit", label: "Audit Trail", source: "scanner", search: "job" },
-        { id: "security", label: "Security", source: "scanner" },
-        { id: "automation", label: "Automation", source: "scheduler" },
-        { id: "updates", label: "Updates", source: "updateengine" },
-        { id: "errors", label: "Errors", level: "ERROR" }
+        { id: "audit", label: "Audit Trail" },
+        { id: "security", label: "Security" },
+        { id: "automation", label: "Automation" },
+        { id: "updates", label: "Updates" },
+        { id: "errors", label: "Errors" }
     ];
 
     let status = $state<SystemStatus | null>(null);
@@ -44,6 +41,7 @@
     let logLevel = $state("");
     let logSource = $state("");
     let selectedPreset = $state<PresetID>("all");
+    let activePresetLabel = $derived(presets.find((p) => p.id === selectedPreset)?.label || "All Logs");
 
     function normalizePreset(raw?: string): PresetID {
         const value = String(raw || "").trim().toLowerCase();
@@ -115,17 +113,86 @@
         }
     };
 
+    function classifyLog(entry: LogEntry): "audit" | "security" | "automation" | "updates" | "errors" | "all" {
+        const source = String(entry.source || "").toLowerCase();
+        const message = String(entry.message || "").toLowerCase();
+        const level = String(entry.level || "").toLowerCase();
+        if (level === "error") return "errors";
+        if (source.includes("updateengine") || message.includes("update pipeline") || message.includes("rollback")) return "updates";
+        if (source.includes("scheduler") || message.includes("task ") || message.includes("prune")) return "automation";
+        if (source.includes("scanner") || message.includes("trivy") || message.includes("clamav") || message.includes("malware")) return "security";
+        if (source.includes("scanner") || source.includes("scheduler") || source.includes("updateengine") || message.includes("job")) return "audit";
+        return "all";
+    }
+
+    function matchesPreset(entry: LogEntry, preset: PresetID): boolean {
+        if (preset === "all") return true;
+        const cls = classifyLog(entry);
+        if (preset === "audit") {
+            return cls === "audit" || cls === "security" || cls === "automation" || cls === "updates" || cls === "errors";
+        }
+        return cls === preset;
+    }
+
+    let visibleLogs = $derived(logs.filter((entry) => matchesPreset(entry, selectedPreset)));
+
+    function classBadge(log: LogEntry): string {
+        const cls = classifyLog(log);
+        switch (cls) {
+            case "security":
+                return "Security";
+            case "automation":
+                return "Automation";
+            case "updates":
+                return "Updates";
+            case "errors":
+                return "Error";
+            case "audit":
+                return "Audit";
+            default:
+                return "General";
+        }
+    }
+
+    function classColor(log: LogEntry): string {
+        const cls = classifyLog(log);
+        switch (cls) {
+            case "security":
+                return "bg-emerald-950/50 text-emerald-300 border border-emerald-800/60";
+            case "automation":
+                return "bg-blue-950/50 text-blue-300 border border-blue-800/60";
+            case "updates":
+                return "bg-violet-950/50 text-violet-300 border border-violet-800/60";
+            case "errors":
+                return "bg-rose-950/50 text-rose-300 border border-rose-800/60";
+            case "audit":
+                return "bg-amber-950/50 text-amber-300 border border-amber-800/60";
+            default:
+                return "bg-slate-800 text-slate-300 border border-slate-700";
+        }
+    }
+
     function applyLogSearch() {
         loading = true;
         void loadData();
     }
 
     function applyPreset(id: PresetID, reload = true) {
-        const preset = presets.find((p) => p.id === id) || presets[0];
-        selectedPreset = preset.id;
-        logLevel = preset.level || "";
-        logSource = preset.source || "";
-        logSearch = preset.search || "";
+        selectedPreset = id;
+        if (id === "errors") {
+            logLevel = "ERROR";
+        } else if (logLevel === "ERROR") {
+            logLevel = "";
+        }
+        if (id === "security") {
+            logSource = "scanner";
+        } else if (id === "automation") {
+            logSource = "scheduler";
+        } else if (id === "updates") {
+            logSource = "updateengine";
+        } else if (id === "all" || id === "audit") {
+            logSource = "";
+        }
         if (reload) {
             applyLogSearch();
         }
@@ -178,7 +245,8 @@
                     <button
                         type="button"
                         onclick={() => applyPreset(preset.id)}
-                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors {(selectedPreset === preset.id) ? 'bg-brand-600 text-white' : 'bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700'}"
+                        aria-pressed={selectedPreset === preset.id}
+                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {(selectedPreset === preset.id) ? 'bg-brand-600 text-white ring-2 ring-brand-300/70 scale-[1.02]' : 'bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700'}"
                     >
                         {preset.label}
                     </button>
@@ -187,6 +255,15 @@
         </div>
         <div class="text-[11px] text-slate-500">
             Audit Trail now maps to the <span class="font-bold text-slate-300">System Health</span> stream via the <span class="font-bold text-brand-400">Audit Trail</span> preset.
+        </div>
+        <div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px]">
+            <div class="flex items-center gap-2">
+                <span class="px-2 py-1 rounded-md bg-brand-600/30 text-brand-300 font-black uppercase tracking-widest">{activePresetLabel}</span>
+                <span class="text-slate-400">Showing {visibleLogs.length} of {logs.length} log entries</span>
+            </div>
+            {#if loading}
+                <span class="text-slate-400 font-black uppercase tracking-widest animate-pulse">Refreshing...</span>
+            {/if}
         </div>
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <form
@@ -233,18 +310,24 @@
                         <tr class="bg-slate-950/50 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-800">
                             <th class="px-6 py-3 w-48">Timestamp</th>
                             <th class="px-6 py-3 w-24">Level</th>
+                            <th class="px-6 py-3 w-28">Class</th>
                             <th class="px-6 py-3 w-32">Source</th>
                             <th class="px-6 py-3">Message</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800/50 font-mono text-[11px]">
-                        {#each logs as log}
+                        {#each visibleLogs as log}
                             <tr class="hover:bg-slate-800/30 transition-colors">
                                 <td class="px-6 py-2 text-slate-500">
                                     {new Date(log.timestamp * 1000).toISOString().replace('T', ' ').split('.')[0]}
                                 </td>
                                 <td class="px-6 py-2 font-black uppercase {levelColor(log.level)}">
                                     {log.level}
+                                </td>
+                                <td class="px-6 py-2">
+                                    <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest {classColor(log)}">
+                                        {classBadge(log)}
+                                    </span>
                                 </td>
                                 <td class="px-6 py-2 text-brand-500 font-bold">
                                     {log.source}
@@ -255,7 +338,7 @@
                             </tr>
                         {:else}
                             <tr>
-                                <td colspan="4" class="px-6 py-12 text-center text-slate-600 italic">No internal logs captured in this window.</td>
+                                <td colspan="5" class="px-6 py-12 text-center text-slate-600 italic">No logs matched the current preset/filters.</td>
                             </tr>
                         {/each}
                     </tbody>

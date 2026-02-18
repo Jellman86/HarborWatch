@@ -38,6 +38,10 @@ All notable changes to HarborWatch are documented in this file.
 - **System Health Log Searchability:**
   - Added backend `search`/`q` query filtering support for `GET /api/system/logs`.
   - Added System Health log search controls in Diagnostics UI for quick filtering by message/source/level content.
+- **System Health Preset Feedback & Classification:**
+  - Added explicit active-preset UI feedback, filtered row counts, and refresh status messaging so preset button presses are visibly acknowledged.
+  - Added derived log class badges (`Security`, `Automation`, `Updates`, `Audit`, `Error`, `General`) to make event categorization clear at a glance.
+  - Updated empty-state messaging to explain when preset/filter criteria exclude all rows.
 - **Image Security Scan Correlation:**
   - Fixed image intelligence matching across tagless, tagged, and digest-style references so scans recorded under `repo` are correctly surfaced for `repo:latest` images (and vice versa).
   - Resolved false `Not scanned` states and incorrect prune-candidate flags caused by strict tag matching.
