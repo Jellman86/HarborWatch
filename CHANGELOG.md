@@ -2,6 +2,31 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.6] - 2026-02-18
+
+### Added
+- **Automation Exclusion Controls:**
+  - Added auto-discovered container exclusion controls with per-container toggles in Settings -> Automations.
+  - Added an advanced token editor below toggles for custom exclusion patterns while preserving HarborWatch self-protection.
+
+### Changed
+- **Automation Flow UX:**
+  - Updated wrapped flow connector routing so row transitions exit the final node from the bottom face for clearer visual continuity.
+- **Automation Safety Exclusions Layout:**
+  - Scoped `Ignored Malware Mount Paths` to the Security automation tab only.
+  - Clarified exclusion copy to reflect global container-scoped automation behavior.
+- **Chart Rendering Engine Hardening:**
+  - Replaced Apex-based metric, sparkline, and disk usage charts with native SVG/bar renderers to remove NaN-prone runtime layout behavior.
+  - Removed frontend runtime dependencies on `apexcharts` and `svelte-apexcharts`.
+
+### Fixed
+- **Container Detail Navigation Stability:**
+  - Eliminated repeated chart `NaN` SVG/transform console errors observed when opening containers (including `frigate`) and cycling tabs (`insights/security/lifecycle/configuration`).
+  - Resolved associated UI slowdown/hang risk during tab traversal.
+
+### Tests
+- Playwright verification executed via the documented container-to-container workflow (`agents/PLAYWRIGHT_TESTING_GUIDE.md`) against `frigate` and `yawamf-frontend` tab navigation flows with zero console/page/network errors.
+
 ## [0.7.5] - 2026-02-17
 
 ### Added
