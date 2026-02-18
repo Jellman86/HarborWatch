@@ -66,4 +66,7 @@ func TestUsageSQLiteStoreSummary(t *testing.T) {
 	if len(summary.Daily) != 1 {
 		t.Fatalf("expected 1 daily row, got %d", len(summary.Daily))
 	}
+	if len(summary.DailyBreakdown) != 1 {
+		t.Fatalf("expected 1 daily breakdown row, got %d", len(summary.DailyBreakdown))
+	}
 }

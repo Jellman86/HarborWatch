@@ -21,7 +21,7 @@ type aiUsageResponse struct {
 	EstimatedCostUSD  float64                    `json:"estimatedCostUsd,omitempty"`
 	PricingError      string                     `json:"pricingError,omitempty"`
 	Breakdown         []aiUsageBreakdownResponse `json:"breakdown"`
-	Daily             []ai.UsageDaily            `json:"daily"`
+	Daily             []aiUsageDailyResponse     `json:"daily"`
 }
 
 type aiUsageBreakdownResponse struct {
@@ -33,6 +33,16 @@ type aiUsageBreakdownResponse struct {
 	OutputTokens     int64   `json:"outputTokens"`
 	TotalTokens      int64   `json:"totalTokens"`
 	EstimatedCostUSD float64 `json:"estimatedCostUsd,omitempty"`
+}
+
+type aiUsageDailyResponse struct {
+	Day               string  `json:"day"`
+	Calls             int64   `json:"calls"`
+	InputTokens       int64   `json:"inputTokens"`
+	OutputTokens      int64   `json:"outputTokens"`
+	TotalTokens       int64   `json:"totalTokens"`
+	EstimatedCostUSD  float64 `json:"estimatedCostUsd,omitempty"`
+	CumulativeCostUSD float64 `json:"cumulativeCostUsd,omitempty"`
 }
 
 type aiPricingEntry struct {
@@ -128,7 +138,7 @@ func buildAIUsageResponse(summary ai.UsageSummary, span string, pricingJSON stri
 		OutputTokens: summary.OutputTokens,
 		TotalTokens:  summary.TotalTokens,
 		Breakdown:    []aiUsageBreakdownResponse{},
-		Daily:        summary.Daily,
+		Daily:        []aiUsageDailyResponse{},
 	}
 	rates, err := parseAIPricing(pricingJSON)
 	if err != nil {
@@ -136,6 +146,7 @@ func buildAIUsageResponse(summary ai.UsageSummary, span string, pricingJSON stri
 		rates = map[string]aiPricingRate{}
 	}
 	resp.PricingConfigured = len(rates) > 0
+	dailyCostByDay := map[string]float64{}
 
 	for _, item := range summary.Breakdown {
 		row := aiUsageBreakdownResponse{
@@ -152,6 +163,33 @@ func buildAIUsageResponse(summary ai.UsageSummary, span string, pricingJSON stri
 			resp.EstimatedCostUSD += row.EstimatedCostUSD
 		}
 		resp.Breakdown = append(resp.Breakdown, row)
+	}
+
+	if resp.PricingConfigured {
+		for _, item := range summary.DailyBreakdown {
+			rate, ok := lookupPricingRate(rates, item.Provider, item.Model)
+			if !ok {
+				continue
+			}
+			dailyCostByDay[item.Day] += estimateTokenCostUSD(item.InputTokens, item.OutputTokens, rate)
+		}
+	}
+
+	cumulative := 0.0
+	for _, item := range summary.Daily {
+		row := aiUsageDailyResponse{
+			Day:          item.Day,
+			Calls:        item.Calls,
+			InputTokens:  item.InputTokens,
+			OutputTokens: item.OutputTokens,
+			TotalTokens:  item.TotalTokens,
+		}
+		if resp.PricingConfigured {
+			row.EstimatedCostUSD = dailyCostByDay[item.Day]
+			cumulative += row.EstimatedCostUSD
+			row.CumulativeCostUSD = cumulative
+		}
+		resp.Daily = append(resp.Daily, row)
 	}
 	return resp
 }

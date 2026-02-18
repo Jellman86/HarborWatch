@@ -56,10 +56,11 @@ func (s *UsageSQLiteStore) SummaryUsage(ctx context.Context, from, to int64) (Us
 		from = to - 30*24*3600
 	}
 	out := UsageSummary{
-		From:      from,
-		To:        to,
-		Breakdown: []UsageBreakdown{},
-		Daily:     []UsageDaily{},
+		From:           from,
+		To:             to,
+		Breakdown:      []UsageBreakdown{},
+		Daily:          []UsageDaily{},
+		DailyBreakdown: []UsageDailyBreakdown{},
 	}
 
 	if err := s.db.QueryRowContext(ctx, `
@@ -138,6 +139,38 @@ ORDER BY day ASC
 	}
 	if err := dailyRows.Err(); err != nil {
 		return out, fmt.Errorf("iterate ai usage daily: %w", err)
+	}
+
+	dailyBreakdownRows, err := s.db.QueryContext(ctx, `
+SELECT date(ts, 'unixepoch') AS day, provider, model,
+	COALESCE(SUM(input_tokens), 0) AS input_tokens,
+	COALESCE(SUM(output_tokens), 0) AS output_tokens,
+	COALESCE(SUM(total_tokens), 0) AS total_tokens
+FROM ai_usage_events
+WHERE ts >= ? AND ts <= ?
+GROUP BY day, provider, model
+ORDER BY day ASC
+`, from, to)
+	if err != nil {
+		return out, fmt.Errorf("query ai usage daily breakdown: %w", err)
+	}
+	defer dailyBreakdownRows.Close()
+	for dailyBreakdownRows.Next() {
+		var item UsageDailyBreakdown
+		if err := dailyBreakdownRows.Scan(
+			&item.Day,
+			&item.Provider,
+			&item.Model,
+			&item.InputTokens,
+			&item.OutputTokens,
+			&item.TotalTokens,
+		); err != nil {
+			return out, fmt.Errorf("scan ai usage daily breakdown: %w", err)
+		}
+		out.DailyBreakdown = append(out.DailyBreakdown, item)
+	}
+	if err := dailyBreakdownRows.Err(); err != nil {
+		return out, fmt.Errorf("iterate ai usage daily breakdown: %w", err)
 	}
 
 	return out, nil

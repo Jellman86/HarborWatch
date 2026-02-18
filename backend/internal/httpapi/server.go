@@ -1436,7 +1436,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					From:      from,
 					To:        to,
 					Breakdown: []aiUsageBreakdownResponse{},
-					Daily:     []ai.UsageDaily{},
+					Daily:     []aiUsageDailyResponse{},
 				}
 				summarizer, ok := aiService.(aiUsageSummarizer)
 				if aiService == nil || !ok {

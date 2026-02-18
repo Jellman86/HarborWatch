@@ -58,6 +58,8 @@
         inputTokens: number;
         outputTokens: number;
         totalTokens: number;
+        estimatedCostUsd?: number;
+        cumulativeCostUsd?: number;
     }
 
     interface AIUsageSummary {
@@ -127,6 +129,7 @@
     let aiUsage = $state<AIUsageSummary | null>(null);
     let aiUsageLoading = $state(false);
     let aiUsageError = $state("");
+    let aiSpendRows = $derived(Array.isArray(aiUsage?.daily) ? aiUsage.daily : []);
 
     // Latest curated model choices (validated against provider docs, February 2026).
     const latestModelsByProvider: Record<AIProvider, ModelOption[]> = {
@@ -724,6 +727,63 @@
         return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(Number(value || 0));
     }
 
+    function formatUSDCompact(value: number | undefined): string {
+        return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(Number(value || 0));
+    }
+
+    function formatDayLabel(day: string | undefined): string {
+        const raw = String(day || "").trim();
+        if (!raw) return "";
+        const dt = new Date(`${raw}T00:00:00Z`);
+        if (Number.isNaN(dt.getTime())) return raw;
+        return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    }
+
+    function maxDailySpend(rows: AIUsageDaily[]): number {
+        const max = rows.reduce((acc, row) => Math.max(acc, Number(row?.estimatedCostUsd || 0)), 0);
+        return max > 0 ? max : 1;
+    }
+
+    function maxCumulativeSpend(rows: AIUsageDaily[]): number {
+        const max = rows.reduce((acc, row) => Math.max(acc, Number(row?.cumulativeCostUsd || 0)), 0);
+        return max > 0 ? max : 1;
+    }
+
+    function cumulativeLinePoints(rows: AIUsageDaily[]): string {
+        if (!rows.length) return "";
+        const width = 100;
+        const height = 42;
+        const pad = 4;
+        const usableWidth = width - pad * 2;
+        const usableHeight = height - pad * 2;
+        const max = maxCumulativeSpend(rows);
+        return rows
+            .map((row, idx) => {
+                const x = rows.length === 1 ? width / 2 : pad + (idx * usableWidth) / (rows.length - 1);
+                const value = Number(row?.cumulativeCostUsd || 0);
+                const y = pad + usableHeight - (value / max) * usableHeight;
+                return `${x},${y}`;
+            })
+            .join(" ");
+    }
+
+    function dailyBars(rows: AIUsageDaily[]): Array<{ x: number; y: number; width: number; height: number; value: number; day: string }> {
+        const chartWidth = 100;
+        const barAreaTop = 6;
+        const baseline = 42;
+        const max = maxDailySpend(rows);
+        const count = Math.max(rows.length, 1);
+        const available = chartWidth / count;
+        const barWidth = Math.max(1, Math.min(10, available * 0.62));
+        return rows.map((row, index) => {
+            const value = Number(row?.estimatedCostUsd || 0);
+            const x = available * index + (available - barWidth) / 2;
+            const height = Math.max(0.8, ((baseline - barAreaTop) * Math.max(0, value)) / Math.max(max, 1));
+            const y = baseline - height;
+            return { x, y, width: barWidth, height, value, day: String(row?.day || "") };
+        });
+    }
+
     $effect(() => {
         settings.openaiModel = normalizeModel("openai", settings.openaiModel);
         settings.anthropicModel = normalizeModel("anthropic", settings.anthropicModel);
@@ -1076,6 +1136,66 @@
                             </p>
                         </div>
                     </div>
+
+                    {#if aiSpendRows.length > 0}
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Spend History</p>
+                                <p class="text-[10px] text-slate-500">
+                                    {formatDayLabel(aiSpendRows[0]?.day)} to {formatDayLabel(aiSpendRows[aiSpendRows.length - 1]?.day)}
+                                </p>
+                            </div>
+
+                            {#if aiUsage?.pricingConfigured}
+                                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3">
+                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Daily Spend (USD)</p>
+                                        <svg viewBox="0 0 100 44" class="w-full h-24">
+                                            <line x1="2" y1="42" x2="98" y2="42" stroke="currentColor" class="text-slate-300 dark:text-slate-700" stroke-width="0.5"></line>
+                                            {#each dailyBars(aiSpendRows) as bar}
+                                                <rect
+                                                    x={bar.x}
+                                                    y={bar.y}
+                                                    width={bar.width}
+                                                    height={bar.height}
+                                                    rx="0.6"
+                                                    class="fill-brand-500/80"
+                                                >
+                                                    <title>{formatDayLabel(bar.day)}: {formatUSDCompact(bar.value)}</title>
+                                                </rect>
+                                            {/each}
+                                        </svg>
+                                        <div class="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+                                            <span>{formatDayLabel(aiSpendRows[0]?.day)}</span>
+                                            <span>Max {formatUSDCompact(maxDailySpend(aiSpendRows))}</span>
+                                            <span>{formatDayLabel(aiSpendRows[aiSpendRows.length - 1]?.day)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3">
+                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Cumulative Spend (USD)</p>
+                                        <svg viewBox="0 0 100 42" class="w-full h-24">
+                                            <polyline
+                                                points={cumulativeLinePoints(aiSpendRows)}
+                                                fill="none"
+                                                stroke="currentColor"
+                                                class="text-brand-600 dark:text-brand-300"
+                                                stroke-width="1.4"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            ></polyline>
+                                        </svg>
+                                        <div class="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+                                            <span>Start {formatUSDCompact(aiSpendRows[0]?.cumulativeCostUsd)}</span>
+                                            <span class="font-bold">Total {formatUSDCompact(aiSpendRows[aiSpendRows.length - 1]?.cumulativeCostUsd)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            {:else}
+                                <p class="text-[11px] text-slate-500">Configure <span class="font-semibold">AI Pricing JSON</span> to render daily and cumulative spend history. Token history is already being tracked.</p>
+                            {/if}
+                        </div>
+                    {/if}
 
                     {#if aiUsage?.pricingError}
                         <p class="text-[11px] text-amber-600 dark:text-amber-300">Pricing config ignored: {aiUsage.pricingError}</p>

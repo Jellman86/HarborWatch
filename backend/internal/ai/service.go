@@ -66,15 +66,25 @@ type UsageDaily struct {
 	TotalTokens  int64  `json:"totalTokens"`
 }
 
+type UsageDailyBreakdown struct {
+	Day          string `json:"day"`
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	InputTokens  int64  `json:"inputTokens"`
+	OutputTokens int64  `json:"outputTokens"`
+	TotalTokens  int64  `json:"totalTokens"`
+}
+
 type UsageSummary struct {
-	From         int64            `json:"from"`
-	To           int64            `json:"to"`
-	Calls        int64            `json:"calls"`
-	InputTokens  int64            `json:"inputTokens"`
-	OutputTokens int64            `json:"outputTokens"`
-	TotalTokens  int64            `json:"totalTokens"`
-	Breakdown    []UsageBreakdown `json:"breakdown"`
-	Daily        []UsageDaily     `json:"daily"`
+	From           int64                 `json:"from"`
+	To             int64                 `json:"to"`
+	Calls          int64                 `json:"calls"`
+	InputTokens    int64                 `json:"inputTokens"`
+	OutputTokens   int64                 `json:"outputTokens"`
+	TotalTokens    int64                 `json:"totalTokens"`
+	Breakdown      []UsageBreakdown      `json:"breakdown"`
+	Daily          []UsageDaily          `json:"daily"`
+	DailyBreakdown []UsageDailyBreakdown `json:"dailyBreakdown"`
 }
 
 type UsageStore interface {
@@ -181,10 +191,11 @@ func (s *Service) UsageSummary(ctx context.Context, from, to int64) (UsageSummar
 	store := s.currentUsageStore()
 	if store == nil {
 		return UsageSummary{
-			From:      from,
-			To:        to,
-			Breakdown: []UsageBreakdown{},
-			Daily:     []UsageDaily{},
+			From:           from,
+			To:             to,
+			Breakdown:      []UsageBreakdown{},
+			Daily:          []UsageDaily{},
+			DailyBreakdown: []UsageDailyBreakdown{},
 		}, nil
 	}
 	return store.SummaryUsage(ctx, from, to)

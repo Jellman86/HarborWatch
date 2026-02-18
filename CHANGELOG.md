@@ -2,6 +2,26 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.12] - 2026-02-18
+
+### Added
+- **AI Spend History Visualization:**
+  - Added spend history graphs in Settings -> AI:
+    - daily spend (USD) bars
+    - cumulative spend (USD) line over the selected span (`24h/7d/30d/90d`)
+  - Added compact spend summary labels for selected range start/end and cumulative total.
+
+### Changed
+- **AI Usage API Daily Cost Enrichment:**
+  - `GET /api/ai/usage` now includes per-day cost fields when pricing is configured:
+    - `daily[].estimatedCostUsd`
+    - `daily[].cumulativeCostUsd`
+  - Daily spend is now calculated from per-day provider/model token usage with configured pricing, rather than a blended approximation.
+
+### Tests
+- `go test ./internal/ai ./internal/httpapi ./internal/settings ./internal/updates ./internal/releases` (backend)
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.11] - 2026-02-18
 
 ### Added
