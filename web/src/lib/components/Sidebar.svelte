@@ -29,9 +29,7 @@
     <!-- Logo -->
     <div class="flex items-center justify-between p-4 h-16 border-b border-slate-100 dark:border-slate-800">
         <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-white/80 dark:bg-slate-800/80 flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-500/20 ring-1 ring-brand-200/70 dark:ring-brand-700/60">
-                <img src="/logo-64.png" alt="HarborWatch" class="h-8 w-8" />
-            </div>
+            <img src="/logo-64.png" alt="HarborWatch" class="h-9 w-9 flex-shrink-0" />
             {#if !collapsed}
                 <div class="flex flex-col overflow-hidden">
                     <h1 class="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate uppercase tracking-wider">HarborWatch</h1>

@@ -105,9 +105,7 @@
   <!-- Mobile Header -->
   <header class="md:hidden flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-lg bg-white/90 dark:bg-slate-800/80 flex items-center justify-center text-white shadow-lg shadow-brand-500/20 ring-1 ring-brand-200/70 dark:ring-brand-700/60">
-        <img src="/logo-64.png" alt="HarborWatch" class="h-6 w-6" />
-      </div>
+      <img src="/logo-64.png" alt="HarborWatch" class="h-7 w-7" />
       <h1 class="text-sm font-bold uppercase tracking-wider">HarborWatch</h1>
     </div>
     <button 
