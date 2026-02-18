@@ -2,6 +2,28 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.15] - 2026-02-18
+
+### Changed
+- **Settings -> Automations Layout Redesign:**
+  - Reworked domain controls into a true 2-column composition:
+    - left column: automation flow diagram and flow state notes
+    - right column: runtime controls and scheduler task toggles/schedules
+  - Updated flow connector behavior to a strict vertical path where arrows exit from the bottom of a node and attach to the top of the next node.
+- **Automation Task UX Clarity:**
+  - Added per-task descriptions explaining what each scheduler task does.
+  - Added inline helper text for cadence/time/day selectors so schedule semantics are explicit in the UI.
+- **Settings Explanation Pass:**
+  - Expanded in-UI descriptions across AI and Integrations settings, including:
+    - preferred AI provider behavior (`auto` vs pinned provider)
+    - provider API key/model purpose
+    - Discord webhook usage
+    - Portainer URL/API key usage
+  - Added appearance-theme context copy to clarify global theme impact.
+
+### Tests
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.14] - 2026-02-18
 
 ### Added

@@ -15,19 +15,10 @@
         state?: "active" | "idle" | "warning";
     }
 
-    interface PositionedFlowNode extends FlowNode {
-        row: number;
-        col: number;
-    }
-
     interface NodeGeometry {
         x: number;
-        y: number;
         top: number;
-        right: number;
         bottom: number;
-        left: number;
-        row: number;
     }
 
     let { title, subtitle = "", steps = [], accent = "#0ea5e9" } = $props<{
@@ -37,16 +28,10 @@
         accent?: string;
     }>();
 
-    const NODE_MIN_WIDTH = 164;
-    const GRID_COL_GAP = 75;
-    const GRID_ROW_GAP = 26;
-    const MAX_SINGLE_ROW_NODES = 6;
-    const CONNECTOR_GAP_X = 10;
-    const CONNECTOR_GAP_Y = 6;
-    const CONNECTOR_SIDE_APPROACH = 24;
+    const GRID_ROW_GAP = 22;
+    const CONNECTOR_GAP_Y = 8;
 
     let host = $state<HTMLDivElement | null>(null);
-    let hostWidth = $state(0);
     let connectorPaths = $state<string[]>([]);
     let connectorMarkerId = $derived(`flow-arrow-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "default"}`);
 
@@ -63,32 +48,7 @@
         { key: "end", kind: "terminal", label: "End", logicalIndex: steps.length + 1 }
     ]);
 
-    let singleRowCapacity = $derived(
-        Math.min(
-            MAX_SINGLE_ROW_NODES,
-            Math.max(3, Math.floor((hostWidth + GRID_COL_GAP) / (NODE_MIN_WIDTH + GRID_COL_GAP)))
-        )
-    );
-    let useTwoRows = $derived(flowNodes.length > singleRowCapacity);
-    let columns = $derived(useTwoRows ? Math.ceil(flowNodes.length / 2) : flowNodes.length);
-
-    let positionedNodes = $derived<PositionedFlowNode[]>((() => {
-        const cols = Math.max(columns, 1);
-        if (!useTwoRows) {
-            return flowNodes.map((node, idx) => ({ ...node, row: 0, col: idx }));
-        }
-
-        const firstRowCount = cols;
-        const firstRow = flowNodes.slice(0, firstRowCount).map((node, idx) => ({ ...node, row: 0, col: idx }));
-        const secondRow = flowNodes
-            .slice(firstRowCount)
-            .map((node, idx, arr) => ({ ...node, row: 1, col: arr.length - 1 - idx }));
-        return [...firstRow, ...secondRow];
-    })());
-
-    let gridStyle = $derived(
-        `grid-template-columns: repeat(${Math.max(columns, 1)}, minmax(0, 1fr)); column-gap: ${GRID_COL_GAP}px; row-gap: ${GRID_ROW_GAP}px;`
-    );
+    let gridStyle = $derived(`grid-template-columns: minmax(0, 1fr); row-gap: ${GRID_ROW_GAP}px;`);
 
     function nodeClasses(kind: FlowNode["kind"], state?: string): string {
         if (kind === "terminal") {
@@ -121,8 +81,8 @@
         return "idle";
     }
 
-    function nodeStyle(node: PositionedFlowNode): string {
-        const placement = `grid-column:${node.col + 1}; grid-row:${node.row + 1};`;
+    function nodeStyle(node: FlowNode): string {
+        const placement = `grid-column:1; grid-row:${node.logicalIndex + 1};`;
         if (node.kind === "step" && node.state === "active") {
             return `${placement} background:${accent};`;
         }
@@ -134,8 +94,6 @@
     }
 
     async function updateGeometry() {
-        const width = host?.getBoundingClientRect().width ?? 0;
-        hostWidth = Number.isFinite(width) ? Math.max(Math.floor(width), 0) : 0;
         if (!host || flowNodes.length <= 1) {
             connectorPaths = [];
             return;
@@ -156,17 +114,11 @@
             const idx = Number(el.dataset.logicalIndex);
             if (!Number.isFinite(idx)) return;
             const box = el.getBoundingClientRect();
-            const row = Number(el.dataset.row);
             const centerX = clamp(box.left - base.left + box.width / 2, 3, maxX);
-            const centerY = clamp(box.top - base.top + box.height / 2, 3, maxY);
             nodesByIndex.set(idx, {
                 x: centerX,
-                y: centerY,
-                left: clamp(box.left - base.left, 3, maxX),
-                right: clamp(box.right - base.left, 3, maxX),
                 top: clamp(box.top - base.top, 3, maxY),
-                bottom: clamp(box.bottom - base.top, 3, maxY),
-                row: Number.isFinite(row) ? row : 0
+                bottom: clamp(box.bottom - base.top, 3, maxY)
             });
         });
 
@@ -176,40 +128,15 @@
             const to = nodesByIndex.get(i + 1);
             if (!from || !to) continue;
 
-            if (from.row === to.row) {
-                const leftToRight = to.x >= from.x;
-                const startX = clamp(leftToRight ? from.right + CONNECTOR_GAP_X : from.left - CONNECTOR_GAP_X, 3, maxX);
-                const endX = clamp(leftToRight ? to.left - CONNECTOR_GAP_X : to.right + CONNECTOR_GAP_X, 3, maxX);
-                if (Math.abs(endX - startX) > 2) {
-                    paths.push(`M ${startX} ${from.y} L ${endX} ${to.y}`);
-                } else {
-                    paths.push(`M ${from.x} ${from.y} L ${to.x} ${to.y}`);
-                }
+            const startX = clamp(from.x, 3, maxX);
+            const startY = clamp(from.bottom + CONNECTOR_GAP_Y, 3, maxY);
+            const endX = clamp(to.x, 3, maxX);
+            const endY = clamp(to.top - CONNECTOR_GAP_Y, 3, maxY);
+            if (Math.abs(startX - endX) <= 1) {
+                paths.push(`M ${startX} ${startY} L ${endX} ${endY}`);
             } else {
-                // Row-wrap connector:
-                // 1) exit from bottom face of the row-end node,
-                // 2) enter next row on alternating side faces (row2 right, row3 left, ...).
-                const down = to.row > from.row;
-                const startX = clamp(from.x, 3, maxX);
-                const startY = clamp(down ? from.bottom + CONNECTOR_GAP_Y : from.top - CONNECTOR_GAP_Y, 3, maxY);
-
-                const toSideRight = to.row % 2 === 1;
-                const targetX = clamp(
-                    toSideRight ? to.right + CONNECTOR_GAP_X : to.left - CONNECTOR_GAP_X,
-                    3,
-                    maxX
-                );
-                const targetY = clamp(to.y, 3, maxY);
-                const approachX = clamp(
-                    toSideRight ? targetX + CONNECTOR_SIDE_APPROACH : targetX - CONNECTOR_SIDE_APPROACH,
-                    3,
-                    maxX
-                );
-                const midY = clamp((startY + targetY) / 2, 3, maxY);
-
-                paths.push(
-                    `M ${startX} ${startY} L ${startX} ${midY} L ${approachX} ${midY} L ${approachX} ${targetY} L ${targetX} ${targetY}`
-                );
+                const midY = clamp((startY + endY) / 2, 3, maxY);
+                paths.push(`M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`);
             }
         }
         connectorPaths = paths;
@@ -231,7 +158,6 @@
     });
 
     $effect(() => {
-        positionedNodes;
         steps.length;
         void updateGeometry();
     });
@@ -262,12 +188,11 @@
                 {/if}
 
                 <div class="grid w-full items-stretch" style={gridStyle}>
-                    {#each positionedNodes as node (node.key)}
+                    {#each flowNodes as node (node.key)}
                         <div
                             class="min-w-0 rounded-xl border px-3 py-3 transition-all {nodeClasses(node.kind, node.state)}"
                             style={nodeStyle(node)}
                             data-logical-index={node.logicalIndex}
-                            data-row={node.row}
                         >
                             {#if node.kind === "terminal"}
                                 <p class="text-[10px] font-black uppercase tracking-[0.18em] text-center">{node.label}</p>

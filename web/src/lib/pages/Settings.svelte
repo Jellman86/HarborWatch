@@ -714,6 +714,29 @@
         }
     }
 
+    function taskDescription(id: string): string {
+        switch (id) {
+            case "container_update_check":
+                return "Scans registries for newer image tags and prepares upgrade candidates.";
+            case "container_update_apply":
+                return "Applies approved upgrades with policy gating, retry limits, and health checks.";
+            case "docker_system_prune":
+                return "Reclaims disk by removing eligible Docker artifacts based on prune policy.";
+            case "metrics_prune":
+                return "Trims old metrics to keep database growth predictable.";
+            case "diag_log_prune":
+                return "Deletes aged diagnostics logs after retention limits are reached.";
+            case "security_sweep_trivy":
+                return "Runs Trivy vulnerability scans and records findings for image risk evaluation.";
+            case "malware_sweep_clamav":
+                return "Runs scheduled malware scans across in-scope container mounts.";
+            case "clamav_signature_update":
+                return "Refreshes ClamAV definitions so malware detections use current signatures.";
+            default:
+                return "Background automation task.";
+        }
+    }
+
     function aiFeatureLabel(feature: string): string {
         switch (String(feature || "").toLowerCase()) {
             case "release_analysis": return "Release Analysis";
@@ -958,148 +981,170 @@
                     </div>
                 </div>
 
-                <div class="space-y-6">
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40">
-                        <AutomationFlowChart
-                            title={automationConfig[activeAutomationTab].title}
-                            subtitle={automationConfig[activeAutomationTab].subtitle}
-                            accent={automationConfig[activeAutomationTab].accent}
-                            steps={flowSteps(activeAutomationTab)}
-                        />
-                        <p class="mt-2 text-xs text-slate-500">
-                            Global policy is managed by scheduler tasks. Containers can inherit this policy or override it in container lifecycle settings.
-                        </p>
+                <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-6">
+                    <div class="space-y-4">
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40">
+                            <AutomationFlowChart
+                                title={automationConfig[activeAutomationTab].title}
+                                subtitle={automationConfig[activeAutomationTab].subtitle}
+                                accent={automationConfig[activeAutomationTab].accent}
+                                steps={flowSteps(activeAutomationTab)}
+                            />
+                            <p class="mt-2 text-xs text-slate-500">
+                                Diagram shows the ordered execution path. Connectors always leave the bottom of each node and enter the top of the next step.
+                            </p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/25 p-4">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Flow Notes</p>
+                            <p class="mt-1 text-[11px] text-slate-500">
+                                Active means all required tasks are enabled. Partial means only part of the domain is enabled. Idle means no scheduled tasks are currently active.
+                            </p>
+                        </div>
                     </div>
 
-                    {#if activeAutomationTab === "upgrades"}
-                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
-                            <div>
-                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Upgrade Runtime Controls</p>
-                                <p class="text-[11px] text-slate-500 mt-1">Tune how aggressively auto-apply runs and how long failed containers wait before retry.</p>
-                            </div>
-                            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                <div class="space-y-2">
-                                    <label for="auto-upgrade-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Auto-Apply Max Starts Per Run</label>
-                                    <input
-                                        id="auto-upgrade-max-concurrency"
-                                        type="number"
-                                        min="1"
-                                        max="20"
-                                        bind:value={settings.autoUpgradeMaxConcurrency}
-                                        disabled={isLocked("autoUpgradeMaxConcurrency")}
-                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                    />
-                                </div>
-                                <div class="space-y-2">
-                                    <label for="auto-upgrade-min-retry" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retry Cooldown (minutes)</label>
-                                    <input
-                                        id="auto-upgrade-min-retry"
-                                        type="number"
-                                        min="1"
-                                        max="1440"
-                                        bind:value={settings.autoUpgradeMinRetryMinutes}
-                                        disabled={isLocked("autoUpgradeMinRetryMinutes")}
-                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                    />
-                                </div>
-                            </div>
+                    <div class="space-y-4">
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Task Controls</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Use toggles to enable schedules, set cadence/time, and run on-demand checks for validation.</p>
                         </div>
-                    {/if}
 
-                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                        {#each schedulesForDomain(activeAutomationTab) as task}
-                            {@const draft = draftForTask(task)}
-                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">
-                                <div class="flex flex-wrap items-center justify-between gap-3">
-                                    <div>
-                                        <p class="text-sm font-black text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
-                                        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{cronLabel(task.cronSpec)} | Last run: {formatTime(task.lastRun)}</p>
+                        {#if activeAutomationTab === "upgrades"}
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                                <div>
+                                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Upgrade Runtime Controls</p>
+                                    <p class="text-[11px] text-slate-500 mt-1">Tune how aggressively auto-apply runs and how long failed containers wait before retry.</p>
+                                </div>
+                                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                    <div class="space-y-2">
+                                        <label for="auto-upgrade-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Auto-Apply Max Starts Per Run</label>
+                                        <input
+                                            id="auto-upgrade-max-concurrency"
+                                            type="number"
+                                            min="1"
+                                            max="20"
+                                            bind:value={settings.autoUpgradeMaxConcurrency}
+                                            disabled={isLocked("autoUpgradeMaxConcurrency")}
+                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                        />
+                                        <p class="text-[11px] text-slate-500">Limits how many containers can start upgrade apply in one scheduler execution.</p>
                                     </div>
-                                    <div class="flex items-center gap-2">
+                                    <div class="space-y-2">
+                                        <label for="auto-upgrade-min-retry" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retry Cooldown (minutes)</label>
+                                        <input
+                                            id="auto-upgrade-min-retry"
+                                            type="number"
+                                            min="1"
+                                            max="1440"
+                                            bind:value={settings.autoUpgradeMinRetryMinutes}
+                                            disabled={isLocked("autoUpgradeMinRetryMinutes")}
+                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                        />
+                                        <p class="text-[11px] text-slate-500">Minimum wait before a previously failed upgrade can be retried automatically.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        {/if}
+
+                        <div class="space-y-3">
+                            {#each schedulesForDomain(activeAutomationTab) as task}
+                                {@const draft = draftForTask(task)}
+                                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">
+                                    <div class="flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
+                                            <p class="text-[11px] text-slate-500 mt-1">{taskDescription(task.id)}</p>
+                                            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{cronLabel(task.cronSpec)} | Last run: {formatTime(task.lastRun)}</p>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <button
+                                                onclick={() => runTask(task.id)}
+                                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
+                                            >Run Now</button>
+                                            <button
+                                                onclick={() => toggleTask(task.id, task.enabled)}
+                                                class="w-10 h-5 rounded-full relative transition-colors {task.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                aria-label="Toggle task"
+                                            >
+                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {task.enabled ? 'right-1' : 'left-1'}"></div>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                                        <div class="space-y-1">
+                                            <label for={"cadence-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
+                                            <select
+                                                id={"cadence-" + task.id}
+                                                value={draft.cadence}
+                                                onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
+                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                            >
+                                                <option value="daily">Daily</option>
+                                                <option value="weekly">Weekly</option>
+                                                <option value="monthly">Monthly</option>
+                                            </select>
+                                            <p class="text-[11px] text-slate-500">Defines how often this task is eligible to run.</p>
+                                        </div>
+
+                                        <div class="space-y-1">
+                                            <label for={"time-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
+                                            <input
+                                                id={"time-" + task.id}
+                                                type="time"
+                                                value={draft.time}
+                                                onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                            />
+                                            <p class="text-[11px] text-slate-500">Local time used by the scheduler for this task.</p>
+                                        </div>
+
                                         <button
-                                            onclick={() => runTask(task.id)}
-                                            class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
-                                        >Run Now</button>
-                                        <button
-                                            onclick={() => toggleTask(task.id, task.enabled)}
-                                            class="w-10 h-5 rounded-full relative transition-colors {task.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                            aria-label="Toggle task"
+                                            onclick={() => saveTaskSchedule(task.id)}
+                                            disabled={!scheduleDirty(task) || savingScheduleId === task.id}
+                                            class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
                                         >
-                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {task.enabled ? 'right-1' : 'left-1'}"></div>
+                                            {savingScheduleId === task.id ? "Saving..." : "Save Schedule"}
                                         </button>
                                     </div>
-                                </div>
 
-                                <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                                    <div class="space-y-1">
-                                        <label for={"cadence-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
-                                        <select
-                                            id={"cadence-" + task.id}
-                                            value={draft.cadence}
-                                            onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                        >
-                                            <option value="daily">Daily</option>
-                                            <option value="weekly">Weekly</option>
-                                            <option value="monthly">Monthly</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="space-y-1">
-                                        <label for={"time-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
-                                        <input
-                                            id={"time-" + task.id}
-                                            type="time"
-                                            value={draft.time}
-                                            onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                        />
-                                    </div>
-
-                                    <button
-                                        onclick={() => saveTaskSchedule(task.id)}
-                                        disabled={!scheduleDirty(task) || savingScheduleId === task.id}
-                                        class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
-                                    >
-                                        {savingScheduleId === task.id ? "Saving..." : "Save Schedule"}
-                                    </button>
-                                </div>
-
-                                {#if draft.cadence === "weekly"}
-                                    <div class="space-y-1">
-                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
-                                        <div class="flex flex-wrap gap-2">
-                                            {#each weekdayOptions as day}
-                                                <button
-                                                    onclick={() => toggleWeeklyDay(task.id, day.value)}
-                                                    class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {draft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                >
-                                                    {day.label}
-                                                </button>
-                                            {/each}
+                                    {#if draft.cadence === "weekly"}
+                                        <div class="space-y-1">
+                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
+                                            <div class="flex flex-wrap gap-2">
+                                                {#each weekdayOptions as day}
+                                                    <button
+                                                        onclick={() => toggleWeeklyDay(task.id, day.value)}
+                                                        class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {draft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                    >
+                                                        {day.label}
+                                                    </button>
+                                                {/each}
+                                            </div>
+                                            <p class="text-[11px] text-slate-500">Select one or more weekdays for weekly execution.</p>
                                         </div>
-                                    </div>
-                                {:else if draft.cadence === "monthly"}
-                                    <div class="space-y-1">
-                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
-                                        <div class="flex flex-wrap gap-1.5">
-                                            {#each monthDayOptions as day}
-                                                <button
-                                                    onclick={() => toggleMonthDay(task.id, day)}
-                                                    class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {draft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                >
-                                                    {day}
-                                                </button>
-                                            {/each}
+                                    {:else if draft.cadence === "monthly"}
+                                        <div class="space-y-1">
+                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
+                                            <div class="flex flex-wrap gap-1.5">
+                                                {#each monthDayOptions as day}
+                                                    <button
+                                                        onclick={() => toggleMonthDay(task.id, day)}
+                                                        class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {draft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                    >
+                                                        {day}
+                                                    </button>
+                                                {/each}
+                                            </div>
+                                            <p class="text-[11px] text-slate-500">Select one or more month days. Tasks run on matching calendar dates.</p>
                                         </div>
-                                    </div>
-                                {/if}
-                            </div>
-                        {:else}
-                            <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-sm text-slate-500 italic">
-                                No scheduler tasks found for this automation domain.
-                            </div>
-                        {/each}
+                                    {/if}
+                                </div>
+                            {:else}
+                                <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-sm text-slate-500 italic">
+                                    No scheduler tasks found for this automation domain.
+                                </div>
+                            {/each}
+                        </div>
                     </div>
                 </div>
 
@@ -1131,6 +1176,7 @@
                             <option value="anthropic">Anthropic</option>
                             <option value="gemini">Gemini</option>
                         </select>
+                        <p class="text-[11px] text-slate-500">Auto mode uses the first provider that has a configured key. Set a provider explicitly to pin all AI calls to one backend.</p>
                     </div>
                 </div>
 
@@ -1326,34 +1372,43 @@
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">OpenAI</h3>
-                        <input type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey") || !settings.aiEnabled} placeholder="sk-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <select bind:value={settings.openaiModel} disabled={isLocked("openaiModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <label for="openai-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
+                        <input id="openai-key" type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey") || !settings.aiEnabled} placeholder="sk-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <label for="openai-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
+                        <select id="openai-model" bind:value={settings.openaiModel} disabled={isLocked("openaiModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("openai") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
                         </select>
+                        <p class="text-[11px] text-slate-500">Used for release analysis, compose review, and other AI-assisted decision points.</p>
                         <button onclick={() => testProvider("openai", settings.openaiModel || "")} disabled={testingProvider === "openai" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "openai" ? "Testing..." : "Test OpenAI"}</button>
                     </div>
 
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Anthropic</h3>
-                        <input type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey") || !settings.aiEnabled} placeholder="sk-ant-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <select bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <label for="anthropic-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
+                        <input id="anthropic-key" type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey") || !settings.aiEnabled} placeholder="sk-ant-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <label for="anthropic-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
+                        <select id="anthropic-model" bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("anthropic") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
                         </select>
+                        <p class="text-[11px] text-slate-500">Use this when Anthropic should be considered for AI decisions and analysis workflows.</p>
                         <button onclick={() => testProvider("anthropic", settings.anthropicModel || "")} disabled={testingProvider === "anthropic" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "anthropic" ? "Testing..." : "Test Anthropic"}</button>
                     </div>
 
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Gemini</h3>
-                        <input type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey") || !settings.aiEnabled} placeholder="AIza..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <select bind:value={settings.geminiModel} disabled={isLocked("geminiModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <label for="gemini-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
+                        <input id="gemini-key" type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey") || !settings.aiEnabled} placeholder="AIza..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <label for="gemini-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
+                        <select id="gemini-model" bind:value={settings.geminiModel} disabled={isLocked("geminiModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("gemini") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
                         </select>
+                        <p class="text-[11px] text-slate-500">Configure to allow Google Gemini model usage inside HarborWatch AI integrations.</p>
                         <button onclick={() => testProvider("gemini", settings.geminiModel || "")} disabled={testingProvider === "gemini" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "gemini" ? "Testing..." : "Test Gemini"}</button>
                     </div>
                 </div>
@@ -1397,14 +1452,17 @@
                     <div class="space-y-2">
                         <label for="discord-webhook" class="text-[10px] font-black uppercase text-slate-400 ml-1">Discord Webhook</label>
                         <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl") || !settings.discordEnabled} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <p class="text-[11px] text-slate-500">Incoming webhook used for outbound alerts (detections, automation events, failures).</p>
                     </div>
                     <div class="space-y-2">
                         <label for="portainer-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer URL</label>
                         <input id="portainer-url" bind:value={settings.portainerUrl} disabled={isLocked("portainerUrl") || !settings.portainerEnabled} placeholder="https://portainer.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <p class="text-[11px] text-slate-500">Base URL for Portainer API access. Used to enrich container and stack metadata.</p>
                     </div>
                     <div class="space-y-2 xl:col-span-2">
                         <label for="portainer-api-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer API Key</label>
                         <input id="portainer-api-key" type="password" bind:value={settings.portainerApiKey} disabled={isLocked("portainerApiKey") || !settings.portainerEnabled} placeholder="ptr_..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <p class="text-[11px] text-slate-500">Token HarborWatch uses for authenticated Portainer calls. Keep scope limited to required read/write actions.</p>
                     </div>
                 </div>
             </div>
@@ -1530,6 +1588,7 @@
                         <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.uiAnimationsEnabled ? 'right-1' : 'left-1'}"></div>
                     </button>
                 </div>
+                <p class="text-[11px] text-slate-500">Theme changes are applied globally across dashboards, tables, and settings views.</p>
                 <ThemeSwitcher />
             </div>
         {/if}
