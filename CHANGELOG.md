@@ -2,6 +2,31 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.10] - 2026-02-18
+
+### Added
+- **AI Token Usage Telemetry:**
+  - Added persistent AI usage event storage (`ai_usage_events`) capturing provider, model, feature, call count, and input/output/total token usage for each AI request.
+  - Added `GET /api/ai/usage?span=24h|7d|30d|90d` to return token usage totals, breakdowns, and daily trend data.
+- **Optional Cost Estimation:**
+  - Added optional settings field `aiPricingJson` to define per-model token pricing manually.
+  - Usage endpoint now calculates estimated USD cost when pricing is configured, while continuing to report raw token usage when pricing is not configured.
+
+### Changed
+- **Provider Usage Capture:**
+  - OpenAI, Anthropic, and Gemini integrations now extract and record upstream token-usage metadata for:
+    - release analysis
+    - compose audit
+    - metrics analysis
+    - health log analysis
+- **Settings AI UX:**
+  - Added AI usage dashboard in Settings -> AI with selectable time span, token totals, feature/model breakdown, and optional estimated cost display.
+  - Added editable `AI Pricing JSON` configuration area with token-only fallback behavior when left empty.
+
+### Tests
+- `go test ./internal/ai ./internal/httpapi ./internal/settings ./internal/updates ./internal/releases` (backend)
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.9] - 2026-02-18
 
 ### Added

@@ -393,6 +393,22 @@ func TestFleetAdviceEndpoint(t *testing.T) {
 	}
 }
 
+func TestAIUsageEndpointGracefulWithoutUsageStore(t *testing.T) {
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, fakeAIService{enabled: false}, nil, nil, nil, fakeNotificationService{}, fakeSettingsService{}, nil, fakeRulesService{}, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ai/usage?span=7d", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&body); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if body["span"] != "7d" {
+		t.Fatalf("expected span 7d, got %#v", body["span"])
+	}
+}
+
 func TestDockerPruneEndpoint_TriggersSchedulerTask(t *testing.T) {
 	sched := &fakeSchedulerServiceWithRun{}
 	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, sched, nil, nil, nil, nil, nil, fakeRulesService{}, nil)

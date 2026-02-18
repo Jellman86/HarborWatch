@@ -15,9 +15,10 @@ import (
 const defaultGeminiModel = "gemini-2.5-flash"
 
 type geminiProvider struct {
-	apiKey     string
-	model      string
-	httpClient *http.Client
+	apiKey        string
+	model         string
+	httpClient    *http.Client
+	usageRecorder func(UsageRecord)
 }
 
 func NewGeminiProvider(apiKey, model string) Provider {
@@ -35,6 +36,27 @@ func NewGeminiProvider(apiKey, model string) Provider {
 
 func (p *geminiProvider) Name() string { return "gemini" }
 
+func (p *geminiProvider) SetUsageRecorder(recorder func(UsageRecord)) {
+	p.usageRecorder = recorder
+}
+
+func (p *geminiProvider) emitUsage(feature string, inputTokens, outputTokens, totalTokens int64) {
+	if p.usageRecorder == nil {
+		return
+	}
+	if totalTokens <= 0 {
+		totalTokens = inputTokens + outputTokens
+	}
+	p.usageRecorder(UsageRecord{
+		Provider:     p.Name(),
+		Model:        p.model,
+		Feature:      feature,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		TotalTokens:  totalTokens,
+	})
+}
+
 func (p *geminiProvider) AnalyzeReleaseNotes(ctx context.Context, notes string) (AnalysisResult, error) {
 	prompt := `Analyze these Docker release notes for upgrade risk.
 Return ONLY valid JSON using this exact schema:
@@ -49,10 +71,11 @@ Return ONLY valid JSON using this exact schema:
 Release notes:
 ` + notes
 
-	text, err := p.generate(ctx, prompt)
+	text, inputTokens, outputTokens, totalTokens, err := p.generate(ctx, prompt)
 	if err != nil {
 		return AnalysisResult{}, err
 	}
+	p.emitUsage("release_analysis", inputTokens, outputTokens, totalTokens)
 	result, err := parseAnalysisResult(text)
 	if err != nil {
 		return AnalysisResult{}, fmt.Errorf("failed to parse gemini response: %w", err)
@@ -67,7 +90,12 @@ Return a concise markdown remediation report.
 
 Compose file:
 ` + yaml
-	return p.generate(ctx, prompt)
+	text, inputTokens, outputTokens, totalTokens, err := p.generate(ctx, prompt)
+	if err != nil {
+		return "", err
+	}
+	p.emitUsage("compose_audit", inputTokens, outputTokens, totalTokens)
+	return text, nil
 }
 
 func (p *geminiProvider) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
@@ -78,7 +106,12 @@ Return concise markdown recommendations.
 
 Metrics JSON:
 %s`, id, string(metricsJSON))
-	return p.generate(ctx, prompt)
+	text, inputTokens, outputTokens, totalTokens, err := p.generate(ctx, prompt)
+	if err != nil {
+		return "", err
+	}
+	p.emitUsage("metrics_analysis", inputTokens, outputTokens, totalTokens)
+	return text, nil
 }
 
 func (p *geminiProvider) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error) {
@@ -96,10 +129,11 @@ Container ID: ` + containerID + `
 
 Recent logs:
 ` + logs
-	text, err := p.generate(ctx, prompt)
+	text, inputTokens, outputTokens, totalTokens, err := p.generate(ctx, prompt)
 	if err != nil {
 		return HealthAssessment{}, err
 	}
+	p.emitUsage("health_logs", inputTokens, outputTokens, totalTokens)
 	result, err := parseHealthAssessment(text)
 	if err != nil {
 		return HealthAssessment{}, fmt.Errorf("failed to parse gemini health response: %w", err)
@@ -107,7 +141,7 @@ Recent logs:
 	return result, nil
 }
 
-func (p *geminiProvider) generate(ctx context.Context, prompt string) (string, error) {
+func (p *geminiProvider) generate(ctx context.Context, prompt string) (string, int64, int64, int64, error) {
 	endpoint := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", url.PathEscape(p.model), url.QueryEscape(p.apiKey))
 	body := map[string]any{
 		"contents": []map[string]any{
@@ -123,19 +157,19 @@ func (p *geminiProvider) generate(ctx context.Context, prompt string) (string, e
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return "", err
+		return "", 0, 0, 0, err
 	}
 	req.Header.Set("content-type", "application/json")
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("gemini request failed: %w", err)
+		return "", 0, 0, 0, fmt.Errorf("gemini request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("gemini API error: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return "", 0, 0, 0, fmt.Errorf("gemini API error: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 
 	var parsed struct {
@@ -146,9 +180,14 @@ func (p *geminiProvider) generate(ctx context.Context, prompt string) (string, e
 				} `json:"parts"`
 			} `json:"content"`
 		} `json:"candidates"`
+		UsageMetadata struct {
+			PromptTokenCount     int64 `json:"promptTokenCount"`
+			CandidatesTokenCount int64 `json:"candidatesTokenCount"`
+			TotalTokenCount      int64 `json:"totalTokenCount"`
+		} `json:"usageMetadata"`
 	}
 	if err := json.Unmarshal(data, &parsed); err != nil {
-		return "", fmt.Errorf("decode gemini response: %w", err)
+		return "", 0, 0, 0, fmt.Errorf("decode gemini response: %w", err)
 	}
 
 	var b strings.Builder
@@ -159,7 +198,7 @@ func (p *geminiProvider) generate(ctx context.Context, prompt string) (string, e
 	}
 	out := strings.TrimSpace(b.String())
 	if out == "" {
-		return "", fmt.Errorf("gemini response was empty")
+		return "", 0, 0, 0, fmt.Errorf("gemini response was empty")
 	}
-	return out, nil
+	return out, parsed.UsageMetadata.PromptTokenCount, parsed.UsageMetadata.CandidatesTokenCount, parsed.UsageMetadata.TotalTokenCount, nil
 }

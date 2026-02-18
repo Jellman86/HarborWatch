@@ -9,8 +9,9 @@ import (
 )
 
 type openAIProvider struct {
-	client *openai.Client
-	model  string
+	client        *openai.Client
+	model         string
+	usageRecorder func(UsageRecord)
 }
 
 const defaultOpenAIModel = "gpt-5.2"
@@ -26,6 +27,24 @@ func NewOpenAIProvider(apiKey, model string) Provider {
 }
 
 func (p *openAIProvider) Name() string { return "openai" }
+
+func (p *openAIProvider) SetUsageRecorder(recorder func(UsageRecord)) {
+	p.usageRecorder = recorder
+}
+
+func (p *openAIProvider) emitUsage(feature string, usage openai.Usage) {
+	if p.usageRecorder == nil {
+		return
+	}
+	p.usageRecorder(UsageRecord{
+		Provider:     p.Name(),
+		Model:        p.model,
+		Feature:      feature,
+		InputTokens:  int64(usage.PromptTokens),
+		OutputTokens: int64(usage.CompletionTokens),
+		TotalTokens:  int64(usage.TotalTokens),
+	})
+}
 
 func (p *openAIProvider) AnalyzeReleaseNotes(ctx context.Context, notes string) (AnalysisResult, error) {
 	prompt := `Analyze the following software release notes for a Docker container update. 
@@ -54,6 +73,7 @@ Release Notes:
 	if err != nil {
 		return AnalysisResult{}, fmt.Errorf("openai completion failed: %w", err)
 	}
+	p.emitUsage("release_analysis", resp.Usage)
 
 	result, err := parseAnalysisResult(resp.Choices[0].Message.Content)
 	if err != nil {
@@ -79,6 +99,7 @@ Compose File:
 	if err != nil {
 		return "", fmt.Errorf("openai completion failed: %w", err)
 	}
+	p.emitUsage("compose_audit", resp.Usage)
 
 	return resp.Choices[0].Message.Content, nil
 }
@@ -101,6 +122,7 @@ Metrics Data (JSON):
 	if err != nil {
 		return "", fmt.Errorf("openai completion failed: %w", err)
 	}
+	p.emitUsage("metrics_analysis", resp.Usage)
 
 	return resp.Choices[0].Message.Content, nil
 }
@@ -133,6 +155,7 @@ Recent logs:
 	if err != nil {
 		return HealthAssessment{}, fmt.Errorf("openai completion failed: %w", err)
 	}
+	p.emitUsage("health_logs", resp.Usage)
 
 	result, err := parseHealthAssessment(resp.Choices[0].Message.Content)
 	if err != nil {

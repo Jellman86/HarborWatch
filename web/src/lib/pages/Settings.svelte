@@ -39,6 +39,42 @@
         lastLocalUpdate?: number;
     }
 
+    type AIUsageSpan = "24h" | "7d" | "30d" | "90d";
+
+    interface AIUsageBreakdown {
+        provider: string;
+        model: string;
+        feature: string;
+        calls: number;
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        estimatedCostUsd?: number;
+    }
+
+    interface AIUsageDaily {
+        day: string;
+        calls: number;
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+    }
+
+    interface AIUsageSummary {
+        span: AIUsageSpan;
+        from: number;
+        to: number;
+        calls: number;
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        pricingConfigured: boolean;
+        estimatedCostUsd?: number;
+        pricingError?: string;
+        breakdown: AIUsageBreakdown[];
+        daily: AIUsageDaily[];
+    }
+
     const weekdayOptions: Array<{ value: number; label: string }> = [
         { value: 0, label: "Sun" },
         { value: 1, label: "Mon" },
@@ -64,6 +100,7 @@
         anthropicModel: "",
         geminiKey: "",
         geminiModel: "",
+        aiPricingJson: "",
         instanceUrl: "",
         validateUrlPattern: "",
         uiAnimationsEnabled: true,
@@ -86,6 +123,10 @@
     let clamavStatus = $state<ClamAVSignatureStatus | null>(null);
     let clamavStatusLoading = $state(false);
     let clamavUpdating = $state(false);
+    let aiUsageSpan = $state<AIUsageSpan>("30d");
+    let aiUsage = $state<AIUsageSummary | null>(null);
+    let aiUsageLoading = $state(false);
+    let aiUsageError = $state("");
 
     // Latest curated model choices (validated against provider docs, February 2026).
     const latestModelsByProvider: Record<AIProvider, ModelOption[]> = {
@@ -484,6 +525,24 @@
         }
     }
 
+    async function loadAIUsage() {
+        aiUsageLoading = true;
+        aiUsageError = "";
+        try {
+            const res = await fetch(`/api/ai/usage?span=${encodeURIComponent(aiUsageSpan)}`);
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(payload?.message || `ai usage failed (${res.status})`);
+            }
+            aiUsage = payload as AIUsageSummary;
+        } catch (e) {
+            aiUsage = null;
+            aiUsageError = e instanceof Error ? e.message : "Failed to load AI usage";
+        } finally {
+            aiUsageLoading = false;
+        }
+    }
+
     async function loadAll() {
         loading = true;
         try {
@@ -491,7 +550,8 @@
                 loadSettings(),
                 loadSchedules(),
                 loadClamAVStatus(),
-                loadContainersForExclusions()
+                loadContainersForExclusions(),
+                loadAIUsage()
             ]);
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to load settings");
@@ -511,6 +571,7 @@
             if (!res.ok) throw new Error(`settings save failed (${res.status})`);
             toasts.success("Settings saved.");
             await loadSettings();
+            await loadAIUsage();
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to save settings");
         } finally {
@@ -641,8 +702,26 @@
         }
     }
 
+    function aiFeatureLabel(feature: string): string {
+        switch (String(feature || "").toLowerCase()) {
+            case "release_analysis": return "Release Analysis";
+            case "compose_audit": return "Compose Audit";
+            case "metrics_analysis": return "Metrics Analysis";
+            case "health_logs": return "Health Logs";
+            default: return feature || "Unknown";
+        }
+    }
+
     function formatTime(ts?: number): string {
         return ts && ts > 0 ? new Date(ts * 1000).toLocaleString() : "Never";
+    }
+
+    function formatInteger(value: number | undefined): string {
+        return Number(value || 0).toLocaleString();
+    }
+
+    function formatUSD(value: number | undefined): string {
+        return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(Number(value || 0));
     }
 
     $effect(() => {
@@ -936,6 +1015,121 @@
                             <option value="gemini">Gemini</option>
                         </select>
                     </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Usage</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Token usage is captured per request. Estimated cost appears only when pricing is configured.</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select
+                                bind:value={aiUsageSpan}
+                                onchange={() => loadAIUsage()}
+                                class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                            >
+                                <option value="24h">Last 24h</option>
+                                <option value="7d">Last 7d</option>
+                                <option value="30d">Last 30d</option>
+                                <option value="90d">Last 90d</option>
+                            </select>
+                            <button
+                                onclick={loadAIUsage}
+                                disabled={aiUsageLoading}
+                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
+                            >
+                                {aiUsageLoading ? "Refreshing..." : "Refresh"}
+                            </button>
+                        </div>
+                    </div>
+
+                    {#if aiUsageError}
+                        <p class="text-xs text-rose-600 dark:text-rose-300">{aiUsageError}</p>
+                    {/if}
+
+                    <div class="grid grid-cols-2 xl:grid-cols-5 gap-3">
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Calls</p>
+                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.calls)}</p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Input Tokens</p>
+                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.inputTokens)}</p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Output Tokens</p>
+                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.outputTokens)}</p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Tokens</p>
+                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.totalTokens)}</p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Estimated Cost</p>
+                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">
+                                {#if aiUsage?.pricingConfigured}
+                                    {formatUSD(aiUsage?.estimatedCostUsd)}
+                                {:else}
+                                    Not configured
+                                {/if}
+                            </p>
+                        </div>
+                    </div>
+
+                    {#if aiUsage?.pricingError}
+                        <p class="text-[11px] text-amber-600 dark:text-amber-300">Pricing config ignored: {aiUsage.pricingError}</p>
+                    {/if}
+
+                    {#if aiUsage && aiUsage.breakdown.length > 0}
+                        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                            <table class="min-w-full text-xs">
+                                <thead class="bg-slate-50 dark:bg-slate-900/60">
+                                    <tr class="text-left text-slate-500 uppercase tracking-wider">
+                                        <th class="px-3 py-2 font-black">Provider</th>
+                                        <th class="px-3 py-2 font-black">Model</th>
+                                        <th class="px-3 py-2 font-black">Feature</th>
+                                        <th class="px-3 py-2 font-black text-right">Calls</th>
+                                        <th class="px-3 py-2 font-black text-right">Tokens</th>
+                                        <th class="px-3 py-2 font-black text-right">Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {#each aiUsage.breakdown as row}
+                                        <tr class="border-t border-slate-200 dark:border-slate-700">
+                                            <td class="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200">{row.provider}</td>
+                                            <td class="px-3 py-2 text-slate-600 dark:text-slate-300">{row.model}</td>
+                                            <td class="px-3 py-2 text-slate-600 dark:text-slate-300">{aiFeatureLabel(row.feature)}</td>
+                                            <td class="px-3 py-2 text-right text-slate-600 dark:text-slate-300">{formatInteger(row.calls)}</td>
+                                            <td class="px-3 py-2 text-right text-slate-600 dark:text-slate-300">{formatInteger(row.totalTokens)}</td>
+                                            <td class="px-3 py-2 text-right text-slate-600 dark:text-slate-300">
+                                                {#if aiUsage.pricingConfigured}
+                                                    {formatUSD(row.estimatedCostUsd)}
+                                                {:else}
+                                                    -
+                                                {/if}
+                                            </td>
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                            </table>
+                        </div>
+                    {:else}
+                        <p class="text-[11px] text-slate-500 italic">No AI usage recorded for this span yet.</p>
+                    {/if}
+                </div>
+
+                <div class="space-y-2">
+                    <label for="ai-pricing-json" class="text-[10px] font-black uppercase text-slate-400 ml-1">AI Pricing JSON (optional)</label>
+                    <textarea
+                        id="ai-pricing-json"
+                        rows="5"
+                        bind:value={settings.aiPricingJson}
+                        disabled={isLocked("aiPricingJson")}
+                        placeholder={`[\n  { "provider": "openai", "model": "gpt-5.2", "inputPer1M": 1.25, "outputPer1M": 10 },\n  { "provider": "anthropic", "model": "claude-sonnet-4-5", "inputPer1M": 3, "outputPer1M": 15 }\n]`}
+                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                    ></textarea>
+                    <p class="text-[11px] text-slate-500">If empty, HarborWatch displays token usage only. No external pricing lookup is performed.</p>
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">

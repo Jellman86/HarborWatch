@@ -14,9 +14,10 @@ import (
 const defaultAnthropicModel = "claude-sonnet-4-5"
 
 type anthropicProvider struct {
-	apiKey     string
-	model      string
-	httpClient *http.Client
+	apiKey        string
+	model         string
+	httpClient    *http.Client
+	usageRecorder func(UsageRecord)
 }
 
 func NewAnthropicProvider(apiKey, model string) Provider {
@@ -34,6 +35,25 @@ func NewAnthropicProvider(apiKey, model string) Provider {
 
 func (p *anthropicProvider) Name() string { return "anthropic" }
 
+func (p *anthropicProvider) SetUsageRecorder(recorder func(UsageRecord)) {
+	p.usageRecorder = recorder
+}
+
+func (p *anthropicProvider) emitUsage(feature string, inputTokens, outputTokens int64) {
+	if p.usageRecorder == nil {
+		return
+	}
+	total := inputTokens + outputTokens
+	p.usageRecorder(UsageRecord{
+		Provider:     p.Name(),
+		Model:        p.model,
+		Feature:      feature,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		TotalTokens:  total,
+	})
+}
+
 func (p *anthropicProvider) AnalyzeReleaseNotes(ctx context.Context, notes string) (AnalysisResult, error) {
 	prompt := `Analyze the following software release notes for a Docker container update.
 Identify breaking changes, configuration format updates, migration risk, and critical security fixes.
@@ -49,10 +69,11 @@ Return ONLY valid JSON with this exact schema:
 Release notes:
 ` + notes
 
-	text, err := p.generate(ctx, prompt)
+	text, inputTokens, outputTokens, err := p.generate(ctx, prompt)
 	if err != nil {
 		return AnalysisResult{}, err
 	}
+	p.emitUsage("release_analysis", inputTokens, outputTokens)
 	result, err := parseAnalysisResult(text)
 	if err != nil {
 		return AnalysisResult{}, fmt.Errorf("failed to parse anthropic response: %w", err)
@@ -67,7 +88,12 @@ Return a concise remediation report in Markdown.
 
 Compose file:
 ` + yaml
-	return p.generate(ctx, prompt)
+	text, inputTokens, outputTokens, err := p.generate(ctx, prompt)
+	if err != nil {
+		return "", err
+	}
+	p.emitUsage("compose_audit", inputTokens, outputTokens)
+	return text, nil
 }
 
 func (p *anthropicProvider) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
@@ -78,7 +104,12 @@ Return concise recommendations in Markdown.
 
 Metrics JSON:
 %s`, id, string(metricsJSON))
-	return p.generate(ctx, prompt)
+	text, inputTokens, outputTokens, err := p.generate(ctx, prompt)
+	if err != nil {
+		return "", err
+	}
+	p.emitUsage("metrics_analysis", inputTokens, outputTokens)
+	return text, nil
 }
 
 func (p *anthropicProvider) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error) {
@@ -96,10 +127,11 @@ Container ID: ` + containerID + `
 
 Recent logs:
 ` + logs
-	text, err := p.generate(ctx, prompt)
+	text, inputTokens, outputTokens, err := p.generate(ctx, prompt)
 	if err != nil {
 		return HealthAssessment{}, err
 	}
+	p.emitUsage("health_logs", inputTokens, outputTokens)
 	result, err := parseHealthAssessment(text)
 	if err != nil {
 		return HealthAssessment{}, fmt.Errorf("failed to parse anthropic health response: %w", err)
@@ -107,7 +139,7 @@ Recent logs:
 	return result, nil
 }
 
-func (p *anthropicProvider) generate(ctx context.Context, prompt string) (string, error) {
+func (p *anthropicProvider) generate(ctx context.Context, prompt string) (string, int64, int64, error) {
 	body := map[string]any{
 		"model":       p.model,
 		"max_tokens":  1600,
@@ -120,7 +152,7 @@ func (p *anthropicProvider) generate(ctx context.Context, prompt string) (string
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.anthropic.com/v1/messages", bytes.NewReader(payload))
 	if err != nil {
-		return "", err
+		return "", 0, 0, err
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("x-api-key", p.apiKey)
@@ -128,13 +160,13 @@ func (p *anthropicProvider) generate(ctx context.Context, prompt string) (string
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("anthropic request failed: %w", err)
+		return "", 0, 0, fmt.Errorf("anthropic request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("anthropic API error: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return "", 0, 0, fmt.Errorf("anthropic API error: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 
 	var parsed struct {
@@ -142,9 +174,15 @@ func (p *anthropicProvider) generate(ctx context.Context, prompt string) (string
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
+		Usage struct {
+			InputTokens              int64 `json:"input_tokens"`
+			OutputTokens             int64 `json:"output_tokens"`
+			CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
+			CacheReadInputTokens     int64 `json:"cache_read_input_tokens"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(data, &parsed); err != nil {
-		return "", fmt.Errorf("decode anthropic response: %w", err)
+		return "", 0, 0, fmt.Errorf("decode anthropic response: %w", err)
 	}
 
 	var b strings.Builder
@@ -155,7 +193,8 @@ func (p *anthropicProvider) generate(ctx context.Context, prompt string) (string
 	}
 	out := strings.TrimSpace(b.String())
 	if out == "" {
-		return "", fmt.Errorf("anthropic response was empty")
+		return "", 0, 0, fmt.Errorf("anthropic response was empty")
 	}
-	return out, nil
+	inputTokens := parsed.Usage.InputTokens + parsed.Usage.CacheCreationInputTokens + parsed.Usage.CacheReadInputTokens
+	return out, inputTokens, parsed.Usage.OutputTokens, nil
 }

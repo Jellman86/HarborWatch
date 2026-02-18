@@ -26,6 +26,7 @@ type Settings struct {
 	AnthropicModel   string `json:"anthropicModel"`
 	GeminiKey        string `json:"geminiKey"`
 	GeminiModel      string `json:"geminiModel"`
+	AIPricingJSON    string `json:"aiPricingJson"`
 
 	// System
 	InstanceURL                 string `json:"instanceUrl"`
@@ -109,6 +110,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.GeminiKey = value
 		case "gemini_model":
 			st.GeminiModel = value
+		case "ai_pricing_json":
+			st.AIPricingJSON = value
 		case "instance_url":
 			st.InstanceURL = value
 		case "validate_url_pattern":
@@ -137,6 +140,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		"anthropicModel":              {&st.AnthropicModel, "ANTHROPIC_MODEL"},
 		"geminiKey":                   {&st.GeminiKey, "GEMINI_API_KEY"},
 		"geminiModel":                 {&st.GeminiModel, "GEMINI_MODEL"},
+		"aiPricingJson":               {&st.AIPricingJSON, "HW_AI_PRICING_JSON"},
 		"instanceUrl":                 {&st.InstanceURL, "HW_INSTANCE_URL"},
 		"validateUrlPattern":          {&st.ValidateURLPattern, "HW_VALIDATE_PATTERN"},
 		"automationIgnoredContainers": {&st.AutomationIgnoredContainers, "HW_AUTOMATION_IGNORE_CONTAINERS"},
@@ -205,6 +209,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"anthropic_model":               st.AnthropicModel,
 		"gemini_key":                    st.GeminiKey,
 		"gemini_model":                  st.GeminiModel,
+		"ai_pricing_json":               st.AIPricingJSON,
 		"instance_url":                  st.InstanceURL,
 		"validate_url_pattern":          st.ValidateURLPattern,
 		"ui_animations_enabled":         boolString(st.UIAnimationsEnabled),
@@ -226,6 +231,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"anthropicModel":              "anthropic_model",
 		"geminiKey":                   "gemini_key",
 		"geminiModel":                 "gemini_model",
+		"aiPricingJson":               "ai_pricing_json",
 		"instanceUrl":                 "instance_url",
 		"validateUrlPattern":          "validate_url_pattern",
 		"uiAnimationsEnabled":         "ui_animations_enabled",

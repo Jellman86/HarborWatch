@@ -205,6 +205,11 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 
 	releaseService := releases.NewService()
 	aiService := ai.NewService(nil)
+	aiUsageStore := ai.NewUsageSQLiteStore(db)
+	if err := aiUsageStore.Init(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("init ai usage store: %w", err)
+	}
+	aiService.SetUsageStore(aiUsageStore)
 	notificationService := notifications.NewService()
 
 	var portainerService *portainer.Client
@@ -1395,6 +1400,40 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					enabled = aiService.HasProvider()
 				}
 				writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+			})
+
+			r.Get("/usage", func(w http.ResponseWriter, r *http.Request) {
+				span, window := parseAIUsageSpan(r.URL.Query().Get("span"))
+				to := time.Now().UTC().Unix()
+				from := to - int64(window.Seconds())
+				empty := aiUsageResponse{
+					Span:      span,
+					From:      from,
+					To:        to,
+					Breakdown: []aiUsageBreakdownResponse{},
+					Daily:     []ai.UsageDaily{},
+				}
+				summarizer, ok := aiService.(aiUsageSummarizer)
+				if aiService == nil || !ok {
+					writeJSON(w, http.StatusOK, empty)
+					return
+				}
+
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				summary, err := summarizer.UsageSummary(ctx, from, to)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "ai_usage_failed", err.Error())
+					return
+				}
+
+				pricingJSON := ""
+				if settingsService != nil {
+					if st, err := settingsService.Get(ctx); err == nil {
+						pricingJSON = st.AIPricingJSON
+					}
+				}
+				writeJSON(w, http.StatusOK, buildAIUsageResponse(summary, span, pricingJSON))
 			})
 
 			r.Get("/models", func(w http.ResponseWriter, r *http.Request) {
