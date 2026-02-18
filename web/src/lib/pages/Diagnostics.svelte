@@ -18,12 +18,20 @@
     let status = $state<SystemStatus | null>(null);
     let logs = $state<LogEntry[]>([]);
     let loading = $state(true);
+    let logSearch = $state("");
+
+    function logsEndpoint(): string {
+        const params = new URLSearchParams({ limit: "50" });
+        const query = String(logSearch || "").trim();
+        if (query) params.set("search", query);
+        return `/api/system/logs?${params.toString()}`;
+    }
 
     async function loadData() {
         try {
             const [statusRes, logsRes] = await Promise.all([
                 fetch("/api/system/status"),
-                fetch("/api/system/logs?limit=50")
+                fetch(logsEndpoint())
             ]);
             if (statusRes.ok) status = await statusRes.json();
             if (logsRes.ok) logs = await logsRes.json();
@@ -54,6 +62,11 @@
             default: return 'text-slate-400';
         }
     };
+
+    function applyLogSearch() {
+        loading = true;
+        void loadData();
+    }
 </script>
 
 <div class="space-y-8">
@@ -90,12 +103,29 @@
     {/if}
 
     <div class="space-y-4 opacity-0 animate-reveal stagger-2">
-        <h3 class="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Internal Application Logs
-        </h3>
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <h3 class="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Internal Application Logs
+            </h3>
+            <form
+                class="flex items-center gap-2"
+                onsubmit={(e) => {
+                    e.preventDefault();
+                    applyLogSearch();
+                }}
+            >
+                <input
+                    bind:value={logSearch}
+                    placeholder="Search logs..."
+                    class="w-56 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <button type="submit" class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-black uppercase tracking-widest">Search</button>
+                <button type="button" onclick={() => { logSearch = ""; applyLogSearch(); }} class="px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-widest hover:bg-slate-800/60">Clear</button>
+            </form>
+        </div>
         
         <div class="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
             <div class="overflow-x-auto">

@@ -262,6 +262,9 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		return nil, nil, fmt.Errorf("init scheduler store: %w", err)
 	}
 	schedSvc := scheduler.NewService(schedStore)
+	if diagService != nil {
+		schedSvc.SetLogger(diagService)
+	}
 
 	isTaskGloballyEnabled := func(ctx context.Context, taskID string) bool {
 		if schedSvc == nil || strings.TrimSpace(taskID) == "" {
@@ -387,9 +390,9 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		} else if rawDocker != nil {
 			// Maintenance: Weekly Prune
 			schedSvc.RegisterTask("docker_system_prune", func() scheduler.Task {
-				return scheduler.NewDockerPruneTask(rawDocker)
+				return scheduler.NewDockerPruneTask(rawDocker).WithLogger(diagService)
 			})
-			if err := schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker), false); err != nil && diagService != nil {
+			if err := schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker).WithLogger(diagService), false); err != nil && diagService != nil {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task docker_system_prune: %v", err))
 			}
 
@@ -1657,6 +1660,10 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				}
 				level := strings.TrimSpace(strings.ToUpper(r.URL.Query().Get("level")))
 				source := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("source")))
+				search := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("search")))
+				if search == "" {
+					search = strings.TrimSpace(strings.ToLower(r.URL.Query().Get("q")))
+				}
 				sinceRaw := strings.TrimSpace(r.URL.Query().Get("since"))
 				var since int64
 				if sinceRaw != "" {
@@ -1684,6 +1691,12 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					}
 					if since > 0 && entry.Timestamp < since {
 						continue
+					}
+					if search != "" {
+						haystack := strings.ToLower(entry.Level + " " + entry.Source + " " + entry.Message)
+						if !strings.Contains(haystack, search) {
+							continue
+						}
 					}
 					filtered = append(filtered, entry)
 					if len(filtered) >= limit {

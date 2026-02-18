@@ -22,9 +22,14 @@ type Task interface {
 type Service struct {
 	cron     *cron.Cron
 	store    *Store
+	logger   Logger
 	mu       sync.RWMutex
 	tasks    map[string]cron.EntryID
 	registry map[string]func() Task
+}
+
+type Logger interface {
+	Log(level, source, message string)
 }
 
 var cronSpecParser = cron.NewParser(
@@ -46,9 +51,25 @@ func (s *Service) RegisterTask(name string, factory func() Task) {
 	s.registry[name] = factory
 }
 
+func (s *Service) SetLogger(logger Logger) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logger = logger
+}
+
+func (s *Service) log(level, message string) {
+	log.Printf("%s", message)
+	s.mu.RLock()
+	logger := s.logger
+	s.mu.RUnlock()
+	if logger != nil {
+		logger.Log(level, "Scheduler", message)
+	}
+}
+
 func (s *Service) Start() {
 	s.cron.Start()
-	log.Println("Scheduler service started")
+	s.log("INFO", "Scheduler service started")
 }
 
 func (s *Service) Stop() {
@@ -171,9 +192,11 @@ func validateCronSpec(spec string) error {
 
 func (s *Service) scheduleTask(name, spec string, task Task) (cron.EntryID, error) {
 	return s.cron.AddFunc(spec, func() {
-		log.Printf("Executing scheduled task: %s", name)
+		s.log("INFO", fmt.Sprintf("Executing scheduled task: %s", name))
 		if err := task.Run(context.Background()); err != nil {
-			log.Printf("Error executing task %s: %v", name, err)
+			s.log("ERROR", fmt.Sprintf("Error executing task %s: %v", name, err))
+		} else {
+			s.log("INFO", fmt.Sprintf("Scheduled task completed: %s", name))
 		}
 		if s.store != nil {
 			_ = s.store.UpdateLastRun(context.Background(), name, time.Now().Unix())
@@ -323,10 +346,12 @@ func (s *Service) RunTask(ctx context.Context, name string) error {
 	}
 
 	task := factory()
-	log.Printf("Manually triggering task: %s", name)
+	s.log("INFO", fmt.Sprintf("Manually triggering task: %s", name))
 	go func() {
 		if err := task.Run(context.Background()); err != nil {
-			log.Printf("Manual task %s failed: %v", name, err)
+			s.log("ERROR", fmt.Sprintf("Manual task %s failed: %v", name, err))
+		} else {
+			s.log("INFO", fmt.Sprintf("Manual task completed: %s", name))
 		}
 		if s.store != nil {
 			_ = s.store.UpdateLastRun(context.Background(), name, time.Now().Unix())

@@ -25,30 +25,45 @@ type MalwareMountPolicy func(ctx context.Context, containerID, sourcePath string
 // DockerPruneTask cleans up dangling images and stopped containers.
 type DockerPruneTask struct {
 	docker *client.Client
+	logger Logger
 }
 
 func NewDockerPruneTask(cli *client.Client) *DockerPruneTask {
 	return &DockerPruneTask{docker: cli}
 }
 
+func (t *DockerPruneTask) WithLogger(logger Logger) *DockerPruneTask {
+	t.logger = logger
+	return t
+}
+
+func (t *DockerPruneTask) log(level, message string) {
+	log.Printf("%s", message)
+	if t.logger != nil {
+		t.logger.Log(level, "Scheduler", message)
+	}
+}
+
 func (t *DockerPruneTask) Name() string { return "docker_system_prune" }
 
 func (t *DockerPruneTask) Run(ctx context.Context) error {
-	log.Println("Starting automated Docker system prune...")
+	t.log("INFO", "Starting automated Docker system prune...")
 
 	// Prune Images
 	report, err := t.docker.ImagesPrune(ctx, filters.NewArgs(filters.Arg("dangling", "true")))
 	if err != nil {
+		t.log("ERROR", fmt.Sprintf("Image prune failed: %v", err))
 		return fmt.Errorf("image prune failed: %w", err)
 	}
-	log.Printf("Pruned %d images, space reclaimed: %d bytes", len(report.ImagesDeleted), report.SpaceReclaimed)
+	t.log("INFO", fmt.Sprintf("Pruned %d images, space reclaimed: %d bytes", len(report.ImagesDeleted), report.SpaceReclaimed))
 
 	// Prune Containers
 	cReport, err := t.docker.ContainersPrune(ctx, filters.Args{})
 	if err != nil {
+		t.log("ERROR", fmt.Sprintf("Container prune failed: %v", err))
 		return fmt.Errorf("container prune failed: %w", err)
 	}
-	log.Printf("Pruned %d containers, space reclaimed: %d bytes", len(cReport.ContainersDeleted), cReport.SpaceReclaimed)
+	t.log("INFO", fmt.Sprintf("Pruned %d containers, space reclaimed: %d bytes", len(cReport.ContainersDeleted), cReport.SpaceReclaimed))
 
 	return nil
 }
