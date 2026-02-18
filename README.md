@@ -73,6 +73,7 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - `HW_CLAMAV_SCAN_ARCHIVES` toggles archive scanning (`true`/`false`, default `false`).
 - `HW_CLAMAV_FRESHCLAM_CHECKS` controls `freshclam --checks` value during updates (default `2`).
 - `HW_CLAMAV_DB_PATH` controls ClamAV signature database directory path (default `/var/lib/clamav` in container).
+- `HW_SCAN_BIND_ROOT` controls the host root path bind-mounted for scheduled ClamAV mount sweeps in `docker-compose.dev.yml` (default `/mnt/Storage-SSD`). Keep container path identical to host path.
 
 ## Validation URL Automation
 
@@ -118,6 +119,7 @@ scripts/dev.sh
 HarborWatch is designed as a **single monolithic container**. It serves the REST API, background jobs, and the built Svelte static assets from a single Go binary. No Node.js or complex sidecars are required in production.
 
 ClamAV signature updates are also managed inside the HarborWatch container. Persist signature files by bind-mounting `/var/lib/clamav` (compose defaults now include `${HW_CLAMAV_DB_PATH:-./clamav-db}:/var/lib/clamav`).
+For scheduled mount scans in dev compose, HarborWatch needs host bind paths visible at the same absolute path inside the container (compose default: `${HW_SCAN_BIND_ROOT:-/mnt/Storage-SSD}:${HW_SCAN_BIND_ROOT:-/mnt/Storage-SSD}:ro`).
 
 ## Environment Overrides
 
