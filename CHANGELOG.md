@@ -2,6 +2,29 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.8] - 2026-02-18
+
+### Added
+- **Image Repository Intelligence View:**
+  - Added `GET /api/docker/images/intelligence` to enrich image inventory with:
+    - in-use/outdated/prune-candidate lifecycle status
+    - latest Trivy vulnerability totals/severity highlights (when available)
+    - malware detection indicators (when available)
+  - Added Image Repository security and lifecycle tags so high-risk/outdated/prune-target images are visible at a glance.
+- **Image Cleanup Feedback Log:**
+  - Added a collapsed cleanup log panel in Image Repository that auto-expands when cleanup is triggered and streams scheduler feedback from system logs.
+
+### Changed
+- **Container Intelligence UX Placement:**
+  - Moved Repository URL and Changelog URL override controls from global Settings into a new per-container `intelligence` tab in Container Detail.
+  - Added effective/derived metadata display directly in the container context where upgrade decisions are made.
+- **Settings Simplification:**
+  - Removed the global Settings `Containers` intelligence tab now that overrides are managed at container level.
+
+### Tests
+- `go test ./...` (backend)
+- `npm run build` (web)
+
 ## [0.7.7] - 2026-02-18
 
 ### Added
