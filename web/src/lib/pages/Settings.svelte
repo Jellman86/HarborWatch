@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import AutomationFlowChart from "../components/AutomationFlowChart.svelte";
     import ThemeSwitcher from "../components/ThemeSwitcher.svelte";
-    import type { Settings } from "../api-types";
+    import type { ContainerSummary, Settings } from "../api-types";
     import { toasts } from "../stores/ToastStore";
 
     interface Schedule {
@@ -75,6 +75,7 @@
     let settings = $state<Settings>({ ...defaultSettings });
     let schedules = $state<Schedule[]>([]);
     let scheduleDrafts = $state<Record<string, ScheduleDraft>>({});
+    let discoveredContainers = $state<ContainerSummary[]>([]);
 
     let activeTab = $state("automations");
     let activeAutomationTab = $state<AutomationDomain>("upgrades");
@@ -138,6 +139,100 @@
 
     function isLocked(key: string) {
         return settings.environmentOverrides?.[key] || false;
+    }
+
+    function splitDelimitedTokens(raw: string): string[] {
+        return String(raw || "")
+            .split(/[,;\n\r\t]+/)
+            .map((token) => token.trim())
+            .filter(Boolean);
+    }
+
+    function dedupeTokens(tokens: string[]): string[] {
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const token of tokens) {
+            const normalized = token.toLowerCase();
+            if (!normalized || seen.has(normalized)) continue;
+            seen.add(normalized);
+            out.push(token);
+        }
+        return out;
+    }
+
+    function containerDisplayName(container: ContainerSummary): string {
+        const firstName = (container.names || []).find((name) => String(name || "").trim().length > 0);
+        const normalized = String(firstName || "").replace(/^\//, "").trim();
+        if (normalized) return normalized;
+        return (container.id || "").slice(0, 12) || "unnamed";
+    }
+
+    function isHarborWatchContainer(container: ContainerSummary): boolean {
+        const name = containerDisplayName(container).toLowerCase();
+        const image = String(container.image || "").toLowerCase();
+        return name.includes("harborwatch") || image.includes("harborwatch");
+    }
+
+    function containerMatchesToken(container: ContainerSummary, token: string): boolean {
+        const lowered = token.trim().toLowerCase();
+        if (!lowered) return false;
+
+        const id = String(container.id || "").trim().toLowerCase();
+        if (id && (id === lowered || id.startsWith(lowered))) return true;
+
+        const image = String(container.image || "").trim().toLowerCase();
+        if (image && (image === lowered || image.includes(lowered))) return true;
+
+        for (const rawName of container.names || []) {
+            const name = String(rawName || "").trim().replace(/^\//, "").toLowerCase();
+            if (!name) continue;
+            if (name === lowered || name.includes(lowered)) return true;
+        }
+
+        const labels = container.labels || {};
+        for (const value of Object.values(labels)) {
+            const labelValue = String(value || "").trim().toLowerCase();
+            if (!labelValue) continue;
+            if (labelValue === lowered || labelValue.includes(lowered)) return true;
+        }
+
+        return false;
+    }
+
+    function containerMatchesAnyToken(container: ContainerSummary, tokens: string[]): boolean {
+        return tokens.some((token) => containerMatchesToken(container, token));
+    }
+
+    function ignoredContainerTokens(): string[] {
+        return dedupeTokens(splitDelimitedTokens(settings.automationIgnoredContainers || ""));
+    }
+
+    function saveIgnoredContainerTokens(tokens: string[]) {
+        settings.automationIgnoredContainers = dedupeTokens(tokens).join(", ");
+    }
+
+    function isContainerIgnored(container: ContainerSummary): boolean {
+        return containerMatchesAnyToken(container, ignoredContainerTokens());
+    }
+
+    function setContainerIgnored(container: ContainerSummary, ignored: boolean) {
+        const current = ignoredContainerTokens();
+        if (ignored) {
+            if (containerMatchesAnyToken(container, current)) return;
+            saveIgnoredContainerTokens([...current, container.id]);
+            return;
+        }
+        // Remove all tokens that currently target this container.
+        const next = current.filter((token) => !containerMatchesToken(container, token));
+        // HarborWatch self-protection is mandatory.
+        if (isHarborWatchContainer(container)) {
+            next.push("harborwatch");
+        }
+        saveIgnoredContainerTokens(next);
+    }
+
+    function sortedContainers(containers: ContainerSummary[]): ContainerSummary[] {
+        return [...containers].sort((a, b) => containerDisplayName(a).localeCompare(containerDisplayName(b)));
     }
 
     function scheduleById(id: string): Schedule | undefined {
@@ -363,6 +458,20 @@
         syncScheduleDrafts();
     }
 
+    async function loadContainersForExclusions() {
+        try {
+            const res = await fetch("/api/docker/containers");
+            if (!res.ok) {
+                discoveredContainers = [];
+                return;
+            }
+            const data = await res.json();
+            discoveredContainers = sortedContainers(Array.isArray(data) ? data : []);
+        } catch {
+            discoveredContainers = [];
+        }
+    }
+
     async function loadClamAVStatus() {
         clamavStatusLoading = true;
         try {
@@ -379,7 +488,7 @@
     async function loadAll() {
         loading = true;
         try {
-            await Promise.all([loadSettings(), loadSchedules(), loadClamAVStatus()]);
+            await Promise.all([loadSettings(), loadSchedules(), loadClamAVStatus(), loadContainersForExclusions()]);
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to load settings");
         } finally {
@@ -628,16 +737,44 @@
                     <p class="text-[11px] text-slate-500 mt-1">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
                     <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
                         <div class="space-y-2">
-                            <label for="automation-ignore-containers" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</label>
-                            <textarea
-                                id="automation-ignore-containers"
-                                rows="3"
-                                bind:value={settings.automationIgnoredContainers}
-                                disabled={isLocked("automationIgnoredContainers")}
-                                placeholder="harborwatch, plex, qbittorrent"
-                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                            ></textarea>
-                            <p class="text-[11px] text-slate-500">Use container name, image text, or ID prefix. Separate entries with commas or new lines.</p>
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
+                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto">
+                                {#if discoveredContainers.length === 0}
+                                    <p class="px-3 py-3 text-[11px] text-slate-500 italic">No containers discovered. Start Docker to use auto-toggle exclusions.</p>
+                                {:else}
+                                    {#each discoveredContainers as container}
+                                        {@const ignored = isContainerIgnored(container)}
+                                        {@const protectedContainer = isHarborWatchContainer(container)}
+                                        <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 last:border-b-0 flex items-center justify-between gap-3">
+                                            <div class="min-w-0">
+                                                <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
+                                                <p class="text-[10px] text-slate-500 truncate">{container.image}</p>
+                                            </div>
+                                            <button
+                                                onclick={() => setContainerIgnored(container, !ignored)}
+                                                disabled={isLocked("automationIgnoredContainers") || protectedContainer}
+                                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-60 {ignored ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                aria-label="Toggle ignored container"
+                                                title={protectedContainer ? "HarborWatch is always excluded for self-protection" : (ignored ? "Excluded" : "Included")}
+                                            >
+                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {ignored ? 'right-1' : 'left-1'}"></div>
+                                            </button>
+                                        </div>
+                                    {/each}
+                                {/if}
+                            </div>
+                            <details class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-2">
+                                <summary class="cursor-pointer text-[11px] font-bold text-slate-600 dark:text-slate-300">Advanced token editor</summary>
+                                <textarea
+                                    id="automation-ignore-containers"
+                                    rows="3"
+                                    bind:value={settings.automationIgnoredContainers}
+                                    disabled={isLocked("automationIgnoredContainers")}
+                                    placeholder="harborwatch, plex, qbittorrent"
+                                    class="mt-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                ></textarea>
+                                <p class="mt-1 text-[11px] text-slate-500">Supports container name, image text, or ID prefix tokens (comma/newline separated).</p>
+                            </details>
                         </div>
                         {#if activeAutomationTab === "security"}
                             <div class="space-y-2">
