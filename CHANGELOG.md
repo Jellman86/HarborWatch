@@ -2,6 +2,30 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.7] - 2026-02-18
+
+### Added
+- **Container Intelligence Overrides:**
+  - Added persistent container metadata override storage (`container_intel_overrides`) for manual `repositoryUrl` and `changelogUrl` inputs.
+  - Added `GET /api/docker/intel/overrides` for fleet-wide override inventory.
+  - Added `GET|POST /api/docker/{id}/intel` (plus `/api/docker/containers/{id}/intel` alias) for effective intelligence view and override management.
+- **Lifecycle History API:**
+  - Added `GET /api/updates/container/{id}` to retrieve recent per-container update/lifecycle jobs.
+- **Settings -> Containers Tab:**
+  - Added a dedicated container intelligence UI for selecting containers and managing repo/changelog overrides with derived/effective previews.
+
+### Changed
+- **Update Intelligence Enrichment:**
+  - Update runs now pass both effective repository and changelog URLs into AI context generation and release-intelligence derivation.
+  - Release repository detection now falls back across repo/changelog references to improve GitHub release context resolution.
+- **Container Lifecycle UX Simplification:**
+  - Reworked lifecycle tab controls to a two-mode model: `Use Global Automation` or `Manual`.
+  - Lifecycle tab now focuses on lifecycle logs and breaking-change signals while retaining explicit trigger-upgrade controls.
+
+### Tests
+- `go test ./...` (backend)
+- `npm run build` (web)
+
 ## [0.7.6] - 2026-02-18
 
 ### Added
