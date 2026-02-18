@@ -625,7 +625,7 @@
 
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
                     <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Safety Exclusions</p>
-                    <p class="text-[11px] text-slate-500 mt-1">Ignored containers are excluded from automated update and security tasks. HarborWatch is always included for self-protection.</p>
+                    <p class="text-[11px] text-slate-500 mt-1">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
                     <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
                         <div class="space-y-2">
                             <label for="automation-ignore-containers" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</label>
@@ -639,18 +639,20 @@
                             ></textarea>
                             <p class="text-[11px] text-slate-500">Use container name, image text, or ID prefix. Separate entries with commas or new lines.</p>
                         </div>
-                        <div class="space-y-2">
-                            <label for="malware-ignore-mounts" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
-                            <textarea
-                                id="malware-ignore-mounts"
-                                rows="3"
-                                bind:value={settings.malwareIgnoredMounts}
-                                disabled={isLocked("malwareIgnoredMounts")}
-                                placeholder="/mnt/media, /srv/plex-library"
-                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                            ></textarea>
-                            <p class="text-[11px] text-slate-500">These path patterns are skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
-                        </div>
+                        {#if activeAutomationTab === "security"}
+                            <div class="space-y-2">
+                                <label for="malware-ignore-mounts" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
+                                <textarea
+                                    id="malware-ignore-mounts"
+                                    rows="3"
+                                    bind:value={settings.malwareIgnoredMounts}
+                                    disabled={isLocked("malwareIgnoredMounts")}
+                                    placeholder="/mnt/media, /srv/plex-library"
+                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                ></textarea>
+                                <p class="text-[11px] text-slate-500">These path patterns are skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
+                            </div>
+                        {/if}
                     </div>
                 </div>
 
