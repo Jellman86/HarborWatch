@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	_ "modernc.org/sqlite"
@@ -139,4 +140,46 @@ SELECT step, status, message, ts FROM update_steps WHERE run_id=? ORDER BY id AS
 	}
 	run.Steps = steps
 	return &run, nil
+}
+
+func (s *Store) ListRunsForContainer(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error) {
+	if strings.TrimSpace(containerID) == "" {
+		return []gen.UpdateJobStatus{}, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, container_id, target_image, validate_url, status, created_at, updated_at, error, ai_analysis
+FROM update_runs
+WHERE container_id = ?
+ORDER BY updated_at DESC
+LIMIT ?
+`, strings.TrimSpace(containerID), limit)
+	if err != nil {
+		return nil, fmt.Errorf("list update runs: %w", err)
+	}
+	defer rows.Close()
+
+	out := []gen.UpdateJobStatus{}
+	for rows.Next() {
+		var item gen.UpdateJobStatus
+		var aiRaw string
+		if err := rows.Scan(&item.JobID, &item.ContainerID, &item.TargetImage, &item.ValidateURL, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.Error, &aiRaw); err != nil {
+			return nil, fmt.Errorf("scan update run: %w", err)
+		}
+		if aiRaw != "" {
+			var summary gen.AIAnalysisSummary
+			if err := json.Unmarshal([]byte(aiRaw), &summary); err == nil {
+				item.AIAnalysis = &summary
+			}
+		}
+		item.Steps = []gen.UpdateStepEvent{}
+		out = append(out, item)
+	}
+	return out, rows.Err()
 }

@@ -19,18 +19,19 @@ import (
 )
 
 type Request struct {
-	ContainerID    string
-	TargetImage    string
-	ValidateURL    string
-	CurrentImage   string
-	ContainerName  string
-	Labels         map[string]string
-	RepositoryURL  string
-	ReleaseContext string
-	ValidateMode   string
-	ValidateTimeoutSec int
+	ContainerID         string
+	TargetImage         string
+	ValidateURL         string
+	CurrentImage        string
+	ContainerName       string
+	Labels              map[string]string
+	RepositoryURL       string
+	ChangelogURL        string
+	ReleaseContext      string
+	ValidateMode        string
+	ValidateTimeoutSec  int
 	ValidateIntervalSec int
-	AIValidateLogs bool
+	AIValidateLogs      bool
 }
 
 type DiagService interface {
@@ -97,6 +98,10 @@ func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
 
 func (s *Service) GetJob(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error) {
 	return s.store.GetRun(ctx, jobID)
+}
+
+func (s *Service) ListContainerJobs(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error) {
+	return s.store.ListRunsForContainer(ctx, containerID, limit)
 }
 
 func (s *Service) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
@@ -276,6 +281,9 @@ func buildAIReleaseContext(req Request) string {
 	b.WriteString(fmt.Sprintf("- target_tag: %s\n", extractImageTag(req.TargetImage)))
 	if repo := strings.TrimSpace(req.RepositoryURL); repo != "" {
 		b.WriteString(fmt.Sprintf("- source_repository: %s\n", repo))
+	}
+	if changelog := strings.TrimSpace(req.ChangelogURL); changelog != "" {
+		b.WriteString(fmt.Sprintf("- changelog_url: %s\n", changelog))
 	}
 	if len(req.Labels) > 0 {
 		for _, k := range []string{"org.opencontainers.image.source", "org.label-schema.vcs-url", "com.docker.compose.project", "com.docker.compose.service"} {

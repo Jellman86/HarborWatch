@@ -255,6 +255,9 @@ func (f fakeUpdateService) StartUpdate(req updates.Request) (gen.UpdateStartResp
 func (f fakeUpdateService) GetJob(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error) {
 	return f.job, nil
 }
+func (f fakeUpdateService) ListContainerJobs(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error) {
+	return []gen.UpdateJobStatus{}, nil
+}
 func (f fakeUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 	ch := make(chan gen.UpdateStepEvent, 1)
 	ch <- gen.UpdateStepEvent{JobID: jobID, Step: "preflight", Status: "completed", Message: "ok", Timestamp: 1}
@@ -263,7 +266,7 @@ func (f fakeUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, 
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	ts := httptest.NewServer(NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}))
+	ts := httptest.NewServer(NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil))
 	defer ts.Close()
 	resp, err := http.Get(ts.URL + "/health")
 	if err != nil || resp.StatusCode != http.StatusOK {
@@ -272,7 +275,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestDockerContainersEndpoint(t *testing.T) {
-	mux := NewMuxWithDeps(fakeDockerClient{containers: []gen.ContainerSummary{{ID: "abc", Image: "nginx:latest", State: "running"}}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(fakeDockerClient{containers: []gen.ContainerSummary{{ID: "abc", Image: "nginx:latest", State: "running"}}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers", nil))
 	if rec.Code != http.StatusOK {
@@ -286,7 +289,7 @@ func TestDockerContainersEndpoint(t *testing.T) {
 
 func TestReleaseSummaryEndpoint(t *testing.T) {
 	fake := fakeReleaseService{summary: gen.ReleaseRiskSummary{Repo: "Jellman86/HarborWatch", TotalRisk: 42}}
-	mux := NewMuxWithDeps(nil, nil, fake, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(nil, nil, fake, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/releases/summary?repo=Jellman86/HarborWatch", nil))
 	if rec.Code != http.StatusOK {
@@ -296,7 +299,7 @@ func TestReleaseSummaryEndpoint(t *testing.T) {
 
 func TestUpdateEndpoints(t *testing.T) {
 	up := fakeUpdateService{startResp: gen.UpdateStartResponse{JobID: "u1", Status: "running"}, job: &gen.UpdateJobStatus{JobID: "u1", Status: "running"}}
-	mux := NewMuxWithDeps(nil, nil, nil, up, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(nil, nil, nil, up, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 
 	recRun := httptest.NewRecorder()
 	mux.ServeHTTP(recRun, httptest.NewRequest(http.MethodPost, "/api/updates/run", strings.NewReader(`{"containerId":"c1","targetImage":"img","validateUrl":"http://x"}`)))
@@ -318,7 +321,7 @@ func TestUpdateEndpoints(t *testing.T) {
 }
 
 func TestAuditComposeByID_DockerUnavailable(t *testing.T) {
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, fakeAIService{enabled: true}, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, fakeAIService{enabled: true}, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ai/audit-compose/c1", nil))
 	if rec.Code != http.StatusServiceUnavailable {
@@ -327,7 +330,7 @@ func TestAuditComposeByID_DockerUnavailable(t *testing.T) {
 }
 
 func TestRulesRoute_BackwardCompatibleContainersPath(t *testing.T) {
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers/c1/rules", nil))
 	if rec.Code != http.StatusOK {
@@ -336,7 +339,7 @@ func TestRulesRoute_BackwardCompatibleContainersPath(t *testing.T) {
 }
 
 func TestFleetAdviceEndpoint(t *testing.T) {
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 	body := strings.NewReader(`[{"id":"c1","names":["/web"],"image":"nginx:latest","state":"running","status":"Up","labels":{},"updateAvailable":true}]`)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/ai/fleet-advice", body))
@@ -354,7 +357,7 @@ func TestFleetAdviceEndpoint(t *testing.T) {
 
 func TestDockerPruneEndpoint_TriggersSchedulerTask(t *testing.T) {
 	sched := &fakeSchedulerServiceWithRun{}
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, sched, nil, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, sched, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/docker/prune", nil))
 	if rec.Code != http.StatusAccepted {
@@ -372,7 +375,7 @@ func TestMetricsBatchEndpoint(t *testing.T) {
 			"c2": {{ContainerID: "c2", Timestamp: 2, CPUPercent: 20}},
 		},
 	}
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, m, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, m, nil, nil, nil, nil, fakeRulesService{}, nil)
 	body := strings.NewReader(`{"ids":["c1","c2"],"duration":"1h"}`)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/metrics/batch", body))
@@ -394,7 +397,7 @@ func TestDockerContainerLogsEndpoint(t *testing.T) {
 			Combined: "hello\nworld",
 		},
 	}
-	mux := NewMuxWithDeps(docker, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(docker, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/c1/logs?tail=10&since=1h&timestamps=1", nil))
 	if rec.Code != http.StatusOK {
@@ -419,7 +422,7 @@ func TestSystemLogsFilters(t *testing.T) {
 			{Timestamp: 300, Level: "ERROR", Source: "Docker", Message: "boom"},
 		},
 	}
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, diagSvc, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, diagSvc, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/system/logs?limit=10&level=error&source=docker&since=250", nil))
 	if rec.Code != http.StatusOK {
@@ -448,7 +451,7 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 		images:     []gen.ImageSummary{{ID: "img1", RepoTags: []string{"nginx:latest"}}},
 		logs:       dockerengine.ContainerLogs{Combined: "x"},
 	}
-	mux := NewMuxWithDeps(docker, fakeScanService{}, nil, nil, fakeAuditService{}, nil, fakeSchedulerService{}, nil, diagSvc, nil, nil, nil, fakeRulesService{})
+	mux := NewMuxWithDeps(docker, fakeScanService{}, nil, nil, fakeAuditService{}, nil, fakeSchedulerService{}, nil, diagSvc, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/diagnostics/snapshot?containerId=c1&includeFleet=1", nil))
 	if rec.Code != http.StatusOK {

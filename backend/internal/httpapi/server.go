@@ -17,6 +17,7 @@ import (
 
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	"github.com/Jellman86/HarborWatch/backend/internal/audit"
+	"github.com/Jellman86/HarborWatch/backend/internal/containerintel"
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
@@ -116,7 +117,14 @@ type MetricsService interface {
 type UpdateService interface {
 	StartUpdate(req updates.Request) (gen.UpdateStartResponse, error)
 	GetJob(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error)
+	ListContainerJobs(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error)
 	Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func())
+}
+
+type ContainerIntelService interface {
+	Get(ctx context.Context, id string) (containerintel.Override, error)
+	Save(ctx context.Context, ov containerintel.Override) error
+	List(ctx context.Context) ([]containerintel.Override, error)
 }
 
 func NewMux() http.Handler {
@@ -180,6 +188,10 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	rulesStore := rules.NewStore(db)
 	if err := rulesStore.Init(context.Background()); err != nil {
 		return nil, nil, fmt.Errorf("init rules store: %w", err)
+	}
+	intelStore := containerintel.NewStore(db)
+	if err := intelStore.Init(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("init container intel store: %w", err)
 	}
 
 	// 3. Initialize Domain Services
@@ -494,7 +506,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to load schedules from DB: %v", err))
 	}
 
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService, rulesStore), schedSvc, nil
+	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService, rulesStore, intelStore), schedSvc, nil
 }
 
 func newDegradedMux(initErr error) http.Handler {
@@ -512,7 +524,7 @@ func newDegradedMux(initErr error) http.Handler {
 	return r
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService) http.Handler {
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService, intelService ContainerIntelService) http.Handler {
 	r := chi.NewRouter()
 	currentPortainerService := portainerService
 
@@ -761,6 +773,34 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				writeJSON(w, http.StatusOK, logs)
 			}
 
+			loadContainerSummary := func(ctx context.Context, id string) gen.ContainerSummary {
+				summary := gen.ContainerSummary{ID: id}
+				if dockerClient == nil {
+					return summary
+				}
+				inspectCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+				if c, err := dockerClient.GetContainer(inspectCtx, id); err == nil {
+					summary = c
+				}
+				cancel()
+				return summary
+			}
+
+			r.Get("/intel/overrides", func(w http.ResponseWriter, r *http.Request) {
+				if intelService == nil {
+					writeError(w, http.StatusServiceUnavailable, "intel_unavailable", "Container intelligence store unavailable")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				list, err := intelService.List(ctx)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "intel_list_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, list)
+			})
+
 			r.Get("/{id}", getContainerDetail)
 			// Backward-compatible alias for older frontend builds that still call /docker/containers/{id}.
 			r.Get("/containers/{id}", getContainerDetail)
@@ -828,6 +868,70 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 			r.Route("/{id}/rules", registerRulesRoutes)
 			// Backward-compatible route for older frontend builds.
 			r.Route("/containers/{id}/rules", registerRulesRoutes)
+
+			registerIntelRoutes := func(router chi.Router) {
+				getIntel := func(w http.ResponseWriter, r *http.Request) {
+					if intelService == nil {
+						writeError(w, http.StatusServiceUnavailable, "intel_unavailable", "Container intelligence store unavailable")
+						return
+					}
+					id := strings.TrimSpace(chi.URLParam(r, "id"))
+					if id == "" {
+						writeError(w, http.StatusBadRequest, "invalid_request", "container id is required")
+						return
+					}
+					ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+					defer cancel()
+					ov, err := intelService.Get(ctx, id)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "intel_get_failed", err.Error())
+						return
+					}
+					summary := loadContainerSummary(ctx, id)
+					writeJSON(w, http.StatusOK, effectiveContainerIntel(summary, ov))
+				}
+
+				saveIntel := func(w http.ResponseWriter, r *http.Request) {
+					if intelService == nil {
+						writeError(w, http.StatusServiceUnavailable, "intel_unavailable", "Container intelligence store unavailable")
+						return
+					}
+					id := strings.TrimSpace(chi.URLParam(r, "id"))
+					if id == "" {
+						writeError(w, http.StatusBadRequest, "invalid_request", "container id is required")
+						return
+					}
+					var req struct {
+						RepositoryURL string `json:"repositoryUrl"`
+						ChangelogURL  string `json:"changelogUrl"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+						writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+						return
+					}
+					ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+					defer cancel()
+					err := intelService.Save(ctx, containerintel.Override{
+						ContainerID:   id,
+						RepositoryURL: req.RepositoryURL,
+						ChangelogURL:  req.ChangelogURL,
+						UpdatedAt:     time.Now().UTC().Unix(),
+					})
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "intel_save_failed", err.Error())
+						return
+					}
+					ov, _ := intelService.Get(ctx, id)
+					summary := loadContainerSummary(ctx, id)
+					writeJSON(w, http.StatusOK, effectiveContainerIntel(summary, ov))
+				}
+
+				router.Get("/", getIntel)
+				router.Post("/", saveIntel)
+			}
+
+			r.Route("/{id}/intel", registerIntelRoutes)
+			r.Route("/containers/{id}/intel", registerIntelRoutes)
 		})
 
 		r.Route("/scans", func(r chi.Router) {
@@ -1085,14 +1189,21 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 
-				repoURL := firstNonEmpty(
-					summary.Labels["harborwatch.intel.url"],
-					summary.Labels["org.opencontainers.image.source"],
-					summary.Labels["org.label-schema.vcs-url"],
-				)
+				repoURL := deriveRepositoryURL(summary)
+				changelogURL := deriveChangelogURL(summary, repoURL)
+				if intelService != nil {
+					intelCtx, intelCancel := context.WithTimeout(r.Context(), 3*time.Second)
+					if ov, err := intelService.Get(intelCtx, req.ContainerID); err == nil {
+						merged := effectiveContainerIntel(summary, ov)
+						repoURL = firstNonEmpty(merged.EffectiveRepositoryURL, repoURL)
+						changelogURL = firstNonEmpty(merged.EffectiveChangelogURL, changelogURL)
+					}
+					intelCancel()
+				}
 				releaseContext := ""
 				if releaseService != nil {
-					if repo, ok := deriveGithubRepo(repoURL); ok {
+					repoRef := firstNonEmpty(repoURL, changelogURL)
+					if repo, ok := deriveGithubRepo(repoRef); ok {
 						currentTag := imageTagFromRef(summary.Image)
 						targetTag := imageTagFromRef(req.TargetImage)
 						releaseCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
@@ -1109,6 +1220,7 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					ContainerName:       trimContainerName(summary.Names),
 					Labels:              summary.Labels,
 					RepositoryURL:       repoURL,
+					ChangelogURL:        changelogURL,
 					ReleaseContext:      releaseContext,
 					ValidateMode:        effectiveRules.ValidateMode,
 					ValidateTimeoutSec:  effectiveRules.ValidateTimeoutSec,
@@ -1139,6 +1251,27 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					return
 				}
 				writeJSON(w, http.StatusOK, run)
+			})
+
+			r.Get("/container/{id}", func(w http.ResponseWriter, r *http.Request) {
+				if updateService == nil {
+					writeError(w, http.StatusServiceUnavailable, "update_service_unavailable", "Update service unavailable")
+					return
+				}
+				id := strings.TrimSpace(chi.URLParam(r, "id"))
+				if id == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "container id is required")
+					return
+				}
+				limit := parseIntQuery(r.URL.Query().Get("limit"), 20, 1, 100)
+				ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+				defer cancel()
+				runs, err := updateService.ListContainerJobs(ctx, id, limit)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "update_read_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, runs)
 			})
 
 			r.Get("/events/{id}", func(w http.ResponseWriter, r *http.Request) {
