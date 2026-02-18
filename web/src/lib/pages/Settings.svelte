@@ -920,67 +920,6 @@
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
-                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Safety Exclusions</p>
-                    <p class="text-[11px] text-slate-500 mt-1">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
-                    <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
-                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto">
-                                {#if discoveredContainers.length === 0}
-                                    <p class="px-3 py-3 text-[11px] text-slate-500 italic">No containers discovered. Start Docker to use auto-toggle exclusions.</p>
-                                {:else}
-                                    {#each discoveredContainers as container}
-                                        {@const ignored = isContainerIgnored(container)}
-                                        {@const protectedContainer = isHarborWatchContainer(container)}
-                                        <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 last:border-b-0 flex items-center justify-between gap-3">
-                                            <div class="min-w-0">
-                                                <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
-                                                <p class="text-[10px] text-slate-500 truncate">{container.image}</p>
-                                            </div>
-                                            <button
-                                                onclick={() => setContainerIgnored(container, !ignored)}
-                                                disabled={isLocked("automationIgnoredContainers") || protectedContainer}
-                                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-60 {ignored ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                aria-label="Toggle ignored container"
-                                                title={protectedContainer ? "HarborWatch is always excluded for self-protection" : (ignored ? "Excluded" : "Included")}
-                                            >
-                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {ignored ? 'right-1' : 'left-1'}"></div>
-                                            </button>
-                                        </div>
-                                    {/each}
-                                {/if}
-                            </div>
-                            <details class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-2">
-                                <summary class="cursor-pointer text-[11px] font-bold text-slate-600 dark:text-slate-300">Advanced token editor</summary>
-                                <textarea
-                                    id="automation-ignore-containers"
-                                    rows="3"
-                                    bind:value={settings.automationIgnoredContainers}
-                                    disabled={isLocked("automationIgnoredContainers")}
-                                    placeholder="harborwatch, plex, qbittorrent"
-                                    class="mt-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                ></textarea>
-                                <p class="mt-1 text-[11px] text-slate-500">Supports container name, image text, or ID prefix tokens (comma/newline separated).</p>
-                            </details>
-                        </div>
-                        {#if activeAutomationTab === "security"}
-                            <div class="space-y-2">
-                                <label for="malware-ignore-mounts" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
-                                <textarea
-                                    id="malware-ignore-mounts"
-                                    rows="3"
-                                    bind:value={settings.malwareIgnoredMounts}
-                                    disabled={isLocked("malwareIgnoredMounts")}
-                                    placeholder="/mnt/media, /srv/plex-library"
-                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                ></textarea>
-                                <p class="text-[11px] text-slate-500">These path patterns are skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
-                            </div>
-                        {/if}
-                    </div>
-                </div>
-
                 <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-6">
                     <div class="space-y-4">
                         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40">
@@ -1144,6 +1083,72 @@
                                     No scheduler tasks found for this automation domain.
                                 </div>
                             {/each}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-1 border-t border-dashed border-slate-200 dark:border-slate-700">
+                    <div class="rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Safety Section</span>
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Safety Exclusions</p>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-2">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
+                        <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
+                                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto">
+                                    {#if discoveredContainers.length === 0}
+                                        <p class="px-3 py-3 text-[11px] text-slate-500 italic">No containers discovered. Start Docker to use auto-toggle exclusions.</p>
+                                    {:else}
+                                        {#each discoveredContainers as container}
+                                            {@const ignored = isContainerIgnored(container)}
+                                            {@const protectedContainer = isHarborWatchContainer(container)}
+                                            <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 last:border-b-0 flex items-center justify-between gap-3">
+                                                <div class="min-w-0">
+                                                    <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
+                                                    <p class="text-[10px] text-slate-500 truncate">{container.image}</p>
+                                                </div>
+                                                <button
+                                                    onclick={() => setContainerIgnored(container, !ignored)}
+                                                    disabled={isLocked("automationIgnoredContainers") || protectedContainer}
+                                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-60 {ignored ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                    aria-label="Toggle ignored container"
+                                                    title={protectedContainer ? "HarborWatch is always excluded for self-protection" : (ignored ? "Excluded" : "Included")}
+                                                >
+                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {ignored ? 'right-1' : 'left-1'}"></div>
+                                                </button>
+                                            </div>
+                                        {/each}
+                                    {/if}
+                                </div>
+                                <details class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-2">
+                                    <summary class="cursor-pointer text-[11px] font-bold text-slate-600 dark:text-slate-300">Advanced token editor</summary>
+                                    <textarea
+                                        id="automation-ignore-containers"
+                                        rows="3"
+                                        bind:value={settings.automationIgnoredContainers}
+                                        disabled={isLocked("automationIgnoredContainers")}
+                                        placeholder="harborwatch, plex, qbittorrent"
+                                        class="mt-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                    ></textarea>
+                                    <p class="mt-1 text-[11px] text-slate-500">Supports container name, image text, or ID prefix tokens (comma/newline separated).</p>
+                                </details>
+                            </div>
+                            {#if activeAutomationTab === "security"}
+                                <div class="space-y-2">
+                                    <label for="malware-ignore-mounts" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
+                                    <textarea
+                                        id="malware-ignore-mounts"
+                                        rows="3"
+                                        bind:value={settings.malwareIgnoredMounts}
+                                        disabled={isLocked("malwareIgnoredMounts")}
+                                        placeholder="/mnt/media, /srv/plex-library"
+                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                    ></textarea>
+                                    <p class="text-[11px] text-slate-500">These path patterns are skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
+                                </div>
+                            {/if}
                         </div>
                     </div>
                 </div>

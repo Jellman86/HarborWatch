@@ -105,10 +105,8 @@
   <!-- Mobile Header -->
   <header class="md:hidden flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-        </svg>
+      <div class="w-8 h-8 rounded-lg bg-white/90 dark:bg-slate-800/80 flex items-center justify-center text-white shadow-lg shadow-brand-500/20 ring-1 ring-brand-200/70 dark:ring-brand-700/60">
+        <img src="/logo-64.png" alt="HarborWatch" class="h-6 w-6" />
       </div>
       <h1 class="text-sm font-bold uppercase tracking-wider">HarborWatch</h1>
     </div>
@@ -194,6 +192,10 @@
         {/await}
       {:else if currentRoute === 'settings'}
         {#await import("./lib/pages/Settings.svelte") then Mod}
+          <Mod.default />
+        {/await}
+      {:else if currentRoute === 'about'}
+        {#await import("./lib/pages/About.svelte") then Mod}
           <Mod.default />
         {/await}
       {/if}

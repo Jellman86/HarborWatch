@@ -3,167 +3,93 @@
 @tailwind utilities;
 
 :root {
-  /* Default: Tech Innovation */
-  --font-body: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-  --font-display: 'JetBrains Mono', 'IBM Plex Sans', monospace;
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
-  --radius-2xl: 12px;
+  --font-body: 'Manrope', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-display: 'Sora', 'Manrope', 'Segoe UI', sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 22px;
   --border-width: 1px;
-  --glass-opacity: 0.9;
-  --glass-blur: 10px;
+  --glass-opacity: 0.88;
+  --glass-blur: 14px;
 
-  --color-brand-50: 236 254 255;
-  --color-brand-100: 207 250 254;
-  --color-brand-200: 165 243 252;
-  --color-brand-300: 103 232 249;
-  --color-brand-400: 34 211 238;
-  --color-brand-500: 6 182 212;
-  --color-brand-600: 8 145 178;
-  --color-brand-700: 14 116 144;
-  --color-brand-800: 21 94 117;
-  --color-brand-900: 22 78 99;
-  --color-brand-950: 6 44 58;
+  /* Signpost icon palette */
+  --color-brand-50: 243 247 255;
+  --color-brand-100: 226 234 255;
+  --color-brand-200: 198 216 251;
+  --color-brand-300: 159 190 244;
+  --color-brand-400: 112 168 231;
+  --color-brand-500: 88 140 215;
+  --color-brand-600: 72 102 181;
+  --color-brand-700: 60 70 128;
+  --color-brand-800: 47 54 102;
+  --color-brand-900: 35 42 83;
+  --color-brand-950: 20 24 56;
 }
 
 /* =========================================
-   THEME: TECH INNOVATION (Signal Grid / Precision)
+   THEME: HARBOR SIGNPOST (Modern / Minimal)
    ========================================= */
-[data-brand="tech"] {
-  --font-body: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-  --font-display: 'JetBrains Mono', 'IBM Plex Sans', monospace;
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
-  --radius-2xl: 12px;
+[data-brand="signpost"] {
+  --font-body: 'Manrope', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-display: 'Sora', 'Manrope', 'Segoe UI', sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 22px;
   --border-width: 1px;
-  --glass-opacity: 0.9;
-  --glass-blur: 10px;
+  --glass-opacity: 0.88;
+  --glass-blur: 14px;
 
-  --color-brand-50: 236 254 255;
-  --color-brand-100: 207 250 254;
-  --color-brand-200: 165 243 252;
-  --color-brand-300: 103 232 249;
-  --color-brand-400: 34 211 238;
-  --color-brand-500: 6 182 212;
-  --color-brand-600: 8 145 178;
-  --color-brand-700: 14 116 144;
-  --color-brand-800: 21 94 117;
-  --color-brand-900: 22 78 99;
-  --color-brand-950: 6 44 58;
+  --color-brand-50: 243 247 255;
+  --color-brand-100: 226 234 255;
+  --color-brand-200: 198 216 251;
+  --color-brand-300: 159 190 244;
+  --color-brand-400: 112 168 231;
+  --color-brand-500: 88 140 215;
+  --color-brand-600: 72 102 181;
+  --color-brand-700: 60 70 128;
+  --color-brand-800: 47 54 102;
+  --color-brand-900: 35 42 83;
+  --color-brand-950: 20 24 56;
 }
 
-[data-brand="tech"] body {
-  background-color: #eef8ff;
+[data-brand="signpost"] body {
+  background-color: #f3f6ff;
   background-image:
-    linear-gradient(to right, rgba(6, 182, 212, 0.08) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(6, 182, 212, 0.05) 1px, transparent 1px),
-    radial-gradient(700px 320px at 96% -12%, rgba(34, 211, 238, 0.22), transparent),
-    radial-gradient(760px 360px at -8% 115%, rgba(8, 145, 178, 0.16), transparent);
-  background-size: 30px 30px, 30px 30px, auto, auto;
+    radial-gradient(820px 360px at 100% -16%, rgba(112, 168, 231, 0.22), transparent),
+    radial-gradient(900px 420px at -10% 120%, rgba(60, 70, 128, 0.16), transparent),
+    linear-gradient(to right, rgba(72, 102, 181, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(72, 102, 181, 0.05) 1px, transparent 1px);
+  background-size: auto, auto, 30px 30px, 30px 30px;
 }
 
-.dark[data-brand="tech"] body {
-  background-color: #050c14;
+.dark[data-brand="signpost"] body {
+  background-color: #0e1326;
   background-image:
-    linear-gradient(to right, rgba(34, 211, 238, 0.1) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(34, 211, 238, 0.06) 1px, transparent 1px),
-    radial-gradient(760px 360px at 100% -10%, rgba(34, 211, 238, 0.2), transparent),
-    radial-gradient(820px 460px at -5% 120%, rgba(14, 116, 144, 0.22), transparent);
-  background-size: 28px 28px, 28px 28px, auto, auto;
+    radial-gradient(980px 440px at 100% -20%, rgba(112, 168, 231, 0.2), transparent),
+    radial-gradient(980px 460px at -10% 120%, rgba(60, 70, 128, 0.42), transparent),
+    linear-gradient(to right, rgba(112, 168, 231, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(112, 168, 231, 0.05) 1px, transparent 1px);
+  background-size: auto, auto, 30px 30px, 30px 30px;
 }
 
-[data-brand="tech"] .glass-card {
-  border-color: rgba(14, 116, 144, 0.24);
-  box-shadow: 0 22px 45px -24px rgba(14, 116, 144, 0.35);
+[data-brand="signpost"] .glass-card {
+  border-color: rgba(72, 102, 181, 0.22);
+  box-shadow: 0 22px 45px -28px rgba(60, 70, 128, 0.45);
 }
 
-[data-brand="tech"] aside {
-  border-right-color: rgba(14, 116, 144, 0.22);
-  box-shadow: 8px 0 28px -22px rgba(8, 145, 178, 0.5);
+[data-brand="signpost"] aside {
+  border-right-color: rgba(72, 102, 181, 0.24);
+  box-shadow: 10px 0 32px -24px rgba(60, 70, 128, 0.45);
 }
 
-[data-brand="tech"] h1,
-[data-brand="tech"] h2,
-[data-brand="tech"] h3 {
-  letter-spacing: -0.04em;
-}
-
-/* =========================================
-   THEME: FOREST CANOPY (Editorial Earth / Organic)
-   ========================================= */
-[data-brand="forest"] {
-  --font-body: 'Source Serif 4', 'Georgia', serif;
-  --font-display: 'Fraunces', 'Times New Roman', serif;
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 26px;
-  --radius-2xl: 34px;
-  --border-width: 1px;
-  --glass-opacity: 0.94;
-  --glass-blur: 0px;
-
-  --color-brand-50: 245 252 237;
-  --color-brand-100: 229 245 214;
-  --color-brand-200: 206 232 182;
-  --color-brand-300: 173 211 140;
-  --color-brand-400: 130 183 95;
-  --color-brand-500: 92 148 62;
-  --color-brand-600: 66 119 49;
-  --color-brand-700: 53 94 44;
-  --color-brand-800: 43 75 38;
-  --color-brand-900: 36 62 34;
-  --color-brand-950: 20 40 20;
-}
-
-[data-brand="forest"] body {
-  background-color: #f7f5ef;
-  background-image:
-    radial-gradient(900px 420px at 100% -20%, rgba(146, 193, 108, 0.24), transparent),
-    radial-gradient(820px 390px at -5% 120%, rgba(92, 148, 62, 0.16), transparent),
-    linear-gradient(120deg, rgba(186, 208, 157, 0.14), transparent 28%),
-    linear-gradient(300deg, rgba(92, 148, 62, 0.1), transparent 36%);
-}
-
-.dark[data-brand="forest"] body {
-  background-color: #131813;
-  background-image:
-    radial-gradient(950px 440px at 100% -20%, rgba(130, 183, 95, 0.2), transparent),
-    radial-gradient(860px 410px at -10% 120%, rgba(66, 119, 49, 0.2), transparent),
-    linear-gradient(120deg, rgba(146, 193, 108, 0.1), transparent 30%),
-    linear-gradient(300deg, rgba(92, 148, 62, 0.1), transparent 36%);
-}
-
-[data-brand="forest"] body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  opacity: 0.05;
-  mix-blend-mode: multiply;
-  z-index: 0;
-}
-
-[data-brand="forest"] .glass-card {
-  border-color: rgba(92, 148, 62, 0.22);
-  box-shadow: 0 16px 32px -20px rgba(48, 74, 39, 0.35);
-}
-
-[data-brand="forest"] aside {
-  border-right-color: rgba(92, 148, 62, 0.25);
-  box-shadow: 10px 0 32px -26px rgba(48, 74, 39, 0.45);
-}
-
-[data-brand="forest"] h1,
-[data-brand="forest"] h2,
-[data-brand="forest"] h3 {
-  letter-spacing: -0.02em;
-  font-weight: 700;
+[data-brand="signpost"] h1,
+[data-brand="signpost"] h2,
+[data-brand="signpost"] h3 {
+  letter-spacing: -0.03em;
 }
 
 /* =========================================
@@ -253,26 +179,14 @@
 .rounded-3xl { border-radius: var(--radius-2xl) !important; }
 .border { border-width: var(--border-width) !important; }
 
-/* Theme-specific shell personalities so each mode feels structurally distinct. */
-[data-brand="tech"] .app-shell {
+[data-brand="signpost"] .app-shell {
   background-image:
-    linear-gradient(90deg, rgba(6, 182, 212, 0.08) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(6, 182, 212, 0.06) 1px, transparent 1px);
-  background-size: 24px 24px;
+    linear-gradient(120deg, rgba(112, 168, 231, 0.08), transparent 32%),
+    linear-gradient(300deg, rgba(60, 70, 128, 0.1), transparent 38%);
 }
 
-[data-brand="tech"] .content-shell {
-  max-width: 118rem;
-}
-
-[data-brand="forest"] .app-shell {
-  background-image:
-    linear-gradient(122deg, rgba(173, 211, 140, 0.09), transparent 34%),
-    linear-gradient(304deg, rgba(92, 148, 62, 0.08), transparent 38%);
-}
-
-[data-brand="forest"] .content-shell {
-  max-width: 112rem;
+[data-brand="signpost"] .content-shell {
+  max-width: 116rem;
 }
 
 /* Animations */

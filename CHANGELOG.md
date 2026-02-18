@@ -2,6 +2,45 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.16] - 2026-02-18
+
+### Added
+- **About Page:**
+  - Added a dedicated modern `About` screen in the main navigation.
+  - Included platform overview, operational capabilities, backend/frontend architecture notes, and live service version/status from `/health`.
+  - Added icon attribution:
+    - `Harbour icons created by Freepik - Flaticon`
+
+### Changed
+- **Icon System Refresh (Signpost):**
+  - Replaced app icon assets using the provided `agents/signpost.png` source.
+  - Generated and wired modern icon outputs for browser/PWA usage:
+    - `favicon.ico`
+    - `favicon-16x16.png`
+    - `favicon-32x32.png`
+    - `favicon-48x48.png`
+    - `apple-touch-icon.png`
+    - `pwa-192x192.png`
+    - `pwa-512x512.png`
+  - Added reusable UI logo assets:
+    - `logo-64.png`
+    - `logo-96.png`
+    - `logo-128.png`
+    - `logo-256.png`
+    - `logo-512.png`
+- **Theme System Overhaul:**
+  - Removed multi-theme selection (`Tech Innovation`, `Forest Canopy`) and replaced with a single robust icon-led theme: `Harbor Signpost`.
+  - Updated typography, color tokens, shell styling, and dark-mode gradients to align with the signpost icon palette.
+  - Simplified the Appearance UI to mode selection (`light`, `dark`, `system`) plus fixed theme description card.
+- **Branding & Navigation UX:**
+  - Replaced shield glyph logo usage in sidebar/mobile header with the signpost icon.
+  - Added `About` route in application navigation.
+- **Settings Automations Layout Refinement:**
+  - Moved `Automation Safety Exclusions` below the two-column automations layout and marked it as a separate safety section for clearer scanning.
+
+### Tests
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.15] - 2026-02-18
 
 ### Changed

@@ -1,5 +1,5 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type BrandTheme = 'tech' | 'forest';
+export type BrandTheme = 'signpost';
 
 export interface ThemeConfig {
     mode: ThemeMode;
@@ -24,11 +24,11 @@ function applyTheme(config: ThemeConfig) {
 }
 
 function normalizeBrand(value: string | null): BrandTheme {
-    return value === 'forest' ? 'forest' : 'tech';
+    return 'signpost';
 }
 
 class ThemeStore {
-    currentConfig = $state<ThemeConfig>({ mode: 'system', brand: 'tech' });
+    currentConfig = $state<ThemeConfig>({ mode: 'system', brand: 'signpost' });
 
     constructor() {
         if (typeof localStorage !== 'undefined') {
