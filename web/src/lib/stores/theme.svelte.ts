@@ -1,5 +1,5 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type BrandTheme = 'tech' | 'ocean' | 'midnight' | 'forest' | 'sunset';
+export type BrandTheme = 'tech' | 'forest';
 
 export interface ThemeConfig {
     mode: ThemeMode;
@@ -20,11 +20,11 @@ function applyTheme(config: ThemeConfig) {
     document.documentElement.classList.toggle('dark', isDark);
     
     // Apply Brand
-    if (config.brand === 'tech') {
-        document.documentElement.removeAttribute('data-brand');
-    } else {
-        document.documentElement.setAttribute('data-brand', config.brand);
-    }
+    document.documentElement.setAttribute('data-brand', config.brand);
+}
+
+function normalizeBrand(value: string | null): BrandTheme {
+    return value === 'forest' ? 'forest' : 'tech';
 }
 
 class ThemeStore {
@@ -33,7 +33,7 @@ class ThemeStore {
     constructor() {
         if (typeof localStorage !== 'undefined') {
             const storedMode = localStorage.getItem('theme_mode') as ThemeMode | null;
-            const storedBrand = localStorage.getItem('theme_brand') as BrandTheme | null;
+            const storedBrand = localStorage.getItem('theme_brand');
             
             // Backward compatibility for old 'theme' key
             const oldTheme = localStorage.getItem('theme');
@@ -43,9 +43,7 @@ class ThemeStore {
                 this.currentConfig.mode = storedMode;
             }
 
-            if (storedBrand) {
-                this.currentConfig.brand = storedBrand;
-            }
+            this.currentConfig.brand = normalizeBrand(storedBrand);
         }
 
         applyTheme(this.currentConfig);

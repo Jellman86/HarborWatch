@@ -7,12 +7,9 @@
         { value: 'system', label: 'System', icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' }
     ];
 
-    const brands: { value: BrandTheme, label: string, color: string }[] = [
-        { value: 'tech', label: 'Tech Innovation', color: 'bg-sky-500' },
-        { value: 'ocean', label: 'Ocean Depths', color: 'bg-cyan-500' },
-        { value: 'midnight', label: 'Midnight Galaxy', color: 'bg-violet-600' },
-        { value: 'forest', label: 'Forest Canopy', color: 'bg-emerald-500' },
-        { value: 'sunset', label: 'Sunset Boulevard', color: 'bg-orange-500' }
+    const brands: { value: BrandTheme, label: string, subtitle: string, color: string }[] = [
+        { value: 'tech', label: 'Tech Innovation', subtitle: 'Precision grid / signal glow', color: 'bg-cyan-500' },
+        { value: 'forest', label: 'Forest Canopy', subtitle: 'Editorial earth / organic grain', color: 'bg-emerald-600' }
     ];
 </script>
 
@@ -49,7 +46,10 @@
                             </svg>
                         {/if}
                     </div>
-                    <span class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-tight">{brand.label}</span>
+                    <div class="min-w-0">
+                        <p class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-tight">{brand.label}</p>
+                        <p class="text-[10px] text-slate-500 dark:text-slate-400">{brand.subtitle}</p>
+                    </div>
                 </button>
             {/each}
         </div>
