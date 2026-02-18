@@ -74,6 +74,13 @@ func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
 	if (req.ValidateMode == "http" || req.ValidateMode == "both") && strings.TrimSpace(req.ValidateURL) == "" {
 		return gen.UpdateStartResponse{}, errors.New("validateUrl is required for http or both validation mode")
 	}
+	if existing, err := s.store.ListRunsForContainer(context.Background(), req.ContainerID, 1); err == nil {
+		if len(existing) > 0 && strings.EqualFold(strings.TrimSpace(existing[0].Status), "running") {
+			return gen.UpdateStartResponse{}, fmt.Errorf("container %s already has a running update job (%s)", req.ContainerID, existing[0].JobID)
+		}
+	} else {
+		return gen.UpdateStartResponse{}, fmt.Errorf("check existing update jobs: %w", err)
+	}
 	jobID, err := newID()
 	if err != nil {
 		return gen.UpdateStartResponse{}, err

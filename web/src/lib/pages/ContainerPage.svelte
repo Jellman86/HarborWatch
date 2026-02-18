@@ -240,20 +240,34 @@
             detail.rules.upgradesAutomation = true;
             detail.rules.maintenanceAutomation = true;
             detail.rules.securityAutomation = true;
-            if (detail.rules.updatePolicy === "locked") {
-                detail.rules.updatePolicy = "manual";
-            }
             return;
         }
         detail.rules.inheritAutomation = false;
         detail.rules.upgradesAutomation = false;
         detail.rules.maintenanceAutomation = false;
         detail.rules.securityAutomation = false;
-        detail.rules.updatePolicy = "manual";
+        if (detail.rules.updatePolicy === "auto") {
+            detail.rules.updatePolicy = "manual";
+        }
+    }
+
+    function updatePolicyDescription(policy: string | undefined): string {
+        const normalized = String(policy || "manual").toLowerCase();
+        switch (normalized) {
+            case "auto":
+                return "Eligible for scheduled auto-apply when update automation is enabled.";
+            case "locked":
+                return "All upgrade runs are blocked for this container (manual and automated).";
+            default:
+                return "Updates are detected but applied only when manually triggered.";
+        }
     }
 
     async function saveRules() {
         if (!detail?.rules) return;
+        if (lifecycleMode === "manual" && detail.rules.updatePolicy === "auto") {
+            detail.rules.updatePolicy = "manual";
+        }
         lifecycleMessage = "";
         savingRules = true;
         try {
@@ -657,6 +671,22 @@
                                         Manual Mode
                                     </button>
                                 </div>
+                                <div class="space-y-2">
+                                    <label for="update-policy" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Update Policy</label>
+                                    <select
+                                        id="update-policy"
+                                        bind:value={detail.rules.updatePolicy}
+                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                    >
+                                        <option value="manual">Manual</option>
+                                        <option value="auto" disabled={lifecycleMode === "manual"}>Auto Apply</option>
+                                        <option value="locked">Locked</option>
+                                    </select>
+                                    <p class="text-[11px] text-slate-500">{updatePolicyDescription(detail.rules.updatePolicy)}</p>
+                                    {#if lifecycleMode === "manual"}
+                                        <p class="text-[11px] text-slate-500">Auto Apply is disabled while lifecycle mode is Manual.</p>
+                                    {/if}
+                                </div>
                                 <div class="flex flex-wrap gap-3">
                                     <button
                                         onclick={saveRules}
@@ -667,7 +697,8 @@
                                     </button>
                                     <button
                                         onclick={openManualUpdate}
-                                        class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest"
+                                        disabled={detail.rules.updatePolicy === "locked"}
+                                        class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
                                     >
                                         Trigger Upgrade
                                     </button>

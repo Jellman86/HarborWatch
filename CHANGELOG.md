@@ -2,6 +2,48 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.13] - 2026-02-18
+
+### Added
+- **Upgrade Auto-Apply Scheduler Stage:**
+  - Added scheduler task `container_update_apply` (default disabled) to execute policy-approved upgrades after detection.
+  - Added robust candidate gating for auto-apply:
+    - container must currently report `updateAvailable=true`
+    - container must pass automation domain/exclusion checks
+    - container policy must be `auto`
+  - Added cooldown guardrails for retrying failed/rolled-back auto upgrades:
+    - `HW_AUTO_UPGRADE_MIN_RETRY_MINUTES` (default `60`)
+  - Added per-run start cap for auto-apply:
+    - `HW_AUTO_UPGRADE_MAX_CONCURRENCY` (default `1`)
+- **Manual Update Policy Enforcement:**
+  - `POST /api/updates/run` now enforces `updatePolicy=locked` and returns `423 Locked` when blocked.
+  - Added centralized update request builder path for both manual and automated starts to keep derivation/policy behavior consistent.
+- **Lifecycle UI Policy Hooks:**
+  - Added explicit `Update Policy` selector in Container -> Lifecycle (`auto`, `manual`, `locked`).
+  - `Trigger Upgrade` action is now disabled when policy is `locked`.
+  - Settings -> Automations -> Upgrades now exposes both:
+    - `Container Update Check`
+    - `Container Auto-Apply`
+- **Docs Bootstrap:**
+  - Added docs index: `docs/README.md`.
+  - Added upgrade automation guide: `docs/UPGRADE_AUTOMATION.md`.
+  - Linked docs from the project `README.md`.
+
+### Changed
+- **Update Service Safety:**
+  - `StartUpdate` now rejects duplicate in-flight runs for the same container when a `running` job already exists.
+- **Automation Task Filtering Semantics:**
+  - Container automation checks now support task-specific global enable state evaluation, improving consistency between scheduler toggles and task execution.
+
+### Tests
+- Added backend coverage for:
+  - locked policy block on `POST /api/updates/run`
+  - auto-apply task start/skip behavior
+  - duplicate running update rejection in update service
+- Validation commands:
+  - `go test ./internal/httpapi ./internal/updates`
+  - `npm --prefix web run build`
+
 ## [0.7.12] - 2026-02-18
 
 ### Added

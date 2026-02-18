@@ -10,6 +10,7 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - **Fleet Management:** modern Card and List views for your entire container inventory with real-time "Update Available" detection.
 - **Automated Compose Doctor:** Zero-config security auditing. HarborWatch automatically retrieves or reconstructs your `docker-compose.yml` for AI-powered security analysis.
 - **Per-Container Lifecycle Policies:** Fine-grained control over updates. Set "Auto", "Manual", or "Locked" policies per asset with custom health check validation.
+- **Policy-Aware Upgrade Automation:** Split detection (`container_update_check`) and optional execution (`container_update_apply`) pipelines with per-container policy gates and retry cooldowns.
 - **Dual-Engine Security Scanning:** Integrated vulnerability (Trivy) and malware (ClamAV) scanning with shared database persistence.
 - **In-Container ClamAV Signature Management:** HarborWatch now manages `freshclam` updates internally, exposes signature status in Settings, and supports scheduled signature refresh automation.
 - **High-Resolution Performance Profiling:** Real-time sparklines and detailed historical charts for CPU and Memory utilization.
@@ -99,6 +100,13 @@ HarborWatch is a professional, local-first container maintenance and security ap
 - **Frontend:** Svelte 5 (Runes) with Tailwind CSS and ApexCharts.
 - **Database:** SQLite (Embedded) for persistence of scans, rules, and metrics.
 - **AI Core:** OpenAI integration for release note analysis and security auditing.
+
+## Documentation
+
+- `docs/README.md` - docs index and navigation.
+- `docs/UPGRADE_AUTOMATION.md` - upgrade pipeline architecture, policies, scheduler tasks, and operational tuning.
+- `docs/REVERSE_PROXY.md` - reverse proxy deployment notes.
+- `docs/ROADMAP_v2.md` - product roadmap.
 
 ## Quick Start
 

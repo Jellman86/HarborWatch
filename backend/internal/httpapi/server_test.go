@@ -306,6 +306,22 @@ func (f fakeRulesService) Save(ctx context.Context, r rules.ContainerRules) erro
 	return nil
 }
 
+type staticRulesService struct {
+	rule rules.ContainerRules
+}
+
+func (f staticRulesService) Get(ctx context.Context, id string) (rules.ContainerRules, error) {
+	out := f.rule
+	if out.ContainerID == "" {
+		out.ContainerID = id
+	}
+	return out, nil
+}
+
+func (f staticRulesService) Save(ctx context.Context, r rules.ContainerRules) error {
+	return nil
+}
+
 type fakeUpdateService struct {
 	startResp gen.UpdateStartResponse
 	job       *gen.UpdateJobStatus
@@ -323,6 +339,23 @@ func (f fakeUpdateService) ListContainerJobs(ctx context.Context, containerID st
 func (f fakeUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 	ch := make(chan gen.UpdateStepEvent, 1)
 	ch <- gen.UpdateStepEvent{JobID: jobID, Step: "preflight", Status: "completed", Message: "ok", Timestamp: 1}
+	close(ch)
+	return ch, func() {}
+}
+
+type panicUpdateService struct{}
+
+func (panicUpdateService) StartUpdate(req updates.Request) (gen.UpdateStartResponse, error) {
+	panic("StartUpdate should not be called")
+}
+func (panicUpdateService) GetJob(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error) {
+	return nil, nil
+}
+func (panicUpdateService) ListContainerJobs(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error) {
+	return []gen.UpdateJobStatus{}, nil
+}
+func (panicUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
+	ch := make(chan gen.UpdateStepEvent)
 	close(ch)
 	return ch, func() {}
 }
@@ -379,6 +412,35 @@ func TestUpdateEndpoints(t *testing.T) {
 	mux.ServeHTTP(recEvents, httptest.NewRequest(http.MethodGet, "/api/updates/events/u1", nil))
 	if recEvents.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recEvents.Code)
+	}
+}
+
+func TestUpdateRunEndpoint_BlockedWhenPolicyLocked(t *testing.T) {
+	mux := NewMuxWithDeps(
+		nil,
+		nil,
+		nil,
+		panicUpdateService{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		staticRulesService{rule: rules.ContainerRules{
+			UpdatePolicy: "locked",
+			ValidateURL:  "http://x",
+		}},
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader(`{"containerId":"c1","targetImage":"img","validateUrl":"http://x"}`)
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/updates/run", body))
+	if rec.Code != http.StatusLocked {
+		t.Fatalf("expected 423 when policy is locked, got %d", rec.Code)
 	}
 }
 

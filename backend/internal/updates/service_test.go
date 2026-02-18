@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	_ "modernc.org/sqlite"
 )
 
@@ -112,6 +114,32 @@ func TestUpdatePipelineSuccess(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("timeout waiting for completion")
+}
+
+func TestStartUpdateRejectsDuplicateRunningJob(t *testing.T) {
+	svc := newTestService(t, "")
+	now := time.Now().UTC().Unix()
+	if err := svc.store.CreateRun(context.Background(), gen.UpdateJobStatus{
+		JobID:       "existing-run",
+		ContainerID: "test-c",
+		TargetImage: "img:v1",
+		ValidateURL: "http://x",
+		Status:      "running",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Error:       "",
+		Steps:       []gen.UpdateStepEvent{},
+	}); err != nil {
+		t.Fatalf("create existing run: %v", err)
+	}
+
+	_, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img:v2", ValidateURL: "http://x"})
+	if err == nil {
+		t.Fatalf("expected duplicate running update to be rejected")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "running update job") {
+		t.Fatalf("expected running update error, got: %v", err)
+	}
 }
 
 func TestUpdatePipelineRollback(t *testing.T) {

@@ -361,25 +361,35 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		return true
 	}
 
-	containerAutomationEnabled := func(ctx context.Context, containerID, domain string) bool {
+	containerAutomationEnabled := func(ctx context.Context, containerID, domain string, taskIDs ...string) bool {
 		if isIgnoredContainer(ctx, containerID) {
 			return false
 		}
 
-		taskID := ""
-		switch strings.ToLower(strings.TrimSpace(domain)) {
-		case "upgrades":
-			taskID = "container_update_check"
-		case "maintenance":
-			taskID = "docker_system_prune"
-		case "security":
-			// Security domain controls both Trivy and ClamAV sweeps.
-			taskID = "security_sweep_trivy"
-		default:
-			return true
+		globalEnabled := true
+		if len(taskIDs) > 0 {
+			globalEnabled = false
+			for _, taskID := range taskIDs {
+				if isTaskGloballyEnabled(ctx, taskID) {
+					globalEnabled = true
+					break
+				}
+			}
+		} else {
+			taskID := ""
+			switch strings.ToLower(strings.TrimSpace(domain)) {
+			case "upgrades":
+				taskID = "container_update_check"
+			case "maintenance":
+				taskID = "docker_system_prune"
+			case "security":
+				// Security domain controls both Trivy and ClamAV sweeps.
+				taskID = "security_sweep_trivy"
+			}
+			if taskID != "" {
+				globalEnabled = isTaskGloballyEnabled(ctx, taskID)
+			}
 		}
-
-		globalEnabled := isTaskGloballyEnabled(ctx, taskID)
 		if rulesStore == nil {
 			return globalEnabled
 		}
@@ -425,13 +435,42 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 
 			schedSvc.RegisterTask("container_update_check", func() scheduler.Task {
 				return dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
-					return containerAutomationEnabled(ctx, containerID, "upgrades")
+					return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_check")
 				})
 			})
 			if err := schedSvc.AddTask("0 0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
-				return containerAutomationEnabled(ctx, containerID, "upgrades")
+				return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_check")
 			}), true); err != nil && diagService != nil {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_check: %v", err))
+			}
+
+			schedSvc.RegisterTask("container_update_apply", func() scheduler.Task {
+				return newAutomatedUpdateApplyTask(
+					dockerClient,
+					updateService,
+					rulesStore,
+					settingsStore,
+					intelStore,
+					releaseService,
+					diagService,
+					func(ctx context.Context, containerID string) bool {
+						return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_apply")
+					},
+				)
+			})
+			if err := schedSvc.AddTask("0 10 * * * *", newAutomatedUpdateApplyTask(
+				dockerClient,
+				updateService,
+				rulesStore,
+				settingsStore,
+				intelStore,
+				releaseService,
+				diagService,
+				func(ctx context.Context, containerID string) bool {
+					return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_apply")
+				},
+			), false); err != nil && diagService != nil {
+				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_apply: %v", err))
 			}
 
 			// Trigger immediate update check on boot
@@ -467,24 +506,24 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			if scanService != nil {
 				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
 					return scheduler.NewTrivySweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
-						return containerAutomationEnabled(ctx, containerID, "security")
+						return containerAutomationEnabled(ctx, containerID, "security", "security_sweep_trivy")
 					})
 				})
 				if err := schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
-					return containerAutomationEnabled(ctx, containerID, "security")
+					return containerAutomationEnabled(ctx, containerID, "security", "security_sweep_trivy")
 				}), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task security_sweep_trivy: %v", err))
 				}
 
 				schedSvc.RegisterTask("malware_sweep_clamav", func() scheduler.Task {
 					return scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
-						return containerAutomationEnabled(ctx, containerID, "security")
+						return containerAutomationEnabled(ctx, containerID, "security", "malware_sweep_clamav")
 					}).WithMountPolicy(func(ctx context.Context, containerID, sourcePath string) bool {
 						return allowMalwareMountScan(ctx, containerID, sourcePath)
 					})
 				})
 				if err := schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
-					return containerAutomationEnabled(ctx, containerID, "security")
+					return containerAutomationEnabled(ctx, containerID, "security", "malware_sweep_clamav")
 				}).WithMountPolicy(func(ctx context.Context, containerID, sourcePath string) bool {
 					return allowMalwareMountScan(ctx, containerID, sourcePath)
 				}), true); err != nil && diagService != nil {
@@ -1217,90 +1256,32 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				req.ContainerID = strings.TrimSpace(req.ContainerID)
 				req.TargetImage = strings.TrimSpace(req.TargetImage)
 				req.ValidateURL = strings.TrimSpace(req.ValidateURL)
-				if req.ContainerID == "" {
-					writeError(w, http.StatusBadRequest, "invalid_request", "containerId is required")
+				built, err := buildUpdateRequestForContainer(
+					r.Context(),
+					req.ContainerID,
+					req.TargetImage,
+					req.ValidateURL,
+					dockerClient,
+					rulesService,
+					settingsService,
+					intelService,
+					releaseService,
+					diagService,
+					updateRequestBuildOptions{
+						EnforceLocked: true,
+					},
+				)
+				if err != nil {
+					switch {
+					case errors.Is(err, ErrUpdatePolicyLocked):
+						writeError(w, http.StatusLocked, "update_policy_locked", err.Error())
+					default:
+						writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+					}
 					return
 				}
 
-				containerCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-				summary := gen.ContainerSummary{ID: req.ContainerID}
-				if dockerClient != nil {
-					if c, err := dockerClient.GetContainer(containerCtx, req.ContainerID); err == nil {
-						summary = c
-					}
-				}
-				cancel()
-
-				if req.TargetImage == "" {
-					req.TargetImage = strings.TrimSpace(summary.Image)
-				}
-
-				effectiveRules := rules.ContainerRules{
-					ContainerID:           req.ContainerID,
-					UpdatePolicy:          "manual",
-					ValidateMode:          "both",
-					ValidateTimeoutSec:    45,
-					ValidateIntervalSec:   2,
-					AIValidateLogs:        false,
-					AutoRollback:          true,
-					InheritAutomation:     true,
-					UpgradesAutomation:    true,
-					MaintenanceAutomation: true,
-					SecurityAutomation:    true,
-				}
-				if rulesService != nil {
-					rulesCtx, rulesCancel := context.WithTimeout(r.Context(), 3*time.Second)
-					if loaded, err := rulesService.Get(rulesCtx, req.ContainerID); err == nil {
-						effectiveRules = loaded
-					}
-					rulesCancel()
-				}
-				effectiveRules = effectiveContainerRules(r.Context(), summary, effectiveRules, settingsService, diagService)
-
-				if req.ValidateURL == "" {
-					req.ValidateURL = strings.TrimSpace(effectiveRules.ValidateURL)
-				}
-				if req.TargetImage == "" || req.ValidateURL == "" {
-					writeError(w, http.StatusBadRequest, "invalid_request", "targetImage and validateUrl could not be auto-derived; provide explicit values")
-					return
-				}
-
-				repoURL := deriveRepositoryURL(summary)
-				changelogURL := deriveChangelogURL(summary, repoURL)
-				if intelService != nil {
-					intelCtx, intelCancel := context.WithTimeout(r.Context(), 3*time.Second)
-					if ov, err := intelService.Get(intelCtx, req.ContainerID); err == nil {
-						merged := effectiveContainerIntel(summary, ov)
-						repoURL = firstNonEmpty(merged.EffectiveRepositoryURL, repoURL)
-						changelogURL = firstNonEmpty(merged.EffectiveChangelogURL, changelogURL)
-					}
-					intelCancel()
-				}
-				releaseContext := ""
-				if releaseService != nil {
-					repoRef := firstNonEmpty(repoURL, changelogURL)
-					currentTag := imageTagFromRef(summary.Image)
-					targetTag := imageTagFromRef(req.TargetImage)
-					releaseCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
-					releaseContext = buildReleaseContext(releaseCtx, releaseService, repoRef, currentTag, targetTag)
-					cancel()
-				}
-
-				resp, err := updateService.StartUpdate(updates.Request{
-					ContainerID:         req.ContainerID,
-					TargetImage:         req.TargetImage,
-					ValidateURL:         req.ValidateURL,
-					CurrentImage:        strings.TrimSpace(summary.Image),
-					ContainerName:       trimContainerName(summary.Names),
-					Labels:              summary.Labels,
-					RepositoryURL:       repoURL,
-					ChangelogURL:        changelogURL,
-					ReleaseContext:      releaseContext,
-					ValidateMode:        effectiveRules.ValidateMode,
-					ValidateTimeoutSec:  effectiveRules.ValidateTimeoutSec,
-					ValidateIntervalSec: effectiveRules.ValidateIntervalSec,
-					AIValidateLogs:      effectiveRules.AIValidateLogs,
-				})
+				resp, err := updateService.StartUpdate(built.Request)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, "update_start_failed", err.Error())
 					return

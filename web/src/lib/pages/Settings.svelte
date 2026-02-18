@@ -161,8 +161,8 @@
             title: "Upgrade Automation",
             subtitle: "Detect updates, assess risk, and prepare safe rollouts",
             accent: "#0ea5e9",
-            tasks: ["container_update_check"],
-            flow: ["Discover Tags", "Risk Review", "Stage Update", "Health Verify", "Promote/Rollback"]
+            tasks: ["container_update_check", "container_update_apply"],
+            flow: ["Discover Updates", "Policy Gate", "AI Risk Review", "Apply Update", "Health Verify", "Promote/Rollback"]
         },
         maintenance: {
             title: "Maintenance Automation",
@@ -695,6 +695,7 @@
     function taskLabel(id: string): string {
         switch (id) {
             case "container_update_check": return "Container Update Check";
+            case "container_update_apply": return "Container Auto-Apply";
             case "docker_system_prune": return "Docker System Prune";
             case "metrics_prune": return "Metrics Retention Prune";
             case "diag_log_prune": return "Diagnostics Log Prune";
