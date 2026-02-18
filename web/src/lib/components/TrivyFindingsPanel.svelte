@@ -42,13 +42,13 @@
     function flattenFindings(input: TrivyScanDetails | null): TrivyFindingRow[] {
         if (!input?.results || input.results.length === 0) return [];
         const out: TrivyFindingRow[] = [];
-        for (const group of input.results) {
+        for (const [groupIdx, group] of input.results.entries()) {
             const vulns = group.vulnerabilities || [];
-            for (const vuln of vulns) {
+            for (const [vulnIdx, vuln] of vulns.entries()) {
                 const sev = normalizeSeverity(vuln.severity);
                 out.push({
                     ...vuln,
-                    key: `${vuln.id || "UNKNOWN"}:${vuln.pkgName || "pkg"}:${vuln.installedVersion || ""}:${vuln.fixedVersion || ""}:${group.target || "target"}:${group.type || ""}`,
+                    key: `${vuln.id || "UNKNOWN"}:${vuln.pkgName || "pkg"}:${vuln.installedVersion || ""}:${vuln.fixedVersion || ""}:${group.target || "target"}:${group.type || ""}:${groupIdx}:${vulnIdx}`,
                     resultType: group.type || "",
                     resultTarget: group.target || "",
                     resultClass: group.class || "",
