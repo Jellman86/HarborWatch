@@ -8,6 +8,58 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 )
 
+func taglessImageRef(ref string) string {
+	raw := strings.TrimSpace(ref)
+	if raw == "" {
+		return ""
+	}
+	if at := strings.Index(raw, "@"); at > 0 {
+		raw = raw[:at]
+	}
+	lastSlash := strings.LastIndex(raw, "/")
+	lastColon := strings.LastIndex(raw, ":")
+	if lastColon > lastSlash {
+		return raw[:lastColon]
+	}
+	return raw
+}
+
+func imageRefVariants(ref string) []string {
+	raw := strings.TrimSpace(ref)
+	if raw == "" {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := []string{}
+	add := func(value string) {
+		v := strings.TrimSpace(value)
+		if v == "" {
+			return
+		}
+		key := strings.ToLower(v)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, v)
+	}
+
+	add(raw)
+	base := taglessImageRef(raw)
+	add(base)
+	if !strings.Contains(raw, "@") {
+		lastSlash := strings.LastIndex(raw, "/")
+		lastColon := strings.LastIndex(raw, ":")
+		if lastColon <= lastSlash {
+			add(raw + ":latest")
+		}
+	}
+	if strings.Contains(raw, "@") {
+		add(taglessImageRef(raw))
+	}
+	return out
+}
+
 type imageIntelligenceRow struct {
 	ID                    string   `json:"id"`
 	RepoTags              []string `json:"repoTags"`
@@ -22,6 +74,11 @@ type imageIntelligenceRow struct {
 	MalwareInfected       bool     `json:"malwareInfected"`
 	MalwareThreatCount    int      `json:"malwareThreatCount"`
 	SecurityScannedAt     int64    `json:"securityScannedAt,omitempty"`
+}
+
+type imageScanLookup interface {
+	LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error)
+	MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error)
 }
 
 func filteredRepoTags(tags []string) []string {
@@ -49,7 +106,7 @@ func imagePrimaryRef(img gen.ImageSummary) string {
 	return strings.TrimSpace(img.ID)
 }
 
-func buildImageIntelligence(ctx context.Context, dockerClient DockerClient, scanService ScanService) ([]imageIntelligenceRow, error) {
+func buildImageIntelligence(ctx context.Context, dockerClient DockerClient, scanService imageScanLookup) ([]imageIntelligenceRow, error) {
 	images, err := dockerClient.ListImages(ctx)
 	if err != nil {
 		return nil, err
@@ -63,13 +120,15 @@ func buildImageIntelligence(ctx context.Context, dockerClient DockerClient, scan
 	inUseByImage := map[string]bool{}
 	outdatedByImage := map[string]bool{}
 	for _, c := range containers {
-		key := strings.TrimSpace(c.Image)
-		if key == "" {
-			continue
-		}
-		inUseByImage[key] = true
-		if c.UpdateAvailable {
-			outdatedByImage[key] = true
+		for _, key := range imageRefVariants(c.Image) {
+			k := strings.ToLower(strings.TrimSpace(key))
+			if k == "" {
+				continue
+			}
+			inUseByImage[k] = true
+			if c.UpdateAvailable {
+				outdatedByImage[k] = true
+			}
 		}
 	}
 
@@ -78,21 +137,36 @@ func buildImageIntelligence(ctx context.Context, dockerClient DockerClient, scan
 		tags := filteredRepoTags(img.RepoTags)
 		primaryRef := imagePrimaryRef(img)
 
+		lookupCandidates := []string{}
+		seenCandidate := map[string]struct{}{}
+		addCandidate := func(ref string) {
+			for _, v := range imageRefVariants(ref) {
+				key := strings.ToLower(strings.TrimSpace(v))
+				if key == "" {
+					continue
+				}
+				if _, ok := seenCandidate[key]; ok {
+					continue
+				}
+				seenCandidate[key] = struct{}{}
+				lookupCandidates = append(lookupCandidates, v)
+			}
+		}
+		for _, tag := range tags {
+			addCandidate(tag)
+		}
+		addCandidate(primaryRef)
+
 		inUse := false
 		outdated := false
-		for _, tag := range tags {
-			if inUseByImage[tag] {
+		for _, candidate := range lookupCandidates {
+			key := strings.ToLower(strings.TrimSpace(candidate))
+			if inUseByImage[key] {
 				inUse = true
 			}
-			if outdatedByImage[tag] {
+			if outdatedByImage[key] {
 				outdated = true
 			}
-		}
-		if !inUse && inUseByImage[primaryRef] {
-			inUse = true
-		}
-		if !outdated && outdatedByImage[primaryRef] {
-			outdated = true
 		}
 
 		row := imageIntelligenceRow{
@@ -105,20 +179,30 @@ func buildImageIntelligence(ctx context.Context, dockerClient DockerClient, scan
 			PruneCandidate: !inUse,
 		}
 
-		if scanService != nil && primaryRef != "" {
-			if summary, err := scanService.LatestSummaryForTarget(ctx, primaryRef); err == nil && summary != nil {
+		if scanService != nil {
+			for _, candidate := range lookupCandidates {
+				summary, err := scanService.LatestSummaryForTarget(ctx, candidate)
+				if err != nil || summary == nil {
+					continue
+				}
 				row.VulnerabilityTotal = summary.Total
 				row.VulnerabilityCritical = summary.Critical
 				row.VulnerabilityHigh = summary.High
 				row.SecurityScannedAt = summary.ScannedAt
+				break
 			}
-			if malware, err := scanService.MalwareSummaries(ctx, primaryRef); err == nil && len(malware) > 0 {
+			for _, candidate := range lookupCandidates {
+				malware, err := scanService.MalwareSummaries(ctx, candidate)
+				if err != nil || len(malware) == 0 {
+					continue
+				}
 				latest := malware[0]
 				row.MalwareInfected = latest.Infected
 				row.MalwareThreatCount = len(latest.ThreatsFound)
 				if latest.ScannedAt > row.SecurityScannedAt {
 					row.SecurityScannedAt = latest.ScannedAt
 				}
+				break
 			}
 		}
 

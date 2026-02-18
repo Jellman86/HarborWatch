@@ -15,6 +15,7 @@
     let target = $state("nginx:latest");
     let malwareTarget = $state("/var/lib/docker");
     let pollTimer: number | null = null;
+    let cancellingJob = $state(false);
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
     let loadingVulnerabilityDetails = $state(false);
     let malwareDetails = $state<MalwareScanDetail[]>([]);
@@ -27,6 +28,7 @@
     });
 
     const riskBand = (score: number) => score >= 80 ? "Critical" : score >= 60 ? "High" : score >= 30 ? "Medium" : score > 0 ? "Low" : "None";
+    const isTerminalJobStatus = (status: string) => status === "completed" || status === "failed" || status === "cancelled";
 
     async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
         const response = await fetch(url, init);
@@ -100,7 +102,7 @@
             try {
                 const job = await fetchJSON<ScanJobStatus>(`/api/scans/jobs/${jobId}`);
                 activeJob = job;
-                if (job.status === "completed" || job.status === "failed") {
+                if (isTerminalJobStatus(job.status)) {
                     if (pollTimer) window.clearInterval(pollTimer);
                     pollTimer = null;
                     await loadData();
@@ -141,6 +143,27 @@
         }
     }
 
+    async function stopActiveJob() {
+        if (!activeJob || activeJob.status !== "running" || cancellingJob) return;
+        cancellingJob = true;
+        scanError = "";
+        try {
+            const cancelled = await fetchJSON<ScanJobStatus>(`/api/scans/jobs/${activeJob.jobId}/cancel`, {
+                method: "POST"
+            });
+            activeJob = cancelled;
+            if (pollTimer) {
+                window.clearInterval(pollTimer);
+                pollTimer = null;
+            }
+            await loadData();
+        } catch (e) {
+            scanError = e instanceof Error ? e.message : "Failed to stop scan job";
+        } finally {
+            cancellingJob = false;
+        }
+    }
+
     onMount(() => {
         loadData();
         return () => {
@@ -166,13 +189,36 @@
     {#if activeJob}
         <div class="p-4 bg-brand-50 border border-brand-100 dark:bg-brand-900/10 dark:border-brand-900/30 rounded-xl flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <div class="w-8 h-8 rounded-full border-2 border-brand-600 border-t-transparent animate-spin"></div>
+                {#if activeJob.status === "running"}
+                    <div class="w-8 h-8 rounded-full border-2 border-brand-600 border-t-transparent animate-spin"></div>
+                {:else}
+                    <div class="w-8 h-8 rounded-full border-2 border-slate-300 dark:border-slate-600"></div>
+                {/if}
                 <div>
-                    <div class="text-sm font-bold text-brand-900 dark:text-brand-300">Scanning {activeJob.target}...</div>
-                    <div class="text-xs text-brand-600 uppercase font-black tracking-widest">{activeJob.source} in progress</div>
+                    <div class="text-sm font-bold text-brand-900 dark:text-brand-300">
+                        {#if activeJob.status === "running"}
+                            Scanning {activeJob.target}...
+                        {:else if activeJob.status === "cancelled"}
+                            Scan cancelled for {activeJob.target}
+                        {:else}
+                            Scan {activeJob.status} for {activeJob.target}
+                        {/if}
+                    </div>
+                    <div class="text-xs text-brand-600 uppercase font-black tracking-widest">{activeJob.source} {activeJob.status}</div>
                 </div>
             </div>
-            <span class="text-xs font-mono text-slate-400">JOB: {activeJob.jobId}</span>
+            <div class="flex items-center gap-3">
+                {#if activeJob.status === "running"}
+                    <button
+                        onclick={stopActiveJob}
+                        disabled={cancellingJob}
+                        class="px-3 py-1.5 rounded-lg border border-rose-200 text-rose-700 bg-white hover:bg-rose-50 disabled:opacity-50 text-xs font-black uppercase tracking-widest transition-colors"
+                    >
+                        {cancellingJob ? "Stopping..." : "Stop"}
+                    </button>
+                {/if}
+                <span class="text-xs font-mono text-slate-400">JOB: {activeJob.jobId}</span>
+            </div>
         </div>
     {/if}
 
@@ -197,7 +243,7 @@
                     />
                     <button 
                         onclick={startScan}
-                        disabled={!!activeJob}
+                        disabled={activeJob?.status === "running"}
                         class="px-6 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-brand-500/20"
                     >
                         Scan
@@ -245,7 +291,7 @@
                     />
                     <button 
                         onclick={startMalwareScan}
-                        disabled={!!activeJob}
+                        disabled={activeJob?.status === "running"}
                         class="px-6 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-brand-500/20"
                     >
                         Scan

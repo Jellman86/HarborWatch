@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -28,6 +29,30 @@ func (f fakeScanner) Scan(ctx context.Context, target string) (Result, error) {
 		out.Scanned = time.Now().UTC().Unix()
 	}
 	return out, nil
+}
+
+type fakeMalwareScanner struct{}
+
+func (fakeMalwareScanner) Name() string { return "fake-malware" }
+
+func (fakeMalwareScanner) ScanPath(ctx context.Context, path string) (MalwareResult, error) {
+	return MalwareResult{Target: path, Source: "fake-malware", ScannedAt: time.Now().UTC().Unix()}, nil
+}
+
+type blockingScanner struct {
+	started chan struct{}
+}
+
+func (b blockingScanner) Name() string { return "blocking" }
+
+func (b blockingScanner) Scan(ctx context.Context, target string) (Result, error) {
+	select {
+	case <-b.started:
+	default:
+		close(b.started)
+	}
+	<-ctx.Done()
+	return Result{}, fmt.Errorf("scan cancelled: %w", ctx.Err())
 }
 
 func newTestStore(t *testing.T) *Store {
@@ -110,4 +135,47 @@ func TestServiceStartScanFailure(t *testing.T) {
 	if jobStatus != "failed" {
 		t.Fatalf("expected failed status, got %s", jobStatus)
 	}
+}
+
+func TestServiceCancelRunningJob(t *testing.T) {
+	store := newTestStore(t)
+	started := make(chan struct{})
+	svc := NewService(blockingScanner{started: started}, fakeMalwareScanner{}, store, nil)
+
+	run, err := svc.StartScan("nginx:latest")
+	if err != nil {
+		t.Fatalf("start scan: %v", err)
+	}
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scan did not start")
+	}
+
+	job, err := svc.CancelJob(context.Background(), run.JobID)
+	if err != nil {
+		t.Fatalf("cancel job: %v", err)
+	}
+	if job.Status != "cancelled" {
+		t.Fatalf("expected cancelled status, got %s", job.Status)
+	}
+
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		current, err := svc.Job(context.Background(), run.JobID)
+		if err != nil {
+			t.Fatalf("job lookup failed: %v", err)
+		}
+		if current.Status == "cancelled" {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	final, err := svc.Job(context.Background(), run.JobID)
+	if err != nil {
+		t.Fatalf("job lookup failed: %v", err)
+	}
+	t.Fatalf("expected cancelled status, got %s", final.Status)
 }

@@ -32,6 +32,8 @@
     let auditing = $state(false);
     let savingRules = $state(false);
     let runningTrivyScan = $state(false);
+    let stoppingTrivyScan = $state(false);
+    let activeTrivyJobId = $state("");
     let runningMalwareScan = $state(false);
     let activeTab = $state("insights");
     let error = $state("");
@@ -275,6 +277,7 @@
     async function triggerTrivyScan() {
         if (!detail || runningTrivyScan) return;
         runningTrivyScan = true;
+        activeTrivyJobId = "";
         scanMessage = "Starting Trivy scan...";
         try {
             const res = await fetch("/api/scans/run", {
@@ -291,6 +294,7 @@
             if (!jobId) {
                 throw new Error("scan job id was not returned");
             }
+            activeTrivyJobId = String(jobId);
             toasts.info("Trivy scan started.");
             scanMessage = "Trivy scan is running...";
             const done = await waitForScanJob(jobId);
@@ -298,6 +302,11 @@
                 toasts.success("Trivy scan completed.");
                 scanMessage = "Trivy scan completed.";
                 await loadDetail(true);
+                return;
+            }
+            if (done === "cancelled") {
+                toasts.info("Trivy scan cancelled.");
+                scanMessage = "Trivy scan cancelled.";
                 return;
             }
             if (done === "failed") {
@@ -312,10 +321,12 @@
             toasts.error(e instanceof Error ? e.message : "Failed to start Trivy scan.");
         } finally {
             runningTrivyScan = false;
+            stoppingTrivyScan = false;
+            activeTrivyJobId = "";
         }
     }
 
-    async function waitForScanJob(jobId: string): Promise<"completed" | "failed" | "running"> {
+    async function waitForScanJob(jobId: string): Promise<"completed" | "failed" | "cancelled" | "running"> {
         const maxPolls = 40;
         for (let i = 0; i < maxPolls; i++) {
             await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -325,8 +336,28 @@
             const status = String(job?.status || "");
             if (status === "completed") return "completed";
             if (status === "failed") return "failed";
+            if (status === "cancelled") return "cancelled";
         }
         return "running";
+    }
+
+    async function stopTrivyScan() {
+        if (!activeTrivyJobId || !runningTrivyScan || stoppingTrivyScan) return;
+        stoppingTrivyScan = true;
+        try {
+            const res = await fetch(`/api/scans/jobs/${encodeURIComponent(activeTrivyJobId)}/cancel`, {
+                method: "POST"
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.message || `cancel failed (${res.status})`);
+            }
+            scanMessage = "Trivy scan cancelled.";
+            toasts.info("Trivy scan cancelled.");
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "Failed to stop Trivy scan.");
+            stoppingTrivyScan = false;
+        }
     }
 
     async function triggerContainerMalwareScan() {
@@ -492,6 +523,15 @@
                             >
                                 {runningTrivyScan ? 'Scanning...' : 'Run Trivy Scan'}
                             </button>
+                            {#if runningTrivyScan && activeTrivyJobId}
+                                <button
+                                    onclick={stopTrivyScan}
+                                    disabled={stoppingTrivyScan}
+                                    class="w-full py-3 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-rose-500/20 hover:bg-rose-700 transition-all disabled:opacity-50"
+                                >
+                                    {stoppingTrivyScan ? 'Stopping...' : 'Stop Trivy Scan'}
+                                </button>
+                            {/if}
                             <button
                                 onclick={triggerContainerMalwareScan}
                                 disabled={runningMalwareScan}

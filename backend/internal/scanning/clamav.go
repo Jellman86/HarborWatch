@@ -64,6 +64,9 @@ func (clamAVScanner) ScanPath(ctx context.Context, path string) (MalwareResult, 
 	}
 
 	if err != nil {
+		if ctx.Err() != nil {
+			return res, fmt.Errorf("clamscan timed out or was cancelled: %w", ctx.Err())
+		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			if exitErr.ExitCode() == 1 {

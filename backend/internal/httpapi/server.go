@@ -47,6 +47,7 @@ type ScanService interface {
 	StartScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
+	CancelJob(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
 	ClamAVSignatureStatus(ctx context.Context) (scanning.ClamAVSignatureStatus, error)
 	UpdateClamAVSignatures(ctx context.Context) (string, error)
 	Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
@@ -334,6 +335,22 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		return pathMatchesAnyPattern(sourcePath, patterns)
 	}
 
+	allowMalwareMountScan := func(ctx context.Context, containerID, sourcePath string) bool {
+		if isIgnoredMalwareMount(ctx, sourcePath) {
+			if diagService != nil {
+				diagService.Log("INFO", "Scheduler", fmt.Sprintf("Skipping malware mount for %s: %s (ignored by settings)", containerID, sourcePath))
+			}
+			return false
+		}
+		if _, err := os.Stat(sourcePath); err != nil {
+			if diagService != nil {
+				diagService.Log("WARN", "Scheduler", fmt.Sprintf("Skipping malware mount for %s: %s (path not accessible inside HarborWatch container: %v)", containerID, sourcePath, err))
+			}
+			return false
+		}
+		return true
+	}
+
 	containerAutomationEnabled := func(ctx context.Context, containerID, domain string) bool {
 		if isIgnoredContainer(ctx, containerID) {
 			return false
@@ -453,25 +470,13 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 					return scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
 						return containerAutomationEnabled(ctx, containerID, "security")
 					}).WithMountPolicy(func(ctx context.Context, containerID, sourcePath string) bool {
-						if isIgnoredMalwareMount(ctx, sourcePath) {
-							if diagService != nil {
-								diagService.Log("INFO", "Scheduler", fmt.Sprintf("Skipping malware mount for %s: %s", containerID, sourcePath))
-							}
-							return false
-						}
-						return true
+						return allowMalwareMountScan(ctx, containerID, sourcePath)
 					})
 				})
 				if err := schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
 					return containerAutomationEnabled(ctx, containerID, "security")
 				}).WithMountPolicy(func(ctx context.Context, containerID, sourcePath string) bool {
-					if isIgnoredMalwareMount(ctx, sourcePath) {
-						if diagService != nil {
-							diagService.Log("INFO", "Scheduler", fmt.Sprintf("Skipping malware mount for %s: %s", containerID, sourcePath))
-						}
-						return false
-					}
-					return true
+					return allowMalwareMountScan(ctx, containerID, sourcePath)
 				}), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task malware_sweep_clamav: %v", err))
 				}
@@ -1052,6 +1057,29 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 				job, err := scanService.Job(r.Context(), id)
 				if err != nil {
 					writeError(w, http.StatusNotFound, "job_not_found", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, job)
+			})
+
+			r.Post("/jobs/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
+				if scanService == nil {
+					writeError(w, http.StatusServiceUnavailable, "scanner_unavailable", "Scanner service not initialized")
+					return
+				}
+				id := strings.TrimSpace(chi.URLParam(r, "id"))
+				if id == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "scan job id is required")
+					return
+				}
+				job, err := scanService.CancelJob(r.Context(), id)
+				if err != nil {
+					msg := strings.ToLower(strings.TrimSpace(err.Error()))
+					if strings.Contains(msg, "not found") {
+						writeError(w, http.StatusNotFound, "job_not_found", err.Error())
+						return
+					}
+					writeError(w, http.StatusConflict, "scan_cancel_failed", err.Error())
 					return
 				}
 				writeJSON(w, http.StatusOK, job)

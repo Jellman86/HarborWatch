@@ -13,6 +13,9 @@ All notable changes to HarborWatch are documented in this file.
   - Added Image Repository security and lifecycle tags so high-risk/outdated/prune-target images are visible at a glance.
 - **Image Cleanup Feedback Log:**
   - Added a collapsed cleanup log panel in Image Repository that auto-expands when cleanup is triggered and streams scheduler feedback from system logs.
+- **Scan Job Stop Controls:**
+  - Added `POST /api/scans/jobs/{id}/cancel` to allow user-initiated cancellation of running Trivy/ClamAV scan jobs.
+  - Added stop controls for active scans in Security Suite and Container Security views, with explicit `cancelled` terminal state handling.
 
 ### Changed
 - **Container Intelligence UX Placement:**
@@ -23,11 +26,19 @@ All notable changes to HarborWatch are documented in this file.
 - **Scheduler Diagnostics Visibility:**
   - Scheduler start/run/completion/error events now write into diagnostics logs (`/api/system/logs`) instead of stdout-only paths.
   - Docker prune task now logs start/result/error details into diagnostics so System Health and cleanup feedback panels show concrete outcomes.
+- **ClamAV Sweep Path Guardrails:**
+  - Scheduled malware sweeps now verify host mount source accessibility before queueing scans.
+  - Inaccessible mount paths are skipped with diagnostics warnings instead of creating repeated failed scan jobs.
 
 ### Fixed
 - **System Health Log Searchability:**
   - Added backend `search`/`q` query filtering support for `GET /api/system/logs`.
   - Added System Health log search controls in Diagnostics UI for quick filtering by message/source/level content.
+- **Image Security Scan Correlation:**
+  - Fixed image intelligence matching across tagless, tagged, and digest-style references so scans recorded under `repo` are correctly surfaced for `repo:latest` images (and vice versa).
+  - Resolved false `Not scanned` states and incorrect prune-candidate flags caused by strict tag matching.
+- **Security UI Job Locking:**
+  - Fixed Security Suite action locking so completed/cancelled jobs no longer block starting subsequent scans.
 
 ### Tests
 - `go test ./...` (backend)

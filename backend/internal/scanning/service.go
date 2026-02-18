@@ -25,8 +25,9 @@ type Service struct {
 	store          *Store
 	diag           DiagService
 
-	mu   sync.RWMutex
-	jobs map[string]gen.ScanJobStatus
+	mu         sync.RWMutex
+	jobs       map[string]gen.ScanJobStatus
+	jobCancels map[string]context.CancelFunc
 
 	// Concurrency guards to avoid spawning too many heavy scanners at once.
 	trivySem  chan struct{}
@@ -42,6 +43,7 @@ func NewService(scanner Scanner, malwareScanner MalwareScanner, store *Store, di
 		store:          store,
 		diag:           diag,
 		jobs:           map[string]gen.ScanJobStatus{},
+		jobCancels:     map[string]context.CancelFunc{},
 		trivySem:       make(chan struct{}, trivyConcurrency),
 		clamavSem:      make(chan struct{}, clamavConcurrency),
 	}
@@ -67,6 +69,8 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 
 	s.mu.Lock()
 	s.jobs[jobID] = job
+	runCtx, runCancel := context.WithCancel(context.Background())
+	s.jobCancels[jobID] = runCancel
 	s.mu.Unlock()
 
 	_ = s.store.CreateJob(context.Background(), job, "vulnerability")
@@ -74,7 +78,7 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan queued job=%s target=%s", jobID, target))
 	}
 
-	go s.run(jobID, target)
+	go s.run(jobID, target, runCtx)
 
 	return gen.ScanStartResponse{JobID: jobID, Status: "running"}, nil
 }
@@ -136,6 +140,8 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 
 	s.mu.Lock()
 	s.jobs[jobID] = job
+	runCtx, runCancel := context.WithCancel(context.Background())
+	s.jobCancels[jobID] = runCancel
 	s.mu.Unlock()
 
 	_ = s.store.CreateJob(context.Background(), job, "malware")
@@ -144,24 +150,39 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 	if cleanup {
 		cleanupPath = scanPath
 	}
-	go s.runMalware(jobID, targetLabel, scanPath, cleanupPath)
+	go s.runMalware(jobID, targetLabel, scanPath, cleanupPath, runCtx)
 
 	return gen.ScanStartResponse{JobID: jobID, Status: "running"}, nil
 }
 
-func (s *Service) run(jobID, target string) {
-	s.trivySem <- struct{}{}
+func (s *Service) run(jobID, target string, runCtx context.Context) {
+	if !acquireScanSlot(runCtx, s.trivySem) {
+		s.setJobCancelled(jobID, "scan cancelled before execution")
+		return
+	}
 	defer func() { <-s.trivySem }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), envDuration("HW_TRIVY_SCAN_TIMEOUT", 15*time.Minute))
+	ctx, cancel := context.WithTimeout(runCtx, envDuration("HW_TRIVY_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
+	if err := ctx.Err(); err != nil {
+		s.setJobCancelled(jobID, "scan cancelled before execution")
+		return
+	}
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan started job=%s target=%s", jobID, target))
 	}
 
 	result, err := s.scanner.Scan(ctx, target)
 	if err != nil {
+		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
+			s.setJobCancelled(jobID, "scan cancelled by user")
+			return
+		}
 		s.setJobFailed(jobID, err)
+		return
+	}
+	if runCtx.Err() == context.Canceled {
+		s.setJobCancelled(jobID, "scan cancelled by user")
 		return
 	}
 
@@ -170,35 +191,47 @@ func (s *Service) run(jobID, target string) {
 		return
 	}
 
-	now := time.Now().UTC().Unix()
-	s.mu.Lock()
-	job := s.jobs[jobID]
-	job.Status = "completed"
-	job.CompletedAt = now
-	s.jobs[jobID] = job
-	s.mu.Unlock()
-
-	_ = s.store.UpdateJob(context.Background(), jobID, "completed", "", now)
+	if !s.setJobCompleted(jobID) {
+		return
+	}
 	if s.diag != nil {
 		total := result.Critical + result.High + result.Medium + result.Low + result.Unknown
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan completed job=%s target=%s total=%d critical=%d high=%d medium=%d low=%d unknown=%d", jobID, result.Target, total, result.Critical, result.High, result.Medium, result.Low, result.Unknown))
 	}
 }
 
-func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string) {
+func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, runCtx context.Context) {
 	if cleanupPath != "" {
 		defer func() { _ = os.RemoveAll(cleanupPath) }()
 	}
 
-	s.clamavSem <- struct{}{}
+	if !acquireScanSlot(runCtx, s.clamavSem) {
+		s.setJobCancelled(jobID, "scan cancelled before execution")
+		return
+	}
 	defer func() { <-s.clamavSem }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), envDuration("HW_CLAMAV_SCAN_TIMEOUT", 15*time.Minute))
+	ctx, cancel := context.WithTimeout(runCtx, envDuration("HW_CLAMAV_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
+	if err := ctx.Err(); err != nil {
+		s.setJobCancelled(jobID, "scan cancelled before execution")
+		return
+	}
+	if s.diag != nil {
+		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan started job=%s target=%s path=%s", jobID, targetLabel, scanPath))
+	}
 
 	result, err := s.malwareScanner.ScanPath(ctx, scanPath)
 	if err != nil {
+		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
+			s.setJobCancelled(jobID, "scan cancelled by user")
+			return
+		}
 		s.setJobFailed(jobID, err)
+		return
+	}
+	if runCtx.Err() == context.Canceled {
+		s.setJobCancelled(jobID, "scan cancelled by user")
 		return
 	}
 	result.Target = targetLabel
@@ -208,32 +241,58 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string) {
 		return
 	}
 
-	now := time.Now().UTC().Unix()
-	s.mu.Lock()
-	job := s.jobs[jobID]
-	job.Status = "completed"
-	job.CompletedAt = now
-	s.jobs[jobID] = job
-	s.mu.Unlock()
-
-	_ = s.store.UpdateJob(context.Background(), jobID, "completed", "", now)
+	if !s.setJobCompleted(jobID) {
+		return
+	}
+	if s.diag != nil {
+		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan completed job=%s target=%s infected=%t threats=%d", jobID, targetLabel, result.Infected, len(result.FoundThreats)))
+	}
 }
 
 func (s *Service) setJobFailed(jobID string, err error) {
-	now := time.Now().UTC().Unix()
-	s.mu.Lock()
-	job := s.jobs[jobID]
-	job.Status = "failed"
-	job.Error = err.Error()
-	job.CompletedAt = now
-	s.jobs[jobID] = job
-	s.mu.Unlock()
+	if !s.finishRunningJob(jobID, "failed", err.Error()) {
+		return
+	}
 
 	if s.diag != nil {
 		s.diag.Log("ERROR", "Scanner", fmt.Sprintf("Job %s failed: %v", jobID, err))
 	}
+}
 
-	_ = s.store.UpdateJob(context.Background(), jobID, "failed", err.Error(), now)
+func (s *Service) setJobCancelled(jobID, reason string) {
+	if !s.finishRunningJob(jobID, "cancelled", reason) {
+		return
+	}
+	if s.diag != nil {
+		s.diag.Log("WARN", "Scanner", fmt.Sprintf("Job %s cancelled: %s", jobID, reason))
+	}
+}
+
+func (s *Service) setJobCompleted(jobID string) bool {
+	return s.finishRunningJob(jobID, "completed", "")
+}
+
+func (s *Service) finishRunningJob(jobID, status, errMsg string) bool {
+	now := time.Now().UTC().Unix()
+	s.mu.Lock()
+	job, ok := s.jobs[jobID]
+	if !ok {
+		s.mu.Unlock()
+		return false
+	}
+	if job.Status != "running" {
+		s.mu.Unlock()
+		return false
+	}
+	job.Status = status
+	job.Error = strings.TrimSpace(errMsg)
+	job.CompletedAt = now
+	s.jobs[jobID] = job
+	delete(s.jobCancels, jobID)
+	s.mu.Unlock()
+
+	_ = s.store.UpdateJob(context.Background(), jobID, status, strings.TrimSpace(errMsg), now)
+	return true
 }
 
 func (s *Service) Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error) {
@@ -252,6 +311,48 @@ func (s *Service) Job(ctx context.Context, jobID string) (gen.ScanJobStatus, err
 		return gen.ScanJobStatus{}, errors.New("job not found")
 	}
 	return *dbJob, nil
+}
+
+func (s *Service) CancelJob(ctx context.Context, jobID string) (gen.ScanJobStatus, error) {
+	s.mu.Lock()
+	job, ok := s.jobs[jobID]
+	if !ok {
+		s.mu.Unlock()
+		dbJob, err := s.store.GetJob(ctx, jobID)
+		if err != nil {
+			return gen.ScanJobStatus{}, err
+		}
+		if dbJob == nil {
+			return gen.ScanJobStatus{}, errors.New("job not found")
+		}
+		if dbJob.Status == "running" {
+			return *dbJob, errors.New("job is not cancellable (scan service restart)")
+		}
+		return *dbJob, nil
+	}
+
+	if job.Status != "running" {
+		s.mu.Unlock()
+		return job, nil
+	}
+
+	cancel := s.jobCancels[jobID]
+	delete(s.jobCancels, jobID)
+	now := time.Now().UTC().Unix()
+	job.Status = "cancelled"
+	job.Error = "cancelled by user"
+	job.CompletedAt = now
+	s.jobs[jobID] = job
+	s.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if s.diag != nil {
+		s.diag.Log("WARN", "Scanner", fmt.Sprintf("Job %s cancel requested by user", jobID))
+	}
+	_ = s.store.UpdateJob(context.Background(), jobID, "cancelled", "cancelled by user", now)
+	return job, nil
 }
 
 func (s *Service) LatestSummary(ctx context.Context) (*gen.ScanSummary, error) {
@@ -318,4 +419,13 @@ func envInt(key string, fallback, minValue, maxValue int) int {
 		return maxValue
 	}
 	return parsed
+}
+
+func acquireScanSlot(ctx context.Context, sem chan struct{}) bool {
+	select {
+	case sem <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

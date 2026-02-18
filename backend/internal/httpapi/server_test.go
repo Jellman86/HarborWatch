@@ -80,6 +80,15 @@ func (f fakeScanService) StartMalwareScan(target string) (gen.ScanStartResponse,
 func (f fakeScanService) StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
 	return f.startResp, nil
 }
+func (f fakeScanService) CancelJob(ctx context.Context, jobID string) (gen.ScanJobStatus, error) {
+	j, ok := f.jobs[jobID]
+	if !ok {
+		return gen.ScanJobStatus{}, errors.New("not found")
+	}
+	j.Status = "cancelled"
+	j.Error = "cancelled by user"
+	return j, nil
+}
 func (f fakeScanService) ClamAVSignatureStatus(ctx context.Context) (scanning.ClamAVSignatureStatus, error) {
 	return scanning.ClamAVSignatureStatus{EngineVersion: "ClamAV 1.4.0"}, nil
 }
@@ -317,6 +326,35 @@ func TestUpdateEndpoints(t *testing.T) {
 	mux.ServeHTTP(recEvents, httptest.NewRequest(http.MethodGet, "/api/updates/events/u1", nil))
 	if recEvents.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recEvents.Code)
+	}
+}
+
+func TestScanCancelEndpoint(t *testing.T) {
+	scans := fakeScanService{
+		jobs: map[string]gen.ScanJobStatus{
+			"s1": {
+				JobID:     "s1",
+				Target:    "nginx:latest",
+				Status:    "running",
+				Source:    "trivy",
+				StartedAt: time.Now().UTC().Unix(),
+			},
+		},
+	}
+	mux := NewMuxWithDeps(nil, scans, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/scans/jobs/s1/cancel", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var body gen.ScanJobStatus
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Status != "cancelled" {
+		t.Fatalf("expected cancelled job status, got %q", body.Status)
 	}
 }
 
