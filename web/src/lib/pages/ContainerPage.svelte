@@ -1,6 +1,13 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ContainerDetail, MalwareScanDetail, TrivyScanDetails, UpdateJobStatus } from "../api-types";
+    import type {
+        ComposeAuditRecord,
+        ComposeAuditRecordSummary,
+        ContainerDetail,
+        MalwareScanDetail,
+        TrivyScanDetails,
+        UpdateJobStatus
+    } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
     import DiskUsagePanel from "../components/DiskUsagePanel.svelte";
     import MalwareScanPanel from "../components/MalwareScanPanel.svelte";
@@ -27,7 +34,11 @@
 
     let detail = $state<ContainerDetail | null>(null);
     let configYaml = $state("");
-    let aiAudit = $state("");
+    let aiAuditMarkdown = $state("");
+    let aiAuditHtml = $state("");
+    let composeAuditHistory = $state<ComposeAuditRecordSummary[]>([]);
+    let loadingComposeAuditHistory = $state(false);
+    let selectedComposeAuditId = $state("");
     let loading = $state(true);
     let auditing = $state(false);
     let savingRules = $state(false);
@@ -75,7 +86,8 @@
                     loadVulnerabilityDetails(data?.summary?.image || ""),
                     loadMalwareDetailsForContainer(),
                     loadUpdateHistory(),
-                    loadContainerIntel()
+                    loadContainerIntel(),
+                    loadComposeAuditHistory()
                 ]);
             } else {
                 const body = await res.json().catch(() => ({}));
@@ -86,6 +98,11 @@
                 malwareDetails = [];
                 updateHistory = [];
                 intel = null;
+                composeAuditHistory = [];
+                selectedComposeAuditId = "";
+                aiAuditMarkdown = "";
+                aiAuditHtml = "";
+                configYaml = "";
             }
         } catch (e) {
             if (!silent) {
@@ -95,6 +112,11 @@
             malwareDetails = [];
             updateHistory = [];
             intel = null;
+            composeAuditHistory = [];
+            selectedComposeAuditId = "";
+            aiAuditMarkdown = "";
+            aiAuditHtml = "";
+            configYaml = "";
         } finally {
             if (!silent) {
                 loading = false;
@@ -259,18 +281,69 @@
 
     async function runAudit() {
         auditing = true;
-        aiAudit = "";
+        aiAuditMarkdown = "";
+        aiAuditHtml = "";
         try {
             const res = await fetch(`/api/ai/audit-compose/${id}`);
             if (res.ok) {
                 const data = await res.json();
                 configYaml = data.config;
-                aiAudit = data.analysis;
+                aiAuditMarkdown = data.analysisMarkdown || data.analysis || "";
+                aiAuditHtml = data.analysisHtml || "";
+                selectedComposeAuditId = data.recordId || "";
+                await loadComposeAuditHistory();
+            } else {
+                const body = await res.json().catch(() => ({}));
+                toasts.error(body?.message || `Compose audit failed (${res.status})`);
             }
         } catch (e) {
             console.error("Audit failed", e);
+            toasts.error("Compose audit failed.");
         } finally {
             auditing = false;
+        }
+    }
+
+    async function loadComposeAuditHistory(selectFirst = true) {
+        loadingComposeAuditHistory = true;
+        try {
+            const res = await fetch(`/api/ai/audit-compose/${id}/history?limit=30`);
+            if (!res.ok) {
+                composeAuditHistory = [];
+                return;
+            }
+            const rows = await res.json();
+            composeAuditHistory = Array.isArray(rows) ? rows : [];
+            if (composeAuditHistory.length === 0) {
+                selectedComposeAuditId = "";
+                return;
+            }
+            if (selectedComposeAuditId && composeAuditHistory.some((row) => row.id === selectedComposeAuditId)) {
+                return;
+            }
+            if (selectFirst) {
+                await loadComposeAuditRecord(composeAuditHistory[0].id);
+            }
+        } catch {
+            composeAuditHistory = [];
+        } finally {
+            loadingComposeAuditHistory = false;
+        }
+    }
+
+    async function loadComposeAuditRecord(recordId: string) {
+        const target = recordId?.trim();
+        if (!target) return;
+        try {
+            const res = await fetch(`/api/ai/audit-compose/history/${encodeURIComponent(target)}`);
+            if (!res.ok) return;
+            const record: ComposeAuditRecord = await res.json();
+            selectedComposeAuditId = record.id;
+            configYaml = record.config || "";
+            aiAuditMarkdown = record.analysisMarkdown || "";
+            aiAuditHtml = record.analysisHtml || "";
+        } catch {
+            // Keep previous selected data if history fetch fails.
         }
     }
 
@@ -739,6 +812,41 @@
                 </div>
             {:else if activeTab === 'configuration'}
                 <div class="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div class="flex items-center justify-between gap-3 mb-4">
+                            <h4 class="text-sm font-black uppercase text-slate-400 tracking-widest">Compose Audit History</h4>
+                            <button
+                                onclick={() => loadComposeAuditHistory(false)}
+                                disabled={loadingComposeAuditHistory}
+                                class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                            >
+                                {loadingComposeAuditHistory ? "Refreshing..." : "Refresh"}
+                            </button>
+                        </div>
+                        <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                            {#if loadingComposeAuditHistory}
+                                <p class="text-[11px] text-slate-500">Loading compose audit history...</p>
+                            {:else}
+                                {#each composeAuditHistory as record}
+                                    <button
+                                        onclick={() => loadComposeAuditRecord(record.id)}
+                                        class="w-full text-left rounded-xl border px-3 py-2 transition-colors {selectedComposeAuditId === record.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/30'}"
+                                    >
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                            {new Date(record.createdAt * 1000).toLocaleString()}
+                                        </p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                            {record.headline || "Compose audit"}
+                                        </p>
+                                        <p class="mt-1 text-[10px] text-slate-500">{record.provider} / {record.model}</p>
+                                    </button>
+                                {:else}
+                                    <p class="text-[11px] text-slate-500 italic">No compose audits persisted yet. Run an audit to build history.</p>
+                                {/each}
+                            {/if}
+                        </div>
+                    </div>
+
                     <div class="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
                         <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
                             <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Effective Compose Config</span>
@@ -750,10 +858,10 @@
                                 {auditing ? 'Analyzing...' : 'Audit with AI'}
                             </button>
                         </div>
-                        <pre class="p-8 text-emerald-500 font-mono text-xs overflow-x-auto leading-relaxed"><code>{configYaml || '# Automated discovery pending. Click "Audit with AI" to retrieve and analyze.'}</code></pre>
+                        <pre class="p-8 text-emerald-500 font-mono text-xs overflow-x-auto leading-relaxed"><code>{configYaml || '# Automated discovery pending. Click "Audit with AI" to retrieve, analyze, and persist.'}</code></pre>
                     </div>
 
-                    {#if aiAudit}
+                    {#if aiAuditMarkdown}
                         <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
                             <h4 class="text-sm font-black uppercase text-slate-400 tracking-widest mb-6 flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -761,9 +869,13 @@
                                 </svg>
                                 Compose Doctor Analysis
                             </h4>
-                            <div class="prose dark:prose-invert prose-sm max-w-none text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                                {aiAudit}
-                            </div>
+                            {#if aiAuditHtml}
+                                <div class="markdown-content text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                                    {@html aiAuditHtml}
+                                </div>
+                            {:else}
+                                <div class="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{aiAuditMarkdown}</div>
+                            {/if}
                         </div>
                     {/if}
                 </div>

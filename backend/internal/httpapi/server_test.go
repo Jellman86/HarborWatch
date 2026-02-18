@@ -160,6 +160,59 @@ func (f fakeAIService) AnalyzeHealthLogs(ctx context.Context, containerID string
 	return ai.HealthAssessment{Healthy: true, Confidence: 80, Summary: "healthy"}, nil
 }
 
+type fakeComposeAuditHistoryStore struct {
+	items []ai.ComposeAuditRecord
+	byID  map[string]ai.ComposeAuditRecord
+}
+
+func (f *fakeComposeAuditHistoryStore) SaveComposeAudit(ctx context.Context, rec ai.ComposeAuditRecord) (ai.ComposeAuditRecord, error) {
+	if f.byID == nil {
+		f.byID = map[string]ai.ComposeAuditRecord{}
+	}
+	if rec.ID == "" {
+		rec.ID = "rec-" + rec.ContainerID
+	}
+	if rec.CreatedAt == 0 {
+		rec.CreatedAt = time.Now().UTC().Unix()
+	}
+	f.byID[rec.ID] = rec
+	f.items = append([]ai.ComposeAuditRecord{rec}, f.items...)
+	return rec, nil
+}
+
+func (f *fakeComposeAuditHistoryStore) ListComposeAudits(ctx context.Context, containerID string, limit, offset int) ([]ai.ComposeAuditRecordSummary, error) {
+	out := make([]ai.ComposeAuditRecordSummary, 0, len(f.items))
+	for _, rec := range f.items {
+		if rec.ContainerID != containerID {
+			continue
+		}
+		out = append(out, ai.ComposeAuditRecordSummary{
+			ID:            rec.ID,
+			ContainerID:   rec.ContainerID,
+			ContainerName: rec.ContainerName,
+			Provider:      rec.Provider,
+			Model:         rec.Model,
+			Headline:      rec.Headline,
+			CreatedAt:     rec.CreatedAt,
+		})
+	}
+	if offset > len(out) {
+		return []ai.ComposeAuditRecordSummary{}, nil
+	}
+	end := len(out)
+	if limit > 0 && offset+limit < end {
+		end = offset + limit
+	}
+	return out[offset:end], nil
+}
+
+func (f *fakeComposeAuditHistoryStore) GetComposeAudit(ctx context.Context, id string) (ai.ComposeAuditRecord, error) {
+	if rec, ok := f.byID[id]; ok {
+		return rec, nil
+	}
+	return ai.ComposeAuditRecord{}, ai.ErrComposeAuditNotFound
+}
+
 type fakeSchedulerService struct{}
 
 func (f fakeSchedulerService) AddTask(spec string, task scheduler.Task, enabled bool) error {
@@ -367,6 +420,119 @@ func TestAuditComposeByID_DockerUnavailable(t *testing.T) {
 	}
 }
 
+func TestAuditComposeByID_PersistsAndReturnsHTML(t *testing.T) {
+	history := &fakeComposeAuditHistoryStore{}
+	mux := newMuxWithDepsAndComposeAuditStore(
+		fakeDockerClient{},
+		nil,
+		nil,
+		nil,
+		nil,
+		fakeAIService{enabled: true},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		fakeRulesService{},
+		nil,
+		history,
+	)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ai/audit-compose/c1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&body); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if body["persisted"] != true {
+		t.Fatalf("expected persisted=true, got %#v", body["persisted"])
+	}
+	if strings.TrimSpace(asString(body["analysisHtml"])) == "" {
+		t.Fatalf("expected analysisHtml in response")
+	}
+	if len(history.items) != 1 {
+		t.Fatalf("expected 1 persisted history item, got %d", len(history.items))
+	}
+}
+
+func TestAuditComposeHistoryEndpoints(t *testing.T) {
+	history := &fakeComposeAuditHistoryStore{
+		byID: map[string]ai.ComposeAuditRecord{
+			"rec1": {
+				ID:               "rec1",
+				ContainerID:      "c1",
+				ContainerName:    "frigate",
+				Provider:         "openai",
+				Model:            "gpt-5.2",
+				ComposeConfig:    "version: '3'",
+				AnalysisMarkdown: "# Findings",
+				AnalysisHTML:     "<h1>Findings</h1>",
+				CreatedAt:        1700000000,
+			},
+		},
+		items: []ai.ComposeAuditRecord{{
+			ID:               "rec1",
+			ContainerID:      "c1",
+			ContainerName:    "frigate",
+			Provider:         "openai",
+			Model:            "gpt-5.2",
+			Headline:         "Findings",
+			ComposeConfig:    "version: '3'",
+			AnalysisMarkdown: "# Findings",
+			AnalysisHTML:     "<h1>Findings</h1>",
+			CreatedAt:        1700000000,
+		}},
+	}
+	mux := newMuxWithDepsAndComposeAuditStore(
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		fakeAIService{enabled: true},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		fakeRulesService{},
+		nil,
+		history,
+	)
+
+	recList := httptest.NewRecorder()
+	mux.ServeHTTP(recList, httptest.NewRequest(http.MethodGet, "/api/ai/audit-compose/c1/history?limit=5", nil))
+	if recList.Code != http.StatusOK {
+		t.Fatalf("expected 200 list status, got %d", recList.Code)
+	}
+	var list []map[string]any
+	if err := json.NewDecoder(bytes.NewReader(recList.Body.Bytes())).Decode(&list); err != nil {
+		t.Fatalf("decode list failed: %v", err)
+	}
+	if len(list) != 1 || asString(list[0]["id"]) != "rec1" {
+		t.Fatalf("expected rec1 in list, got %#v", list)
+	}
+
+	recGet := httptest.NewRecorder()
+	mux.ServeHTTP(recGet, httptest.NewRequest(http.MethodGet, "/api/ai/audit-compose/history/rec1", nil))
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("expected 200 record status, got %d", recGet.Code)
+	}
+	var record map[string]any
+	if err := json.NewDecoder(bytes.NewReader(recGet.Body.Bytes())).Decode(&record); err != nil {
+		t.Fatalf("decode record failed: %v", err)
+	}
+	if asString(record["id"]) != "rec1" || strings.TrimSpace(asString(record["analysisHtml"])) == "" {
+		t.Fatalf("unexpected record payload: %#v", record)
+	}
+}
+
 func TestRulesRoute_BackwardCompatibleContainersPath(t *testing.T) {
 	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakeRulesService{}, nil)
 	rec := httptest.NewRecorder()
@@ -521,4 +687,9 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 	if payload["components"] == nil {
 		t.Fatalf("expected components in diagnostics snapshot")
 	}
+}
+
+func asString(v any) string {
+	s, _ := v.(string)
+	return s
 }

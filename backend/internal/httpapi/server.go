@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -210,6 +211,10 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		return nil, nil, fmt.Errorf("init ai usage store: %w", err)
 	}
 	aiService.SetUsageStore(aiUsageStore)
+	composeAuditStore := ai.NewComposeAuditSQLiteStore(db)
+	if err := composeAuditStore.Init(context.Background()); err != nil {
+		return nil, nil, fmt.Errorf("init compose audit history store: %w", err)
+	}
 	notificationService := notifications.NewService()
 
 	var portainerService *portainer.Client
@@ -519,7 +524,23 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to load schedules from DB: %v", err))
 	}
 
-	return NewMuxWithDeps(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsStore, portainerService, rulesStore, intelStore), schedSvc, nil
+	return newMuxWithDepsAndComposeAuditStore(
+		dockerClient,
+		scanService,
+		releaseService,
+		updateService,
+		auditService,
+		aiService,
+		schedSvc,
+		metricService,
+		diagService,
+		notificationService,
+		settingsStore,
+		portainerService,
+		rulesStore,
+		intelStore,
+		composeAuditStore,
+	), schedSvc, nil
 }
 
 func newDegradedMux(initErr error) http.Handler {
@@ -538,6 +559,10 @@ func newDegradedMux(initErr error) http.Handler {
 }
 
 func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService, intelService ContainerIntelService) http.Handler {
+	return newMuxWithDepsAndComposeAuditStore(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsService, portainerService, rulesService, intelService, nil)
+}
+
+func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore) http.Handler {
 	r := chi.NewRouter()
 	currentPortainerService := portainerService
 
@@ -1509,7 +1534,78 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					writeError(w, http.StatusInternalServerError, "ai_error", err.Error())
 					return
 				}
-				writeJSON(w, http.StatusOK, map[string]string{"analysis": analysis})
+				markdown, rendered, err := ai.NormalizeAndRenderMarkdown(analysis)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "ai_render_error", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, composeAuditResponse{
+					Analysis:         markdown,
+					AnalysisMarkdown: markdown,
+					AnalysisHTML:     rendered,
+					Persisted:        false,
+				})
+			})
+
+			r.Get("/audit-compose/history/{recordID}", func(w http.ResponseWriter, r *http.Request) {
+				if composeAuditStore == nil {
+					writeError(w, http.StatusServiceUnavailable, "history_unavailable", "Compose audit history store is not available")
+					return
+				}
+				recordID := strings.TrimSpace(chi.URLParam(r, "recordID"))
+				if recordID == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "recordID is required")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				record, err := composeAuditStore.GetComposeAudit(ctx, recordID)
+				if err != nil {
+					if errors.Is(err, ai.ErrComposeAuditNotFound) {
+						writeError(w, http.StatusNotFound, "not_found", "Compose audit record not found")
+						return
+					}
+					writeError(w, http.StatusBadGateway, "history_fetch_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, record)
+			})
+
+			r.Get("/audit-compose/{id}/history", func(w http.ResponseWriter, r *http.Request) {
+				if composeAuditStore == nil {
+					writeJSON(w, http.StatusOK, []ai.ComposeAuditRecordSummary{})
+					return
+				}
+				containerID := strings.TrimSpace(chi.URLParam(r, "id"))
+				if containerID == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "id is required")
+					return
+				}
+				limit := 20
+				if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+					if n, err := strconv.Atoi(raw); err == nil {
+						if n > 0 {
+							limit = n
+						}
+					}
+				}
+				if limit > 100 {
+					limit = 100
+				}
+				offset := 0
+				if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
+					if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+						offset = n
+					}
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				history, err := composeAuditStore.ListComposeAudits(ctx, containerID, limit, offset)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "history_list_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, history)
 			})
 
 			r.Get("/audit-compose/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -1536,7 +1632,66 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 					writeError(w, http.StatusInternalServerError, "ai_error", err.Error())
 					return
 				}
-				writeJSON(w, http.StatusOK, map[string]string{"analysis": analysis, "config": config})
+				markdown, rendered, err := ai.NormalizeAndRenderMarkdown(analysis)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "ai_render_error", err.Error())
+					return
+				}
+
+				provider := "unknown"
+				model := "unknown"
+				if settingsService != nil {
+					if st, err := settingsService.Get(ctx); err == nil {
+						provider, model = resolveAuditProviderModel(st)
+					}
+				}
+				containerName := id
+				if dockerClient != nil {
+					if summary, err := dockerClient.GetContainer(ctx, id); err == nil {
+						if name := containerDisplayName(summary); name != "" {
+							containerName = name
+						}
+					}
+				}
+
+				resp := composeAuditResponse{
+					Config:           config,
+					Analysis:         markdown,
+					AnalysisMarkdown: markdown,
+					AnalysisHTML:     rendered,
+					Provider:         provider,
+					Model:            model,
+				}
+				if composeAuditStore == nil {
+					resp.Persisted = false
+					resp.PersistError = "history store unavailable"
+					writeJSON(w, http.StatusOK, resp)
+					return
+				}
+
+				record, saveErr := composeAuditStore.SaveComposeAudit(ctx, ai.ComposeAuditRecord{
+					ContainerID:      id,
+					ContainerName:    containerName,
+					Provider:         provider,
+					Model:            model,
+					ComposeConfig:    config,
+					AnalysisMarkdown: markdown,
+					AnalysisHTML:     rendered,
+				})
+				if saveErr != nil {
+					resp.Persisted = false
+					resp.PersistError = saveErr.Error()
+					if diagService != nil {
+						diagService.Log("WARN", "AI", "Compose audit persisted failed: "+saveErr.Error())
+					}
+					writeJSON(w, http.StatusOK, resp)
+					return
+				}
+
+				resp.RecordID = record.ID
+				resp.CreatedAt = record.CreatedAt
+				resp.Persisted = true
+				writeJSON(w, http.StatusOK, resp)
 			})
 
 			r.Post("/analyze-metrics", func(w http.ResponseWriter, r *http.Request) {

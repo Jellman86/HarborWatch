@@ -2,6 +2,34 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.11] - 2026-02-18
+
+### Added
+- **Compose Audit History Persistence:**
+  - Added persistent `compose_audit_history` storage for container compose audit runs, including:
+    - effective compose config snapshot
+    - normalized markdown analysis
+    - sanitized rendered HTML
+    - provider/model metadata
+    - timestamped history entries
+  - Added history APIs:
+    - `GET /api/ai/audit-compose/{id}/history`
+    - `GET /api/ai/audit-compose/history/{recordID}`
+
+### Changed
+- **Compose Analysis Markdown Normalization:**
+  - Added backend markdown normalization and rendering pipeline using established Go libraries:
+    - `github.com/yuin/goldmark` (Markdown parsing/rendering)
+    - `github.com/microcosm-cc/bluemonday` (HTML sanitization)
+  - `audit-compose` responses now include both normalized markdown and sanitized HTML payloads for richer UI rendering.
+- **Container Configuration UX:**
+  - Reworked Compose Doctor output in Container Detail to render prettified markdown (headings, lists, tables, code blocks, links).
+  - Added persisted Compose Audit History panel with selectable historical records so users can retrieve previous configs and analyses directly from the UI.
+
+### Tests
+- `go test ./internal/ai ./internal/httpapi ./internal/settings ./internal/updates ./internal/releases` (backend)
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.10] - 2026-02-18
 
 ### Added

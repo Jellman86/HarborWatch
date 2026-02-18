@@ -192,6 +192,55 @@
     border-width: var(--border-width);
     @apply dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl;
   }
+
+  .markdown-content h1,
+  .markdown-content h2,
+  .markdown-content h3 {
+    @apply mt-5 mb-2 font-black text-slate-900 dark:text-slate-100;
+  }
+
+  .markdown-content p {
+    @apply my-2;
+  }
+
+  .markdown-content ul,
+  .markdown-content ol {
+    @apply my-2 pl-5;
+  }
+
+  .markdown-content ul {
+    list-style: disc;
+  }
+
+  .markdown-content ol {
+    list-style: decimal;
+  }
+
+  .markdown-content li {
+    @apply my-1;
+  }
+
+  .markdown-content code {
+    @apply text-[12px] bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded;
+  }
+
+  .markdown-content pre {
+    @apply my-3 p-3 rounded-xl overflow-x-auto bg-slate-100 dark:bg-slate-900 text-[12px];
+  }
+
+  .markdown-content a {
+    @apply underline underline-offset-2 text-brand-700 dark:text-brand-300;
+  }
+
+  .markdown-content table {
+    @apply w-full text-xs my-3 border border-slate-200 dark:border-slate-700;
+    border-collapse: collapse;
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    @apply px-2 py-1 border border-slate-200 dark:border-slate-700;
+  }
 }
 
 /* Theme geometry overrides must win against Tailwind utility classes. */
