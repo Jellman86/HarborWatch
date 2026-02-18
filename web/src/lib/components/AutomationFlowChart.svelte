@@ -43,6 +43,7 @@
     const MAX_SINGLE_ROW_NODES = 6;
     const CONNECTOR_GAP_X = 10;
     const CONNECTOR_GAP_Y = 6;
+    const CONNECTOR_SIDE_APPROACH = 24;
 
     let host = $state<HTMLDivElement | null>(null);
     let hostWidth = $state(0);
@@ -185,15 +186,30 @@
                     paths.push(`M ${from.x} ${from.y} L ${to.x} ${to.y}`);
                 }
             } else {
-                // Row-wrap connector: exit from the bottom face of the last node in the row
-                // and enter the next row from the top face for a cleaner serpentine transition.
+                // Row-wrap connector:
+                // 1) exit from bottom face of the row-end node,
+                // 2) enter next row on alternating side faces (row2 right, row3 left, ...).
+                const down = to.row > from.row;
                 const startX = clamp(from.x, 3, maxX);
-                const startY = clamp(from.bottom + CONNECTOR_GAP_Y, 3, maxY);
-                const endX = clamp(to.x, 3, maxX);
-                const endY = clamp(to.top - CONNECTOR_GAP_Y, 3, maxY);
-                const midY = clamp((startY + endY) / 2, 3, maxY);
+                const startY = clamp(down ? from.bottom + CONNECTOR_GAP_Y : from.top - CONNECTOR_GAP_Y, 3, maxY);
 
-                paths.push(`M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`);
+                const toSideRight = to.row % 2 === 1;
+                const targetX = clamp(
+                    toSideRight ? to.right + CONNECTOR_GAP_X : to.left - CONNECTOR_GAP_X,
+                    3,
+                    maxX
+                );
+                const targetY = clamp(to.y, 3, maxY);
+                const approachX = clamp(
+                    toSideRight ? targetX + CONNECTOR_SIDE_APPROACH : targetX - CONNECTOR_SIDE_APPROACH,
+                    3,
+                    maxX
+                );
+                const midY = clamp((startY + targetY) / 2, 3, maxY);
+
+                paths.push(
+                    `M ${startX} ${startY} L ${startX} ${midY} L ${approachX} ${midY} L ${approachX} ${targetY} L ${targetX} ${targetY}`
+                );
             }
         }
         connectorPaths = paths;

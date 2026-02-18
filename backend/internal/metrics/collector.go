@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"runtime"
 	"time"
 
@@ -87,15 +88,28 @@ func computeCPUPercent(stats container.StatsResponse) float64 {
 	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage) - float64(stats.PreCPUStats.CPUUsage.TotalUsage)
 	systemDelta := float64(stats.CPUStats.SystemUsage) - float64(stats.PreCPUStats.SystemUsage)
 	if systemDelta > 0 && cpuDelta >= 0 {
-		return (cpuDelta / systemDelta) * cpuCount * 100
+		return normalizeCPUPercent((cpuDelta / systemDelta) * cpuCount * 100)
 	}
 
 	// Fallback for engines that do not provide valid pre-CPU snapshots.
 	if stats.CPUStats.SystemUsage > 0 && stats.CPUStats.CPUUsage.TotalUsage > 0 {
-		return (float64(stats.CPUStats.CPUUsage.TotalUsage) / float64(stats.CPUStats.SystemUsage)) * cpuCount * 100
+		return normalizeCPUPercent((float64(stats.CPUStats.CPUUsage.TotalUsage) / float64(stats.CPUStats.SystemUsage)) * cpuCount * 100)
 	}
 
 	return 0
+}
+
+func normalizeCPUPercent(value float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0
+	}
+	if value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
 }
 
 func cpuCoreCount(stats container.StatsResponse) float64 {

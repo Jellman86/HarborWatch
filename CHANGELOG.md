@@ -18,11 +18,15 @@ All notable changes to HarborWatch are documented in this file.
 - **Chart Rendering Engine Hardening:**
   - Replaced Apex-based metric, sparkline, and disk usage charts with native SVG/bar renderers to remove NaN-prone runtime layout behavior.
   - Removed frontend runtime dependencies on `apexcharts` and `svelte-apexcharts`.
+  - Added chart-series guardrails (CPU value bounding and point downsampling) to keep container detail rendering responsive even for high-frequency telemetry histories.
+  - Normalized API-delivered CPU percentages to a bounded 0-100 scale for consistent chart semantics.
 
 ### Fixed
 - **Container Detail Navigation Stability:**
   - Eliminated repeated chart `NaN` SVG/transform console errors observed when opening containers (including `frigate`) and cycling tabs (`insights/security/lifecycle/configuration`).
   - Resolved associated UI slowdown/hang risk during tab traversal.
+- **Automation Flow Diagram Connector Semantics:**
+  - Refined row-wrap connector routing to exit row-end nodes from the bottom face while entering subsequent rows via alternating side faces (row 2 right, row 3 left, etc.) for clearer directionality.
 
 ### Tests
 - Playwright verification executed via the documented container-to-container workflow (`agents/PLAYWRIGHT_TESTING_GUIDE.md`) against `frigate` and `yawamf-frontend` tab navigation flows with zero console/page/network errors.

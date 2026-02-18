@@ -40,3 +40,17 @@ func TestComputeCPUPercent_UsesPercpuLengthFallback(t *testing.T) {
 		t.Fatalf("unexpected cpu percent: got %.4f want %.4f", got, want)
 	}
 }
+
+func TestComputeCPUPercent_ClampsHighValues(t *testing.T) {
+	stats := container.StatsResponse{}
+	stats.CPUStats.CPUUsage.TotalUsage = 8_000_000_000
+	stats.PreCPUStats.CPUUsage.TotalUsage = 7_000_000_000
+	stats.CPUStats.SystemUsage = 8_000_000_000
+	stats.PreCPUStats.SystemUsage = 7_500_000_000
+	stats.CPUStats.OnlineCPUs = 8
+
+	got := computeCPUPercent(stats)
+	if got != 100 {
+		t.Fatalf("expected clamped cpu percent at 100, got %.4f", got)
+	}
+}

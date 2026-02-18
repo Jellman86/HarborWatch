@@ -30,8 +30,15 @@ func (s *Service) GetMetrics(ctx context.Context, containerID string, duration s
 	if d, err := time.ParseDuration(duration); err == nil {
 		since = time.Now().Add(-d).Unix()
 	}
-	
-	return s.store.GetMetrics(ctx, containerID, since)
+
+	items, err := s.store.GetMetrics(ctx, containerID, since)
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		items[i].CPUPercent = normalizeCPUPercent(items[i].CPUPercent)
+	}
+	return items, nil
 }
 
 // PruneTask cleans up metrics older than 7 days

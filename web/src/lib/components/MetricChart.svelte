@@ -10,6 +10,7 @@
 
     const CHART_HEIGHT = 250;
     const MIN_CHART_WIDTH = 260;
+    const MAX_RENDER_POINTS = 240;
     const PAD_TOP = 16;
     const PAD_RIGHT = 14;
     const PAD_BOTTOM = 30;
@@ -34,6 +35,18 @@
         const i = Math.min(Math.floor(Math.log(safe) / Math.log(k)), sizes.length - 1);
         return `${(safe / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
     };
+
+    function downsamplePoints(points: Array<{ x: number; y: number }>, maxPoints: number): Array<{ x: number; y: number }> {
+        if (points.length <= maxPoints) return points;
+        const stride = Math.max(1, Math.ceil(points.length / maxPoints));
+        const sampled: Array<{ x: number; y: number }> = [];
+        for (let i = 0; i < points.length; i += stride) {
+            sampled.push(points[i]);
+        }
+        const last = points[points.length - 1];
+        if (sampled[sampled.length - 1] !== last) sampled.push(last);
+        return sampled;
+    }
 
     let host = $state<HTMLDivElement | null>(null);
     let hostWidth = $state(0);
@@ -69,21 +82,26 @@
                 const x = normalizeTimestamp(m?.timestamp);
                 const rawY = type === "cpu" ? toFinite(m?.cpuPercent) : toFinite(m?.memoryUsage);
                 if (x === null || rawY === null) return null;
-                return { x, y: Math.max(0, rawY) };
+                const boundedY = type === "cpu"
+                    ? Math.max(0, Math.min(100, rawY))
+                    : Math.max(0, rawY);
+                return { x, y: boundedY };
             })
             .filter((point): point is { x: number; y: number } => point !== null)
             .sort((a, b) => a.x - b.x)
     );
 
+    let renderMetrics = $derived(downsamplePoints(safeMetrics, MAX_RENDER_POINTS));
+
     let bounds = $derived((() => {
-        if (safeMetrics.length === 0) {
+        if (renderMetrics.length === 0) {
             const now = Date.now();
             return { minX: now - 1, maxX: now, maxY: 1 };
         }
-        const minX = safeMetrics[0].x;
-        const maxXRaw = safeMetrics[safeMetrics.length - 1].x;
+        const minX = renderMetrics[0].x;
+        const maxXRaw = renderMetrics[renderMetrics.length - 1].x;
         const maxX = maxXRaw > minX ? maxXRaw : minX + 1;
-        const observedMaxY = safeMetrics.reduce((max, p) => (p.y > max ? p.y : max), 0);
+        const observedMaxY = renderMetrics.reduce((max, p) => (p.y > max ? p.y : max), 0);
         const normalizedMax = type === "cpu"
             ? Math.max(100, observedMaxY * 1.1, 1)
             : Math.max(observedMaxY * 1.1, 1);
@@ -100,7 +118,7 @@
         return PAD_TOP + (1 - Math.max(0, Math.min(1, ratio))) * innerHeight;
     };
 
-    let points = $derived(safeMetrics.map((p) => ({ x: scaleX(p.x), y: scaleY(p.y), rawX: p.x, rawY: p.y })));
+    let points = $derived(renderMetrics.map((p) => ({ x: scaleX(p.x), y: scaleY(p.y), rawX: p.x, rawY: p.y })));
 
     let linePath = $derived(
         points.length > 0

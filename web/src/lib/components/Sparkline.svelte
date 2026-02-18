@@ -6,17 +6,30 @@
     const WIDTH = 100;
     const HEIGHT = 30;
     const PAD = 2;
+    const MAX_RENDER_POINTS = 80;
 
     const toFinite = (value: unknown): number | null => {
         const n = Number(value);
         return Number.isFinite(n) ? n : null;
     };
 
+    function downsampleSeries(series: number[], maxPoints: number): number[] {
+        if (series.length <= maxPoints) return series;
+        const stride = Math.max(1, Math.ceil(series.length / maxPoints));
+        const sampled: number[] = [];
+        for (let i = 0; i < series.length; i += stride) {
+            sampled.push(series[i]);
+        }
+        const last = series[series.length - 1];
+        if (sampled[sampled.length - 1] !== last) sampled.push(last);
+        return sampled;
+    }
+
     let safeData = $derived(
-        (metrics || [])
+        downsampleSeries((metrics || [])
             .map((m) => toFinite(m?.cpuPercent))
             .filter((v): v is number => v !== null)
-            .map((v) => Math.max(0, v))
+            .map((v) => Math.max(0, Math.min(100, v))), MAX_RENDER_POINTS)
     );
 
     let bounds = $derived((() => {
