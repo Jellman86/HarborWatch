@@ -17,6 +17,11 @@
   let routeParams = $state<any>(null);
 
   function navigate(route: string, params: any = null) {
+    if (route === "audit") {
+      currentRoute = "diagnostics";
+      routeParams = { preset: "audit" };
+      return;
+    }
     currentRoute = route;
     routeParams = params;
   }
@@ -183,13 +188,9 @@
         {#await import("./lib/pages/Updates.svelte") then Mod}
           <Mod.default params={routeParams} />
         {/await}
-      {:else if currentRoute === 'audit'}
-        {#await import("./lib/pages/Audit.svelte") then Mod}
-          <Mod.default />
-        {/await}
       {:else if currentRoute === 'diagnostics'}
         {#await import("./lib/pages/Diagnostics.svelte") then Mod}
-          <Mod.default />
+          <Mod.default params={routeParams} />
         {/await}
       {:else if currentRoute === 'settings'}
         {#await import("./lib/pages/Settings.svelte") then Mod}

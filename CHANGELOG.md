@@ -21,6 +21,10 @@ All notable changes to HarborWatch are documented in this file.
 - **Container Intelligence UX Placement:**
   - Moved Repository URL and Changelog URL override controls from global Settings into a new per-container `intelligence` tab in Container Detail.
   - Added effective/derived metadata display directly in the container context where upgrade decisions are made.
+- **Audit Trail Consolidation:**
+  - Retired the standalone Audit page in the web UI.
+  - System Health now acts as the canonical operational timeline with reusable presets (including an `Audit Trail` preset) plus source/level/search filters.
+  - Legacy `audit` navigation now resolves to System Health in audit preset mode.
 - **Settings Simplification:**
   - Removed the global Settings `Containers` intelligence tab now that overrides are managed at container level.
 - **Scheduler Diagnostics Visibility:**

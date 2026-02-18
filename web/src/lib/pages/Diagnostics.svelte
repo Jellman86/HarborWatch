@@ -15,15 +15,58 @@
         message: string;
     }
 
+    type PresetID = "all" | "audit" | "security" | "automation" | "updates" | "errors";
+    interface LogPreset {
+        id: PresetID;
+        label: string;
+        level?: string;
+        source?: string;
+        search?: string;
+    }
+
+    let { params } = $props<{
+        params?: { preset?: string };
+    }>();
+
+    const presets: LogPreset[] = [
+        { id: "all", label: "All Logs" },
+        { id: "audit", label: "Audit Trail", source: "scanner", search: "job" },
+        { id: "security", label: "Security", source: "scanner" },
+        { id: "automation", label: "Automation", source: "scheduler" },
+        { id: "updates", label: "Updates", source: "updateengine" },
+        { id: "errors", label: "Errors", level: "ERROR" }
+    ];
+
     let status = $state<SystemStatus | null>(null);
     let logs = $state<LogEntry[]>([]);
     let loading = $state(true);
     let logSearch = $state("");
+    let logLevel = $state("");
+    let logSource = $state("");
+    let selectedPreset = $state<PresetID>("all");
+
+    function normalizePreset(raw?: string): PresetID {
+        const value = String(raw || "").trim().toLowerCase();
+        switch (value) {
+            case "audit":
+            case "security":
+            case "automation":
+            case "updates":
+            case "errors":
+                return value as PresetID;
+            default:
+                return "all";
+        }
+    }
 
     function logsEndpoint(): string {
         const params = new URLSearchParams({ limit: "50" });
         const query = String(logSearch || "").trim();
+        const level = String(logLevel || "").trim();
+        const source = String(logSource || "").trim();
         if (query) params.set("search", query);
+        if (level) params.set("level", level);
+        if (source) params.set("source", source);
         return `/api/system/logs?${params.toString()}`;
     }
 
@@ -43,9 +86,18 @@
     }
 
     onMount(() => {
+        const preset = normalizePreset(params?.preset);
+        applyPreset(preset, false);
         loadData();
         const interval = setInterval(loadData, 5000);
         return () => clearInterval(interval);
+    });
+
+    $effect(() => {
+        const preset = normalizePreset(params?.preset);
+        if (preset !== selectedPreset) {
+            applyPreset(preset);
+        }
     });
 
     const formatBytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(2) + " MB";
@@ -66,6 +118,17 @@
     function applyLogSearch() {
         loading = true;
         void loadData();
+    }
+
+    function applyPreset(id: PresetID, reload = true) {
+        const preset = presets.find((p) => p.id === id) || presets[0];
+        selectedPreset = preset.id;
+        logLevel = preset.level || "";
+        logSource = preset.source || "";
+        logSearch = preset.search || "";
+        if (reload) {
+            applyLogSearch();
+        }
     }
 </script>
 
@@ -110,6 +173,22 @@
                 </svg>
                 Internal Application Logs
             </h3>
+            <div class="flex items-center gap-2 flex-wrap">
+                {#each presets as preset}
+                    <button
+                        type="button"
+                        onclick={() => applyPreset(preset.id)}
+                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors {(selectedPreset === preset.id) ? 'bg-brand-600 text-white' : 'bg-slate-800/80 border border-slate-700 text-slate-300 hover:bg-slate-700'}"
+                    >
+                        {preset.label}
+                    </button>
+                {/each}
+            </div>
+        </div>
+        <div class="text-[11px] text-slate-500">
+            Audit Trail now maps to the <span class="font-bold text-slate-300">System Health</span> stream via the <span class="font-bold text-brand-400">Audit Trail</span> preset.
+        </div>
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <form
                 class="flex items-center gap-2"
                 onsubmit={(e) => {
@@ -122,8 +201,28 @@
                     placeholder="Search logs..."
                     class="w-56 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
                 />
+                <select
+                    bind:value={logLevel}
+                    class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                    <option value="">All Levels</option>
+                    <option value="ERROR">ERROR</option>
+                    <option value="WARN">WARN</option>
+                    <option value="INFO">INFO</option>
+                </select>
+                <select
+                    bind:value={logSource}
+                    class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                    <option value="">All Sources</option>
+                    <option value="scanner">Scanner</option>
+                    <option value="scheduler">Scheduler</option>
+                    <option value="updateengine">UpdateEngine</option>
+                    <option value="docker">Docker</option>
+                    <option value="system">System</option>
+                </select>
                 <button type="submit" class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-black uppercase tracking-widest">Search</button>
-                <button type="button" onclick={() => { logSearch = ""; applyLogSearch(); }} class="px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-widest hover:bg-slate-800/60">Clear</button>
+                <button type="button" onclick={() => applyPreset("all")} class="px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-widest hover:bg-slate-800/60">Clear</button>
             </form>
         </div>
         
