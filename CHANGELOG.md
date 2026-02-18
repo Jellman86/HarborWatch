@@ -2,6 +2,16 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.18] - 2026-02-18
+
+### Fixed
+- **Cleanup Log Ordering and Completion Semantics:**
+  - System log query ordering is now deterministic for same-second events (`timestamp DESC, id DESC`) so prune timelines no longer shuffle lines unpredictably.
+  - Image Repository cleanup log ingestion now sorts by `timestamp + id` and deduplicates by log record id where available.
+  - Manual prune polling now waits for explicit terminal scheduler messages (`Manual task completed/failed`) before declaring completion.
+- **Prune Task Messaging Clarity:**
+  - Updated scheduler log wording from `Starting automated Docker system prune...` to `Starting Docker system prune task...` to avoid misleading output during manual runs.
+
 ## [0.7.17] - 2026-02-18
 
 ### Changed

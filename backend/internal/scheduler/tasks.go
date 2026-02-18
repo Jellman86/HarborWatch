@@ -47,7 +47,7 @@ func (t *DockerPruneTask) log(level, message string) {
 func (t *DockerPruneTask) Name() string { return "docker_system_prune" }
 
 func (t *DockerPruneTask) Run(ctx context.Context) error {
-	t.log("INFO", "Starting automated Docker system prune...")
+	t.log("INFO", "Starting Docker system prune task...")
 
 	// Prune Images
 	report, err := t.docker.ImagesPrune(ctx, filters.NewArgs(filters.Arg("dangling", "true")))

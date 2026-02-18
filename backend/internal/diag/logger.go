@@ -82,7 +82,7 @@ func (s *Service) Log(level, source, message string) {
 }
 
 func (s *Service) ListLogs(ctx context.Context, limit int) ([]LogEntry, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, timestamp, level, message, source FROM internal_logs ORDER BY timestamp DESC LIMIT ?", limit)
+	rows, err := s.db.QueryContext(ctx, "SELECT id, timestamp, level, message, source FROM internal_logs ORDER BY timestamp DESC, id DESC LIMIT ?", limit)
 	if err != nil {
 		return nil, err
 	}

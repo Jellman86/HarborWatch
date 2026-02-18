@@ -31,41 +31,83 @@
         cleanupLog = [...cleanupLog, { ts, level, message }];
     }
 
-    function consumeSchedulerLogs(rows: Array<{ timestamp: number; source: string; message: string }>): boolean {
-        let sawCompletion = false;
-        const ordered = [...rows].sort((a, b) => a.timestamp - b.timestamp);
+    interface SchedulerLogRow {
+        id?: number;
+        timestamp?: number;
+        source?: string;
+        message?: string;
+    }
+
+    function cleanupEventRank(message: string): number {
+        const text = message.toLowerCase();
+        if (text.includes("manually triggering task: docker_system_prune")) return 10;
+        if (text.includes("starting docker system prune task")) return 20;
+        if (/pruned .*images/i.test(message)) return 30;
+        if (/pruned .*containers/i.test(message)) return 40;
+        if (text.includes("manual task completed: docker_system_prune")) return 90;
+        if (text.includes("manual task docker_system_prune failed")) return 90;
+        return 50;
+    }
+
+    function consumeSchedulerLogs(rows: SchedulerLogRow[]): { sawOutcome: boolean; sawTerminal: boolean } {
+        let sawOutcome = false;
+        let sawTerminal = false;
+        const ordered = [...rows].sort((a, b) => {
+            const tsA = Number(a?.timestamp || 0);
+            const tsB = Number(b?.timestamp || 0);
+            if (tsA !== tsB) return tsA - tsB;
+            const idA = Number(a?.id || 0);
+            const idB = Number(b?.id || 0);
+            if (idA !== idB) return idA - idB;
+            return cleanupEventRank(String(a?.message || "")) - cleanupEventRank(String(b?.message || ""));
+        });
         for (const entry of ordered) {
             const message = String(entry?.message || "").trim();
             const source = String(entry?.source || "").toLowerCase();
             if (!message || !source.includes("scheduler")) continue;
             const tracked = /prune|docker_system_prune|space reclaimed/i.test(message);
             if (!tracked) continue;
-            const key = `${entry.timestamp}:${message}`;
+            const id = Number(entry?.id || 0);
+            const ts = Number(entry?.timestamp || Math.floor(Date.now() / 1000));
+            const key = id > 0 ? `id:${id}` : `${ts}:${message}`;
             if (cleanupSeen.has(key)) continue;
             cleanupSeen.add(key);
-            const level = /error|failed/i.test(message) ? "error" : "info";
-            appendCleanupLog(level, message, entry.timestamp || Math.floor(Date.now() / 1000));
+            const level =
+                /manual task completed/i.test(message) ? "success"
+                : /error|failed/i.test(message) ? "error"
+                : "info";
+            appendCleanupLog(level, message, ts);
             if (/Pruned .*images|Pruned .*containers|image prune failed|container prune failed/i.test(message)) {
-                sawCompletion = true;
+                sawOutcome = true;
+            }
+            if (/Manual task completed: docker_system_prune|Manual task docker_system_prune failed/i.test(message)) {
+                sawTerminal = true;
             }
         }
-        return sawCompletion;
+        return { sawOutcome, sawTerminal };
     }
 
     async function pollCleanupFeedback(startedAt: number) {
+        let sawOutcome = false;
         for (let i = 0; i < 15; i++) {
             await new Promise((resolve) => setTimeout(resolve, 2500));
             try {
                 const res = await fetch(`/api/system/logs?limit=250&source=scheduler&since=${startedAt}`);
                 if (!res.ok) continue;
                 const logs = await res.json();
-                if (consumeSchedulerLogs(Array.isArray(logs) ? logs : [])) {
+                const result = consumeSchedulerLogs(Array.isArray(logs) ? logs : []);
+                if (result.sawOutcome) sawOutcome = true;
+                if (result.sawTerminal) {
                     appendCleanupLog("success", "Cleanup workflow completed.");
                     return;
                 }
             } catch {
                 // Keep polling to avoid transient log endpoint errors.
             }
+        }
+        if (sawOutcome) {
+            appendCleanupLog("info", "Prune actions finished; waiting for final scheduler status log.");
+            return;
         }
         appendCleanupLog("info", "Cleanup still running in background. Refresh logs shortly.");
     }
