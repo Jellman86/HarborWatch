@@ -1,25 +1,19 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { chart } from 'svelte-apexcharts';
-    import type { Metric } from '../api-types';
+    import type { Metric } from "../api-types";
 
-    let { metrics, title, type = 'cpu' } = $props<{
+    let { metrics, title, type = "cpu" } = $props<{
         metrics: Metric[];
         title: string;
-        type: 'cpu' | 'memory';
+        type: "cpu" | "memory";
     }>();
 
     const CHART_HEIGHT = 250;
-    const MIN_CHART_WIDTH = 80;
-
-    const formatBytes = (bytes: number) => {
-        const safe = Number.isFinite(bytes) ? Math.max(bytes, 0) : 0;
-        if (safe === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(safe) / Math.log(k));
-        return parseFloat((safe / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
+    const MIN_CHART_WIDTH = 260;
+    const PAD_TOP = 16;
+    const PAD_RIGHT = 14;
+    const PAD_BOTTOM = 30;
+    const PAD_LEFT = 54;
 
     const toFinite = (value: unknown): number | null => {
         const n = Number(value);
@@ -29,8 +23,16 @@
     const normalizeTimestamp = (value: unknown): number | null => {
         const ts = toFinite(value);
         if (ts === null || ts <= 0) return null;
-        // Backend stores seconds; preserve ms values if already present.
         return ts > 1_000_000_000_000 ? ts : ts * 1000;
+    };
+
+    const formatBytes = (bytes: number) => {
+        const safe = Number.isFinite(bytes) ? Math.max(bytes, 0) : 0;
+        if (safe === 0) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.min(Math.floor(Math.log(safe) / Math.log(k)), sizes.length - 1);
+        return `${(safe / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
     };
 
     let host = $state<HTMLDivElement | null>(null);
@@ -44,7 +46,6 @@
     onMount(() => {
         measureHost();
         const onResize = () => measureHost();
-        let frame = window.requestAnimationFrame(measureHost);
         let observer: ResizeObserver | null = null;
         if (typeof ResizeObserver !== "undefined" && host) {
             observer = new ResizeObserver(() => measureHost());
@@ -52,138 +53,109 @@
         }
         window.addEventListener("resize", onResize);
         return () => {
-            window.cancelAnimationFrame(frame);
             observer?.disconnect();
             window.removeEventListener("resize", onResize);
         };
     });
 
-    let safeMetrics = $derived((metrics || [])
-        .map((m: Metric) => {
-            const x = normalizeTimestamp(m?.timestamp);
-            const rawY = type === 'cpu' ? toFinite(m?.cpuPercent) : toFinite(m?.memoryUsage);
-            if (x === null || rawY === null) return null;
-            return {
-                x,
-                y: Math.max(0, rawY)
-            };
-        })
-        .filter((point): point is { x: number; y: number } => point !== null));
+    let chartWidth = $derived(Number.isFinite(hostWidth) ? Math.max(hostWidth, MIN_CHART_WIDTH) : MIN_CHART_WIDTH);
+    let innerWidth = $derived(Math.max(chartWidth - PAD_LEFT - PAD_RIGHT, 1));
+    let innerHeight = $derived(Math.max(CHART_HEIGHT - PAD_TOP - PAD_BOTTOM, 1));
+    let baselineY = $derived(PAD_TOP + innerHeight);
 
-    let series = $derived([
-        {
-            name: type === 'cpu' ? 'CPU %' : 'Memory Usage',
-            data: safeMetrics
-        }
-    ]);
-
-    let chartWidth = $derived(
-        Number.isFinite(hostWidth) ? Math.max(Math.floor(hostWidth), MIN_CHART_WIDTH) : MIN_CHART_WIDTH
+    let safeMetrics = $derived(
+        (metrics || [])
+            .map((m) => {
+                const x = normalizeTimestamp(m?.timestamp);
+                const rawY = type === "cpu" ? toFinite(m?.cpuPercent) : toFinite(m?.memoryUsage);
+                if (x === null || rawY === null) return null;
+                return { x, y: Math.max(0, rawY) };
+            })
+            .filter((point): point is { x: number; y: number } => point !== null)
+            .sort((a, b) => a.x - b.x)
     );
 
-    let canRenderChart = $derived(chartWidth >= MIN_CHART_WIDTH && safeMetrics.length > 0);
-
-    let options = $derived({
-        series: series,
-        chart: {
-            type: 'area',
-            width: chartWidth,
-            height: CHART_HEIGHT,
-            animations: { enabled: true },
-            toolbar: { show: false },
-            zoom: { enabled: false },
-            redrawOnParentResize: true,
-            background: 'transparent',
-            foreColor: '#94a3b8'
-        },
-        dataLabels: {
-            enabled: false
-        },
-        legend: {
-            show: false
-        },
-        title: {
-            text: title,
-            align: 'left',
-            style: {
-                fontSize: '12px',
-                fontWeight: '900',
-                fontFamily: 'Montserrat',
-                color: '#64748b'
-            }
-        },
-        stroke: {
-            curve: 'smooth',
-            width: 2,
-            colors: [type === 'cpu' ? '#0ea5e9' : '#8b5cf6']
-        },
-        fill: {
-            type: 'gradient',
-            gradient: {
-                shadeIntensity: 1,
-                opacityFrom: 0.45,
-                opacityTo: 0.05,
-                stops: [20, 100],
-                colorStops: [
-                    {
-                        offset: 0,
-                        color: type === 'cpu' ? '#0ea5e9' : '#8b5cf6',
-                        opacity: 0.4
-                    },
-                    {
-                        offset: 100,
-                        color: type === 'cpu' ? '#0ea5e9' : '#8b5cf6',
-                        opacity: 0
-                    }
-                ]
-            }
-        },
-        xaxis: {
-            type: 'datetime',
-            labels: {
-                datetimeUTC: false,
-                style: { fontSize: '10px' }
-            },
-            axisBorder: { show: false },
-            axisTicks: { show: false }
-        },
-        yaxis: {
-            labels: {
-                style: { fontSize: '10px' },
-                formatter: (val: number) => {
-                    const safeVal = Number.isFinite(val) ? val : 0;
-                    return type === 'cpu' ? safeVal.toFixed(1) + '%' : formatBytes(safeVal);
-                }
-            }
-        },
-        grid: {
-            borderColor: '#334155',
-            strokeDashArray: 4,
-            xaxis: { lines: { show: true } },
-            yaxis: { lines: { show: true } }
-        },
-        theme: {
-            mode: 'dark'
-        },
-        tooltip: {
-            x: { format: 'dd MMM HH:mm' },
-            theme: 'dark'
+    let bounds = $derived((() => {
+        if (safeMetrics.length === 0) {
+            const now = Date.now();
+            return { minX: now - 1, maxX: now, maxY: 1 };
         }
-    });
+        const minX = safeMetrics[0].x;
+        const maxXRaw = safeMetrics[safeMetrics.length - 1].x;
+        const maxX = maxXRaw > minX ? maxXRaw : minX + 1;
+        const observedMaxY = safeMetrics.reduce((max, p) => (p.y > max ? p.y : max), 0);
+        const normalizedMax = type === "cpu"
+            ? Math.max(100, observedMaxY * 1.1, 1)
+            : Math.max(observedMaxY * 1.1, 1);
+        return { minX, maxX, maxY: normalizedMax };
+    })());
+
+    const scaleX = (x: number): number => {
+        const ratio = (x - bounds.minX) / (bounds.maxX - bounds.minX);
+        return PAD_LEFT + Math.max(0, Math.min(1, ratio)) * innerWidth;
+    };
+
+    const scaleY = (y: number): number => {
+        const ratio = y / bounds.maxY;
+        return PAD_TOP + (1 - Math.max(0, Math.min(1, ratio))) * innerHeight;
+    };
+
+    let points = $derived(safeMetrics.map((p) => ({ x: scaleX(p.x), y: scaleY(p.y), rawX: p.x, rawY: p.y })));
+
+    let linePath = $derived(
+        points.length > 0
+            ? points.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" ")
+            : ""
+    );
+
+    let areaPath = $derived((() => {
+        if (points.length === 0) return "";
+        const first = points[0];
+        const last = points[points.length - 1];
+        return `${linePath} L ${last.x.toFixed(2)} ${baselineY.toFixed(2)} L ${first.x.toFixed(2)} ${baselineY.toFixed(2)} Z`;
+    })());
+
+    let yTickValues = $derived(Array.from({ length: 5 }, (_, idx) => bounds.maxY * (4 - idx) / 4));
+
+    const axisLabel = (value: number): string => {
+        if (type === "cpu") return `${value.toFixed(0)}%`;
+        return formatBytes(value);
+    };
+
+    const latestPoint = $derived(points.length > 0 ? points[points.length - 1] : null);
+    const latestValueLabel = $derived(latestPoint
+        ? (type === "cpu" ? `${latestPoint.rawY.toFixed(1)}%` : formatBytes(latestPoint.rawY))
+        : "No data");
 </script>
 
 <div class="w-full" bind:this={host}>
-    {#if canRenderChart}
-        {#key `${type}:${hostWidth}:${safeMetrics.length}:${safeMetrics[0]?.x ?? 0}:${safeMetrics[safeMetrics.length - 1]?.x ?? 0}`}
-            <div class="w-full h-[250px]" use:chart={options}></div>
-        {/key}
-    {:else if safeMetrics.length > 0}
-        <div class="w-full h-[250px] flex items-center justify-center text-slate-500 italic text-xs bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-            Preparing chart...
+    {#if points.length > 0}
+        <div class="w-full h-[250px] rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/35 p-2">
+            <div class="flex items-center justify-between px-2 pb-1">
+                <p class="text-[11px] font-black uppercase tracking-wider text-slate-500">{title}</p>
+                <p class="text-[10px] font-black text-slate-500">Latest: {latestValueLabel}</p>
+            </div>
+            <svg class="w-full h-[210px]" viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`} preserveAspectRatio="none" aria-label={title} role="img">
+                {#each yTickValues as tick}
+                    {@const y = scaleY(tick)}
+                    <line x1={PAD_LEFT} y1={y} x2={PAD_LEFT + innerWidth} y2={y} stroke="currentColor" stroke-opacity="0.12" stroke-width="1" class="text-slate-500" />
+                    <text x={PAD_LEFT - 6} y={y + 3} text-anchor="end" font-size="9" class="fill-slate-500 dark:fill-slate-400">{axisLabel(tick)}</text>
+                {/each}
+
+                <line x1={PAD_LEFT} y1={PAD_TOP} x2={PAD_LEFT} y2={baselineY} stroke="currentColor" stroke-opacity="0.2" class="text-slate-500" />
+                <line x1={PAD_LEFT} y1={baselineY} x2={PAD_LEFT + innerWidth} y2={baselineY} stroke="currentColor" stroke-opacity="0.2" class="text-slate-500" />
+
+                <path d={areaPath} fill={type === "cpu" ? "#0ea5e933" : "#8b5cf633"} />
+                <path d={linePath} fill="none" stroke={type === "cpu" ? "#0ea5e9" : "#8b5cf6"} stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+
+                {#if latestPoint}
+                    <circle cx={latestPoint.x} cy={latestPoint.y} r="3" fill={type === "cpu" ? "#0ea5e9" : "#8b5cf6"} />
+                {/if}
+            </svg>
         </div>
     {:else}
         <div class="w-full h-[250px] flex items-center justify-center text-slate-500 italic text-xs bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
             No telemetry data available for this window.
         </div>
     {/if}
-    </div>
+</div>
