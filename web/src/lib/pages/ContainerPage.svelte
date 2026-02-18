@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ContainerDetail, MalwareScanDetail, TrivyScanDetails } from "../api-types";
+    import type { ContainerDetail, MalwareScanDetail, TrivyScanDetails, UpdateJobStatus } from "../api-types";
     import MetricChart from "../components/MetricChart.svelte";
     import DiskUsagePanel from "../components/DiskUsagePanel.svelte";
     import MalwareScanPanel from "../components/MalwareScanPanel.svelte";
@@ -24,6 +24,9 @@
     let error = $state("");
     let scanMessage = $state("");
     let lifecycleMessage = $state("");
+    let lifecycleMode = $state<"global" | "manual">("global");
+    let updateHistory = $state<UpdateJobStatus[]>([]);
+    let loadingUpdateHistory = $state(false);
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
     let loadingVulnerabilityDetails = $state(false);
     let malwareDetails = $state<MalwareScanDetail[]>([]);
@@ -49,9 +52,11 @@
                     if (typeof data.rules.securityAutomation !== "boolean") data.rules.securityAutomation = true;
                 }
                 detail = data;
+                syncLifecycleModeFromRules();
                 await Promise.all([
                     loadVulnerabilityDetails(data?.summary?.image || ""),
-                    loadMalwareDetailsForContainer()
+                    loadMalwareDetailsForContainer(),
+                    loadUpdateHistory()
                 ]);
             } else {
                 const body = await res.json().catch(() => ({}));
@@ -60,6 +65,7 @@
                 }
                 vulnerabilityDetails = null;
                 malwareDetails = [];
+                updateHistory = [];
             }
         } catch (e) {
             if (!silent) {
@@ -67,6 +73,7 @@
             }
             vulnerabilityDetails = null;
             malwareDetails = [];
+            updateHistory = [];
         } finally {
             if (!silent) {
                 loading = false;
@@ -113,6 +120,47 @@
         }
     }
 
+    async function loadUpdateHistory() {
+        loadingUpdateHistory = true;
+        try {
+            const res = await fetch(`/api/updates/container/${id}?limit=20`);
+            if (!res.ok) {
+                updateHistory = [];
+                return;
+            }
+            const rows = await res.json();
+            updateHistory = Array.isArray(rows) ? rows : [];
+        } catch {
+            updateHistory = [];
+        } finally {
+            loadingUpdateHistory = false;
+        }
+    }
+
+    function syncLifecycleModeFromRules() {
+        lifecycleMode = detail?.rules?.inheritAutomation === false ? "manual" : "global";
+    }
+
+    function applyLifecycleModeToRules(mode: "global" | "manual") {
+        if (!detail?.rules) return;
+        lifecycleMode = mode;
+        if (mode === "global") {
+            detail.rules.inheritAutomation = true;
+            detail.rules.upgradesAutomation = true;
+            detail.rules.maintenanceAutomation = true;
+            detail.rules.securityAutomation = true;
+            if (detail.rules.updatePolicy === "locked") {
+                detail.rules.updatePolicy = "manual";
+            }
+            return;
+        }
+        detail.rules.inheritAutomation = false;
+        detail.rules.upgradesAutomation = false;
+        detail.rules.maintenanceAutomation = false;
+        detail.rules.securityAutomation = false;
+        detail.rules.updatePolicy = "manual";
+    }
+
     async function saveRules() {
         if (!detail?.rules) return;
         lifecycleMessage = "";
@@ -125,9 +173,9 @@
             });
             if (res.ok) {
                 await loadDetail(true);
-                lifecycleMessage = detail?.rules?.validateUrl
-                    ? `Validation URL in use: ${detail.rules.validateUrl}`
-                    : "Lifecycle policy updated.";
+                lifecycleMessage = lifecycleMode === "global"
+                    ? "Lifecycle mode set to global automation."
+                    : "Lifecycle mode set to manual.";
                 toasts.success("Lifecycle policy updated.");
             } else {
                 const body = await res.json().catch(() => ({}));
@@ -407,171 +455,111 @@
                     </div>
                 </div>
             {:else if activeTab === 'lifecycle'}
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-8">
-                        <div>
-                            <h3 class="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Asset Lifecycle Policy</h3>
-                            <p class="text-xs text-slate-500 mt-1">Define how HarborWatch manages updates for this specific container.</p>
-                        </div>
-                        
-                        {#if detail.rules}
-                            <div class="space-y-6">
-                                <div class="space-y-2">
-                                    <label for="policy" class="text-[10px] font-black uppercase text-slate-400 ml-1">Update Strategy</label>
-                                    <select 
-                                        id="policy"
-                                        bind:value={detail.rules.updatePolicy}
-                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-bold appearance-none cursor-pointer"
-                                    >
-                                        <option value="auto">Automatic (Apply when available)</option>
-                                        <option value="manual">Manual (Notify only)</option>
-                                        <option value="locked">Locked (Ignore updates)</option>
-                                    </select>
-                                </div>
-
-                                <div class="space-y-2">
-                                    <label for="val-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation URL</label>
-                                    <input 
-                                        id="val-url"
-                                        bind:value={detail.rules.validateUrl}
-                                        placeholder="http://localhost:8080/health"
-                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-mono"
-                                    />
-                                    <p class="text-[10px] text-slate-500">
-                                        Used during update validation. Leave empty and HarborWatch derives this from labels, healthcheck, ports, and settings pattern.
-                                    </p>
-                                </div>
-
-                                <div class="space-y-2">
-                                    <label for="val-mode" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation Mode</label>
-                                    <select
-                                        id="val-mode"
-                                        bind:value={detail.rules.validateMode}
-                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-bold appearance-none cursor-pointer"
-                                    >
-                                        <option value="both">Both (HTTP + Docker)</option>
-                                        <option value="docker">Docker Health Only</option>
-                                        <option value="http">HTTP URL Only</option>
-                                    </select>
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div class="space-y-2">
-                                        <label for="val-timeout" class="text-[10px] font-black uppercase text-slate-400 ml-1">Timeout (sec)</label>
-                                        <input
-                                            id="val-timeout"
-                                            type="number"
-                                            min="5"
-                                            max="600"
-                                            bind:value={detail.rules.validateTimeoutSec}
-                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-mono"
-                                        />
-                                    </div>
-                                    <div class="space-y-2">
-                                        <label for="val-interval" class="text-[10px] font-black uppercase text-slate-400 ml-1">Interval (sec)</label>
-                                        <input
-                                            id="val-interval"
-                                            type="number"
-                                            min="1"
-                                            max="30"
-                                            bind:value={detail.rules.validateIntervalSec}
-                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all font-mono"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                                    <div>
-                                        <span class="text-sm font-bold text-slate-700 dark:text-slate-300">Auto-Rollback</span>
-                                        <p class="text-[10px] text-slate-500 mt-0.5">Revert to last stable image if validation fails.</p>
-                                    </div>
-                                    <button 
-                                        onclick={() => detail!.rules!.autoRollback = !detail!.rules!.autoRollback}
-                                        class="w-10 h-5 rounded-full relative transition-colors {detail.rules.autoRollback ? 'bg-emerald-500' : 'bg-slate-300'}"
-                                        aria-label="Toggle Auto-Rollback"
-                                    >
-                                        <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {detail.rules.autoRollback ? 'right-1' : 'left-1'}"></div>
-                                    </button>
-                                </div>
-
-                                <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                                    <div>
-                                        <span class="text-sm font-bold text-slate-700 dark:text-slate-300">AI Log Health Assessment</span>
-                                        <p class="text-[10px] text-slate-500 mt-0.5">After validation, send recent container logs to AI and fail update if unhealthy.</p>
-                                    </div>
+                <div class="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                            <div>
+                                <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Lifecycle Controls</h3>
+                                <p class="text-[11px] text-slate-500 mt-1">Choose whether this container follows global automation policy or manual-only operation.</p>
+                            </div>
+                            {#if detail.rules}
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <button
-                                        onclick={() => detail!.rules!.aiValidateLogs = !detail!.rules!.aiValidateLogs}
-                                        class="w-10 h-5 rounded-full relative transition-colors {detail.rules.aiValidateLogs ? 'bg-brand-500' : 'bg-slate-300'}"
-                                        aria-label="Toggle AI Log Health Assessment"
+                                        onclick={() => applyLifecycleModeToRules("global")}
+                                        class="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors {lifecycleMode === 'global' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
                                     >
-                                        <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {detail.rules.aiValidateLogs ? 'right-1' : 'left-1'}"></div>
+                                        Use Global Automation
+                                    </button>
+                                    <button
+                                        onclick={() => applyLifecycleModeToRules("manual")}
+                                        class="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors {lifecycleMode === 'manual' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                    >
+                                        Manual Mode
                                     </button>
                                 </div>
-
-                                <div class="space-y-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
-                                    <div class="flex items-center justify-between">
-                                        <div>
-                                            <span class="text-sm font-bold text-slate-700 dark:text-slate-300">Inherit Global Automation</span>
-                                            <p class="text-[10px] text-slate-500 mt-0.5">Use global automation settings from Settings -> Automations.</p>
-                                        </div>
-                                        <button
-                                            onclick={() => detail!.rules!.inheritAutomation = !detail!.rules!.inheritAutomation}
-                                            class="w-10 h-5 rounded-full relative transition-colors {detail.rules.inheritAutomation ? 'bg-brand-500' : 'bg-slate-300'}"
-                                            aria-label="Toggle Inherit Global Automation"
-                                        >
-                                            <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all {detail.rules.inheritAutomation ? 'right-1' : 'left-1'}"></div>
-                                        </button>
-                                    </div>
-
-                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                        <button
-                                            onclick={() => detail!.rules!.upgradesAutomation = !detail!.rules!.upgradesAutomation}
-                                            disabled={detail.rules.inheritAutomation}
-                                            class="px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed {detail.rules.upgradesAutomation ? 'border-sky-300 text-sky-700 bg-sky-50 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-900/40' : 'border-slate-300 text-slate-500 bg-white dark:bg-slate-900/30 dark:border-slate-700'}"
-                                        >Upgrades</button>
-                                        <button
-                                            onclick={() => detail!.rules!.maintenanceAutomation = !detail!.rules!.maintenanceAutomation}
-                                            disabled={detail.rules.inheritAutomation}
-                                            class="px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed {detail.rules.maintenanceAutomation ? 'border-teal-300 text-teal-700 bg-teal-50 dark:bg-teal-900/20 dark:text-teal-300 dark:border-teal-900/40' : 'border-slate-300 text-slate-500 bg-white dark:bg-slate-900/30 dark:border-slate-700'}"
-                                        >Maintenance</button>
-                                        <button
-                                            onclick={() => detail!.rules!.securityAutomation = !detail!.rules!.securityAutomation}
-                                            disabled={detail.rules.inheritAutomation}
-                                            class="px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed {detail.rules.securityAutomation ? 'border-orange-300 text-orange-700 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-900/40' : 'border-slate-300 text-slate-500 bg-white dark:bg-slate-900/30 dark:border-slate-700'}"
-                                        >Security</button>
-                                    </div>
+                                <div class="flex flex-wrap gap-3">
+                                    <button
+                                        onclick={saveRules}
+                                        disabled={savingRules}
+                                        class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                                    >
+                                        {savingRules ? "Saving..." : "Save Lifecycle Mode"}
+                                    </button>
+                                    <button
+                                        onclick={openManualUpdate}
+                                        class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest"
+                                    >
+                                        Trigger Upgrade
+                                    </button>
                                 </div>
-
-                                <button 
-                                    onclick={saveRules}
-                                    disabled={savingRules}
-                                    class="w-full py-4 bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-500/20 hover:bg-brand-700 transition-all disabled:opacity-50"
-                                >
-                                    {savingRules ? 'Saving...' : 'Apply Policy Overrides'}
-                                </button>
                                 {#if lifecycleMessage}
-                                    <p class="text-[10px] text-slate-500">{lifecycleMessage}</p>
+                                    <p class="text-[11px] text-slate-500">{lifecycleMessage}</p>
+                                {/if}
+                            {/if}
+                        </div>
+
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Breaking Change Signals</h3>
+                            <p class="text-[11px] text-slate-500 mt-1">Recent AI release assessments that flagged breaking-change risk.</p>
+                            <div class="mt-4 space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                                {#if loadingUpdateHistory}
+                                    <p class="text-[11px] text-slate-500">Loading lifecycle history...</p>
+                                {:else}
+                                    {#each updateHistory.filter((job) => (job.aiAnalysis?.breakingChanges || []).length > 0).slice(0, 6) as job}
+                                        <div class="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-3">
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{job.targetImage}</p>
+                                            <p class="text-[10px] text-amber-700/80 dark:text-amber-200/90 mt-1">{new Date(job.updatedAt * 1000).toLocaleString()}</p>
+                                            <p class="text-[11px] text-amber-900 dark:text-amber-100 mt-2">{job.aiAnalysis?.breakingChanges?.[0]}</p>
+                                        </div>
+                                    {:else}
+                                        <p class="text-[11px] text-slate-500 italic">No recent breaking-change notices for this container.</p>
+                                    {/each}
                                 {/if}
                             </div>
-                        {/if}
+                        </div>
                     </div>
 
-                    <div class="space-y-6">
-                        <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-6 flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                                Ad-hoc Actions
-                            </h3>
-                            <div class="space-y-3">
-                                <button onclick={openManualUpdate} class="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-3">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    Execute Manual Update
-                                </button>
-                            </div>
+                    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+                            <h3 class="text-sm font-black uppercase tracking-widest text-slate-400">Lifecycle Log</h3>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                                        <th class="px-6 py-3">Target</th>
+                                        <th class="px-6 py-3">Status</th>
+                                        <th class="px-6 py-3">Risk</th>
+                                        <th class="px-6 py-3">Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                                    {#if loadingUpdateHistory}
+                                        <tr>
+                                            <td colspan="4" class="px-6 py-8 text-center text-slate-500 italic">Loading lifecycle entries...</td>
+                                        </tr>
+                                    {:else}
+                                        {#each updateHistory as job}
+                                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors align-top">
+                                                <td class="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-300 break-all">{job.targetImage}</td>
+                                                <td class="px-6 py-4">
+                                                    <span class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase {job.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : job.status === 'failed' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}">
+                                                        {job.status}
+                                                    </span>
+                                                </td>
+                                                <td class="px-6 py-4 text-[11px] text-slate-500">
+                                                    {job.aiAnalysis ? `${job.aiAnalysis.riskLevel} (${job.aiAnalysis.riskScore})` : "n/a"}
+                                                </td>
+                                                <td class="px-6 py-4 text-[11px] text-slate-500">{new Date(job.updatedAt * 1000).toLocaleString()}</td>
+                                            </tr>
+                                        {:else}
+                                            <tr>
+                                                <td colspan="4" class="px-6 py-10 text-center text-slate-400 italic">No lifecycle events recorded yet for this container.</td>
+                                            </tr>
+                                        {/each}
+                                    {/if}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

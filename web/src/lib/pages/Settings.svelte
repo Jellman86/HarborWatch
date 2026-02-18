@@ -39,6 +39,26 @@
         lastLocalUpdate?: number;
     }
 
+    interface ContainerIntelOverride {
+        containerId: string;
+        repositoryUrl?: string;
+        changelogUrl?: string;
+        updatedAt?: number;
+    }
+
+    interface ContainerIntelRecord {
+        containerId: string;
+        containerName?: string;
+        image?: string;
+        overrideRepositoryUrl?: string;
+        overrideChangelogUrl?: string;
+        derivedRepositoryUrl?: string;
+        derivedChangelogUrl?: string;
+        effectiveRepositoryUrl?: string;
+        effectiveChangelogUrl?: string;
+        updatedAt?: number;
+    }
+
     const weekdayOptions: Array<{ value: number; label: string }> = [
         { value: 0, label: "Sun" },
         { value: 1, label: "Mon" },
@@ -76,6 +96,11 @@
     let schedules = $state<Schedule[]>([]);
     let scheduleDrafts = $state<Record<string, ScheduleDraft>>({});
     let discoveredContainers = $state<ContainerSummary[]>([]);
+    let intelOverrides = $state<ContainerIntelOverride[]>([]);
+    let selectedIntelContainerId = $state("");
+    let selectedIntel = $state<ContainerIntelRecord | null>(null);
+    let intelLoading = $state(false);
+    let intelSaving = $state(false);
 
     let activeTab = $state("automations");
     let activeAutomationTab = $state<AutomationDomain>("upgrades");
@@ -233,6 +258,75 @@
 
     function sortedContainers(containers: ContainerSummary[]): ContainerSummary[] {
         return [...containers].sort((a, b) => containerDisplayName(a).localeCompare(containerDisplayName(b)));
+    }
+
+    function selectedContainerSummary(): ContainerSummary | undefined {
+        return discoveredContainers.find((container) => container.id === selectedIntelContainerId);
+    }
+
+    async function loadContainerIntelOverrides() {
+        try {
+            const res = await fetch("/api/docker/intel/overrides");
+            if (!res.ok) {
+                intelOverrides = [];
+                return;
+            }
+            intelOverrides = await res.json();
+        } catch {
+            intelOverrides = [];
+        }
+    }
+
+    async function loadContainerIntel(containerId: string) {
+        const id = String(containerId || "").trim();
+        if (!id) {
+            selectedIntel = null;
+            return;
+        }
+        intelLoading = true;
+        try {
+            const res = await fetch(`/api/docker/${encodeURIComponent(id)}/intel`);
+            if (!res.ok) throw new Error(`intel read failed (${res.status})`);
+            const payload = await res.json();
+            selectedIntel = {
+                ...payload,
+                overrideRepositoryUrl: payload?.overrideRepositoryUrl || "",
+                overrideChangelogUrl: payload?.overrideChangelogUrl || ""
+            };
+        } catch {
+            selectedIntel = null;
+        } finally {
+            intelLoading = false;
+        }
+    }
+
+    async function saveContainerIntel() {
+        const id = String(selectedIntelContainerId || "").trim();
+        if (!id || !selectedIntel) return;
+        intelSaving = true;
+        try {
+            const res = await fetch(`/api/docker/${encodeURIComponent(id)}/intel`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    repositoryUrl: selectedIntel.overrideRepositoryUrl || "",
+                    changelogUrl: selectedIntel.overrideChangelogUrl || ""
+                })
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body?.message || `intel save failed (${res.status})`);
+            selectedIntel = {
+                ...body,
+                overrideRepositoryUrl: body?.overrideRepositoryUrl || "",
+                overrideChangelogUrl: body?.overrideChangelogUrl || ""
+            };
+            await loadContainerIntelOverrides();
+            toasts.success("Container intelligence override saved.");
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "Failed to save container intelligence");
+        } finally {
+            intelSaving = false;
+        }
     }
 
     function scheduleById(id: string): Schedule | undefined {
@@ -463,12 +557,21 @@
             const res = await fetch("/api/docker/containers");
             if (!res.ok) {
                 discoveredContainers = [];
+                selectedIntelContainerId = "";
+                selectedIntel = null;
                 return;
             }
             const data = await res.json();
             discoveredContainers = sortedContainers(Array.isArray(data) ? data : []);
+            if (!selectedIntelContainerId && discoveredContainers.length > 0) {
+                selectedIntelContainerId = discoveredContainers[0].id;
+            } else if (selectedIntelContainerId && !discoveredContainers.some((c) => c.id === selectedIntelContainerId)) {
+                selectedIntelContainerId = discoveredContainers[0]?.id || "";
+            }
         } catch {
             discoveredContainers = [];
+            selectedIntelContainerId = "";
+            selectedIntel = null;
         }
     }
 
@@ -488,7 +591,16 @@
     async function loadAll() {
         loading = true;
         try {
-            await Promise.all([loadSettings(), loadSchedules(), loadClamAVStatus(), loadContainersForExclusions()]);
+            await Promise.all([
+                loadSettings(),
+                loadSchedules(),
+                loadClamAVStatus(),
+                loadContainersForExclusions(),
+                loadContainerIntelOverrides()
+            ]);
+            if (selectedIntelContainerId) {
+                await loadContainerIntel(selectedIntelContainerId);
+            }
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to load settings");
         } finally {
@@ -652,6 +764,15 @@
         document.documentElement.classList.toggle("no-motion", !settings.uiAnimationsEnabled);
     });
 
+    $effect(() => {
+        const id = selectedIntelContainerId;
+        if (!id) {
+            selectedIntel = null;
+            return;
+        }
+        void loadContainerIntel(id);
+    });
+
     onMount(() => {
         loadAll();
     });
@@ -675,6 +796,7 @@
     <div class="flex flex-wrap gap-2 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
         {#each [
             { id: "automations", label: "Automations" },
+            { id: "containers", label: "Containers" },
             { id: "ai", label: "AI" },
             { id: "integrations", label: "Integrations" },
             { id: "system", label: "System" },
@@ -903,6 +1025,93 @@
                     </div>
                 </div>
 
+            </div>
+
+        {:else if activeTab === "containers"}
+            <div class="p-6 md:p-8 space-y-6">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Container Intelligence</p>
+                    <p class="text-[11px] text-slate-500 mt-1">
+                        Override repository and changelog URLs only when labels are missing or inaccurate. Effective values are used during update risk analysis.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+                    <div class="xl:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 max-h-[420px] overflow-y-auto">
+                        {#if discoveredContainers.length === 0}
+                            <p class="text-[11px] text-slate-500 italic">No containers discovered.</p>
+                        {:else}
+                            {#each discoveredContainers as container}
+                                {@const selected = container.id === selectedIntelContainerId}
+                                {@const override = intelOverrides.find((item) => item.containerId === container.id)}
+                                <button
+                                    onclick={() => selectedIntelContainerId = container.id}
+                                    class="w-full text-left px-3 py-2 rounded-xl border mb-2 last:mb-0 transition-colors {selected ? 'border-brand-300 bg-brand-50 dark:bg-brand-900/20 dark:border-brand-900/40' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 hover:bg-slate-100 dark:hover:bg-slate-800/50'}"
+                                >
+                                    <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
+                                    <p class="text-[10px] text-slate-500 truncate">{container.image}</p>
+                                    <p class="text-[10px] mt-1 font-bold {override ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}">
+                                        {override ? "Manual override configured" : "Using derived metadata"}
+                                    </p>
+                                </button>
+                            {/each}
+                        {/if}
+                    </div>
+
+                    <div class="xl:col-span-3 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+                        {#if !selectedIntelContainerId}
+                            <p class="text-sm text-slate-500">Select a container to manage metadata intelligence.</p>
+                        {:else if intelLoading}
+                            <p class="text-sm text-slate-500">Loading container metadata...</p>
+                        {:else if selectedIntel}
+                            <div>
+                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">{selectedIntel.containerName || selectedContainerSummary()?.names?.[0]?.replace(/^\//, "") || selectedIntelContainerId.slice(0, 12)}</p>
+                                <p class="text-[11px] text-slate-500 font-mono mt-1 break-all">{selectedIntel.image || selectedContainerSummary()?.image || ""}</p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <label for="intel-repo" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Repository URL Override</label>
+                                <input
+                                    id="intel-repo"
+                                    type="url"
+                                    bind:value={selectedIntel.overrideRepositoryUrl}
+                                    placeholder="https://github.com/org/repo"
+                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                />
+                                <p class="text-[11px] text-slate-500">Derived: {selectedIntel.derivedRepositoryUrl || "None"}</p>
+                                <p class="text-[11px] text-slate-500">Effective: <span class="font-bold break-all">{selectedIntel.effectiveRepositoryUrl || "None"}</span></p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <label for="intel-changelog" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Changelog URL Override</label>
+                                <input
+                                    id="intel-changelog"
+                                    type="url"
+                                    bind:value={selectedIntel.overrideChangelogUrl}
+                                    placeholder="https://github.com/org/repo/releases"
+                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                />
+                                <p class="text-[11px] text-slate-500">Derived: {selectedIntel.derivedChangelogUrl || "None"}</p>
+                                <p class="text-[11px] text-slate-500">Effective: <span class="font-bold break-all">{selectedIntel.effectiveChangelogUrl || "None"}</span></p>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-3">
+                                <p class="text-[11px] text-slate-500">
+                                    Last override update: {selectedIntel.updatedAt ? new Date(selectedIntel.updatedAt * 1000).toLocaleString() : "Never"}
+                                </p>
+                                <button
+                                    onclick={saveContainerIntel}
+                                    disabled={intelSaving}
+                                    class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                                >
+                                    {intelSaving ? "Saving..." : "Save Override"}
+                                </button>
+                            </div>
+                        {:else}
+                            <p class="text-sm text-slate-500">Container intelligence is unavailable for this selection.</p>
+                        {/if}
+                    </div>
+                </div>
             </div>
 
         {:else if activeTab === "ai"}
