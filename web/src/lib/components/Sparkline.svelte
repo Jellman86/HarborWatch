@@ -66,12 +66,12 @@
 </script>
 
 {#if points.length > 0}
-    <svg class="w-[100px] h-[30px]" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" role="img" aria-label="CPU sparkline">
+    <svg class="w-full h-[30px]" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" role="img" aria-label="CPU sparkline">
         <path d={areaPath} fill="#0ea5e933" />
         <path d={linePath} fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
 {:else}
-    <div class="w-[100px] h-[30px] flex items-center justify-center opacity-20 scale-75">
+    <div class="w-full h-[30px] flex items-center justify-center opacity-20 scale-75">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>

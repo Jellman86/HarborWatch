@@ -451,6 +451,11 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			}), true); err != nil && diagService != nil {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_check: %v", err))
 			}
+			refreshUpdateStatus := func(ctx context.Context) error {
+				return dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
+					return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_check")
+				}).Run(ctx)
+			}
 
 			schedSvc.RegisterTask("container_update_apply", func() scheduler.Task {
 				return newAutomatedUpdateApplyTask(
@@ -464,6 +469,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 					func(ctx context.Context, containerID string) bool {
 						return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_apply")
 					},
+					refreshUpdateStatus,
 				)
 			})
 			if err := schedSvc.AddTask("0 10 * * * *", newAutomatedUpdateApplyTask(
@@ -477,6 +483,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				func(ctx context.Context, containerID string) bool {
 					return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_apply")
 				},
+				refreshUpdateStatus,
 			), false); err != nil && diagService != nil {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_apply: %v", err))
 			}
@@ -515,11 +522,11 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
 					return scheduler.NewTrivySweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
 						return containerAutomationEnabled(ctx, containerID, "security", "security_sweep_trivy")
-					})
+					}).WithLogger(diagService)
 				})
 				if err := schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
 					return containerAutomationEnabled(ctx, containerID, "security", "security_sweep_trivy")
-				}), true); err != nil && diagService != nil {
+				}).WithLogger(diagService), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task security_sweep_trivy: %v", err))
 				}
 
@@ -528,13 +535,13 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 						return containerAutomationEnabled(ctx, containerID, "security", "malware_sweep_clamav")
 					}).WithMountPolicy(func(ctx context.Context, containerID, sourcePath string) bool {
 						return allowMalwareMountScan(ctx, containerID, sourcePath)
-					})
+					}).WithLogger(diagService)
 				})
 				if err := schedSvc.AddTask("0 0 4 * * 0", scheduler.NewClamAVSweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
 					return containerAutomationEnabled(ctx, containerID, "security", "malware_sweep_clamav")
 				}).WithMountPolicy(func(ctx context.Context, containerID, sourcePath string) bool {
 					return allowMalwareMountScan(ctx, containerID, sourcePath)
-				}), true); err != nil && diagService != nil {
+				}).WithLogger(diagService), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task malware_sweep_clamav: %v", err))
 				}
 

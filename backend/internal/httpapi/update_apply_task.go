@@ -22,6 +22,7 @@ type automatedUpdateApplyTask struct {
 	releaseService        ReleaseService
 	diagService           DiagService
 	allow                 func(ctx context.Context, containerID string) bool
+	refreshUpdates        func(ctx context.Context) error
 	defaultMaxPerRun      int
 	defaultMinRetryWindow time.Duration
 }
@@ -35,6 +36,7 @@ func newAutomatedUpdateApplyTask(
 	releaseService ReleaseService,
 	diagService DiagService,
 	allow func(ctx context.Context, containerID string) bool,
+	refreshUpdates func(ctx context.Context) error,
 ) scheduler.Task {
 	return &automatedUpdateApplyTask{
 		dockerClient:          dockerClient,
@@ -45,6 +47,7 @@ func newAutomatedUpdateApplyTask(
 		releaseService:        releaseService,
 		diagService:           diagService,
 		allow:                 allow,
+		refreshUpdates:        refreshUpdates,
 		defaultMaxPerRun:      envIntWithBounds("HW_AUTO_UPGRADE_MAX_CONCURRENCY", 1, 1, 20),
 		defaultMinRetryWindow: time.Duration(envIntWithBounds("HW_AUTO_UPGRADE_MIN_RETRY_MINUTES", 60, 1, 24*60)) * time.Minute,
 	}
@@ -57,6 +60,16 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 		return nil
 	}
 	maxPerRun, minRetryWindow := t.loadRunConfig(ctx)
+	if t.refreshUpdates != nil {
+		refreshCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		err := t.refreshUpdates(refreshCtx)
+		cancel()
+		if err != nil {
+			t.log("WARN", fmt.Sprintf("Auto-apply preflight update refresh failed: %v", err))
+		} else {
+			t.log("INFO", "Auto-apply preflight update refresh completed")
+		}
+	}
 
 	containersCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	containers, err := t.dockerClient.ListContainers(containersCtx)
@@ -65,6 +78,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 		return fmt.Errorf("list containers for auto-apply: %w", err)
 	}
 
+	inspectable := 0
 	started := 0
 	skipped := 0
 	for _, summary := range containers {
@@ -74,6 +88,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 		if strings.TrimSpace(summary.ID) == "" || !summary.UpdateAvailable {
 			continue
 		}
+		inspectable++
 		if t.allow != nil && !t.allow(ctx, summary.ID) {
 			skipped++
 			continue
@@ -127,7 +142,11 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 		t.log("INFO", fmt.Sprintf("Auto-apply started for %s (job=%s, image=%s)", containerLabel(built.Summary), resp.JobID, built.Request.TargetImage))
 	}
 
-	t.log("INFO", fmt.Sprintf("Auto-apply cycle completed: started=%d skipped=%d", started, skipped))
+	if inspectable == 0 {
+		t.log("INFO", "Auto-apply cycle completed: no update candidates available")
+		return nil
+	}
+	t.log("INFO", fmt.Sprintf("Auto-apply cycle completed: candidates=%d started=%d skipped=%d", inspectable, started, skipped))
 	return nil
 }
 

@@ -16,6 +16,7 @@ import (
 type ScannerService interface {
 	StartScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
+	StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
 	UpdateClamAVSignatures(ctx context.Context) (string, error)
 }
 
@@ -73,6 +74,7 @@ type TrivySweepTask struct {
 	docker  *client.Client
 	scanner ScannerService
 	allow   ContainerAutomationPolicy
+	logger  Logger
 }
 
 func NewTrivySweepTask(cli *client.Client, s ScannerService, allow ...ContainerAutomationPolicy) *TrivySweepTask {
@@ -85,13 +87,27 @@ func NewTrivySweepTask(cli *client.Client, s ScannerService, allow ...ContainerA
 
 func (t *TrivySweepTask) Name() string { return "security_sweep_trivy" }
 
+func (t *TrivySweepTask) WithLogger(logger Logger) *TrivySweepTask {
+	t.logger = logger
+	return t
+}
+
+func (t *TrivySweepTask) log(level, message string) {
+	log.Printf("%s", message)
+	if t.logger != nil {
+		t.logger.Log(level, "Scheduler", message)
+	}
+}
+
 func (t *TrivySweepTask) Run(ctx context.Context) error {
+	t.log("INFO", "Starting Trivy security sweep task...")
 	containers, err := t.docker.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
 		return err
 	}
 
 	seenImages := make(map[string]struct{}, len(containers))
+	queued := 0
 	for _, c := range containers {
 		if t.allow != nil && !t.allow(ctx, c.ID) {
 			continue
@@ -105,11 +121,14 @@ func (t *TrivySweepTask) Run(ctx context.Context) error {
 		}
 		seenImages[image] = struct{}{}
 
-		log.Printf("Automated Security Sweep: Triggering Trivy scan for %s", image)
+		t.log("INFO", fmt.Sprintf("Queueing Trivy scan for %s", image))
 		if _, err := t.scanner.StartScan(image); err != nil {
-			log.Printf("ERROR: Failed to start automated Trivy scan for %s: %v", image, err)
+			t.log("ERROR", fmt.Sprintf("Failed to queue Trivy scan for %s: %v", image, err))
+			continue
 		}
+		queued++
 	}
+	t.log("INFO", fmt.Sprintf("Trivy security sweep queued %d image scans", queued))
 	return nil
 }
 
@@ -119,6 +138,7 @@ type ClamAVSweepTask struct {
 	scanner    ScannerService
 	allow      ContainerAutomationPolicy
 	allowMount MalwareMountPolicy
+	logger     Logger
 }
 
 func NewClamAVSweepTask(cli *client.Client, s ScannerService, allow ...ContainerAutomationPolicy) *ClamAVSweepTask {
@@ -134,23 +154,40 @@ func (t *ClamAVSweepTask) WithMountPolicy(policy MalwareMountPolicy) *ClamAVSwee
 	return t
 }
 
+func (t *ClamAVSweepTask) WithLogger(logger Logger) *ClamAVSweepTask {
+	t.logger = logger
+	return t
+}
+
 func (t *ClamAVSweepTask) Name() string { return "malware_sweep_clamav" }
 
+func (t *ClamAVSweepTask) log(level, message string) {
+	log.Printf("%s", message)
+	if t.logger != nil {
+		t.logger.Log(level, "Scheduler", message)
+	}
+}
+
 func (t *ClamAVSweepTask) Run(ctx context.Context) error {
+	t.log("INFO", "Starting ClamAV malware sweep task...")
 	containers, err := t.docker.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
 		return err
 	}
 
-	// Track paths to avoid duplicate scanning of the same host volume
-	seenPaths := make(map[string]bool)
+	queued := 0
+	skippedPolicy := 0
+	skippedMount := 0
+	queueErrors := 0
 
 	for _, c := range containers {
 		if t.allow != nil && !t.allow(ctx, c.ID) {
+			skippedPolicy++
 			continue
 		}
 		inspect, err := t.docker.ContainerInspect(ctx, c.ID)
 		if err != nil {
+			t.log("WARN", fmt.Sprintf("Skipping ClamAV sweep for %s: inspect failed: %v", c.ID, err))
 			continue
 		}
 
@@ -160,17 +197,24 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 				continue
 			}
 			if t.allowMount != nil && !t.allowMount(ctx, c.ID, source) {
+				skippedMount++
 				continue
 			}
-			if !seenPaths[source] {
-				log.Printf("Automated Security Sweep: Triggering ClamAV scan for path %s", source)
-				if _, err := t.scanner.StartMalwareScan(source); err != nil {
-					log.Printf("ERROR: Failed to start automated ClamAV scan for %s: %v", source, err)
-				}
-				seenPaths[source] = true
+			dest := strings.TrimSpace(m.Destination)
+			if dest == "" {
+				dest = source
 			}
+			targetLabel := fmt.Sprintf("container:%s:mount:%s", strings.TrimSpace(c.ID), dest)
+			t.log("INFO", fmt.Sprintf("Queueing ClamAV scan for %s (source=%s)", targetLabel, source))
+			if _, err := t.scanner.StartMalwareScanPath(targetLabel, source, false); err != nil {
+				queueErrors++
+				t.log("ERROR", fmt.Sprintf("Failed to queue ClamAV scan for %s: %v", targetLabel, err))
+				continue
+			}
+			queued++
 		}
 	}
+	t.log("INFO", fmt.Sprintf("ClamAV malware sweep queued=%d skipped_policy=%d skipped_mount=%d queue_errors=%d", queued, skippedPolicy, skippedMount, queueErrors))
 	return nil
 }
 

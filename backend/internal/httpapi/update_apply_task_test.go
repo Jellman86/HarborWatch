@@ -126,6 +126,7 @@ func TestAutomatedUpdateApplyTask_StartsAutoContainersWithUpdates(t *testing.T) 
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	if err := task.Run(context.Background()); err != nil {
@@ -176,6 +177,7 @@ func TestAutomatedUpdateApplyTask_SkipsWhenJobAlreadyRunning(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	if err := task.Run(context.Background()); err != nil {
@@ -183,5 +185,47 @@ func TestAutomatedUpdateApplyTask_SkipsWhenJobAlreadyRunning(t *testing.T) {
 	}
 	if len(updateSvc.started) != 0 {
 		t.Fatalf("expected running container to be skipped, got %d starts", len(updateSvc.started))
+	}
+}
+
+func TestAutomatedUpdateApplyTask_RefreshesUpdateStatusBeforeApply(t *testing.T) {
+	container := gen.ContainerSummary{
+		ID:              "c-refresh",
+		Names:           []string{"/refresh"},
+		Image:           "ghcr.io/example/refresh:v1",
+		UpdateAvailable: true,
+	}
+	dockerClient := autoTaskDockerClient{
+		containers: []gen.ContainerSummary{container},
+		byID:       map[string]gen.ContainerSummary{container.ID: container},
+	}
+	updateSvc := &recordingUpdateService{}
+	refreshed := false
+	task := newAutomatedUpdateApplyTask(
+		dockerClient,
+		updateSvc,
+		testRulesService{rule: rules.ContainerRules{
+			UpdatePolicy: "auto",
+			ValidateURL:  "http://localhost:8080/health",
+		}},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		func(ctx context.Context) error {
+			refreshed = true
+			return nil
+		},
+	)
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run task: %v", err)
+	}
+	if !refreshed {
+		t.Fatalf("expected update refresh callback to run before auto-apply")
+	}
+	if len(updateSvc.started) != 1 {
+		t.Fatalf("expected one auto-started update, got %d", len(updateSvc.started))
 	}
 }

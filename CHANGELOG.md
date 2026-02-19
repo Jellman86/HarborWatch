@@ -2,6 +2,26 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.19] - 2026-02-19
+
+### Fixed
+- **Auto-Apply Reliability After Manual Update Checks:**
+  - `container_update_apply` now performs an update-status refresh preflight before evaluating candidates, reducing stale `updateAvailable` races when operators run check/apply tasks back-to-back.
+  - Added clearer auto-apply cycle diagnostics when no candidates are available versus candidates skipped by policy/cooldown.
+- **Scheduled ClamAV Sweep Visibility + Result Attribution:**
+  - Scheduled ClamAV sweeps now emit explicit scheduler telemetry (`start`, per-target queue, and run summary counts) into diagnostics logs.
+  - Scheduled ClamAV scans now use container-scoped targets (`container:<id>:mount:<path>`) so results appear in container security history views rather than only path-level records.
+
+### Changed
+- **Fleet Inventory Card-First UX:**
+  - Removed list-mode fleet rendering and standardized on card view for a simpler operator workflow.
+  - Reworked card content to prioritize meaningful telemetry at a glance (state, update signal, CPU trend, current CPU, memory, PID count) with direct drill-down via `Manage`.
+  - Sparkline rendering now uses full available card width (instead of fixed 100px), fixing truncated trend visuals.
+
+### Tests
+- `go test ./...` (backend)
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.18] - 2026-02-18
 
 ### Fixed
