@@ -25,6 +25,7 @@ ENV PORT=8000
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    docker.io \
     gnupg \
     lsb-release \
     clamav \

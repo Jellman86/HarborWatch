@@ -67,8 +67,8 @@
 
 {#if points.length > 0}
     <svg class="w-full h-[30px]" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" role="img" aria-label="CPU sparkline">
-        <path d={areaPath} fill="#0ea5e933" />
-        <path d={linePath} fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <path d={areaPath} fill="#0ea5e920" />
+        <path d={linePath} fill="none" stroke="#0ea5e9" stroke-width="1.25" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
 {:else}
     <div class="w-full h-[30px] flex items-center justify-center opacity-20 scale-75">
