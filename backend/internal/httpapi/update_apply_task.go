@@ -137,8 +137,8 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 		if !canStart {
 			skipped++
 			if reason != "" {
-				if strings.Contains(strings.ToLower(reason), "already running") {
-					skipReasons["already_running"]++
+				if strings.Contains(strings.ToLower(reason), "update job") && strings.Contains(strings.ToLower(reason), "running") {
+					skipReasons["update_job_running"]++
 				} else if strings.Contains(strings.ToLower(reason), "retry cooldown") {
 					skipReasons["retry_cooldown"]++
 				} else {
@@ -191,7 +191,7 @@ func (t *automatedUpdateApplyTask) canStartUpdate(ctx context.Context, container
 	last := runs[0]
 	status := strings.ToLower(strings.TrimSpace(last.Status))
 	if status == "running" {
-		return false, "an update job is already running"
+		return false, "an update job for this container is already running"
 	}
 	if (status == "failed" || status == "rolled_back") && minRetryWindow > 0 {
 		lastUpdated := time.Unix(last.UpdatedAt, 0)

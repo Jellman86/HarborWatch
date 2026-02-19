@@ -186,6 +186,18 @@ func TestAutomatedUpdateApplyTask_SkipsWhenJobAlreadyRunning(t *testing.T) {
 	if len(updateSvc.started) != 0 {
 		t.Fatalf("expected running container to be skipped, got %d starts", len(updateSvc.started))
 	}
+
+	autoTask, ok := task.(*automatedUpdateApplyTask)
+	if !ok {
+		t.Fatalf("expected concrete automatedUpdateApplyTask")
+	}
+	canStart, reason := autoTask.canStartUpdate(context.Background(), container.ID, time.Minute)
+	if canStart {
+		t.Fatalf("expected canStartUpdate to block when an update job is already running")
+	}
+	if !strings.Contains(strings.ToLower(reason), "update job") {
+		t.Fatalf("expected explicit update-job reason, got %q", reason)
+	}
 }
 
 func TestAutomatedUpdateApplyTask_RefreshesUpdateStatusBeforeApply(t *testing.T) {
