@@ -136,8 +136,15 @@ func (s *Store) MalwareSummaries(ctx context.Context, target string) ([]gen.Malw
 }
 
 func (s *Store) MalwareSummariesByPrefix(ctx context.Context, prefix string) ([]gen.MalwareScanSummary, error) {
-	query := `SELECT target, source, scanned_at, infected, threats_found FROM malware_scan_results WHERE target LIKE ? ORDER BY scanned_at DESC`
-	rows, err := s.db.QueryContext(ctx, query, prefix+":%")
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return []gen.MalwareScanSummary{}, nil
+	}
+	query := `SELECT target, source, scanned_at, infected, threats_found
+FROM malware_scan_results
+WHERE target = ? OR target LIKE ? OR target LIKE ?
+ORDER BY scanned_at DESC`
+	rows, err := s.db.QueryContext(ctx, query, prefix, prefix+":%", prefix+"%:%")
 	if err != nil {
 		return nil, fmt.Errorf("query malware summaries by prefix: %w", err)
 	}
@@ -176,8 +183,8 @@ func (s *Store) MalwareDetails(ctx context.Context, target, prefix string, limit
 		args = append(args, target)
 	}
 	if prefix != "" {
-		clauses = append(clauses, "target LIKE ?")
-		args = append(args, prefix+":%")
+		clauses = append(clauses, "(target = ? OR target LIKE ? OR target LIKE ?)")
+		args = append(args, prefix, prefix+":%", prefix+"%:%")
 	}
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")

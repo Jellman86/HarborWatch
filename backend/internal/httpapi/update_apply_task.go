@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -81,6 +82,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 	inspectable := 0
 	started := 0
 	skipped := 0
+	skipReasons := map[string]int{}
 	for _, summary := range containers {
 		if maxPerRun > 0 && started >= maxPerRun {
 			break
@@ -91,6 +93,8 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 		inspectable++
 		if t.allow != nil && !t.allow(ctx, summary.ID) {
 			skipped++
+			skipReasons["global_exclusion"]++
+			t.log("INFO", fmt.Sprintf("Auto-apply skipped for %s: globally excluded from automations", containerLabel(summary)))
 			continue
 		}
 
@@ -114,9 +118,16 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 			switch {
 			case errors.Is(err, ErrUpdatePolicyLocked), errors.Is(err, ErrUpdatePolicyNotAuto):
 				skipped++
+				if errors.Is(err, ErrUpdatePolicyLocked) {
+					skipReasons["policy_locked"]++
+				} else {
+					skipReasons["policy_manual"]++
+				}
+				t.log("INFO", fmt.Sprintf("Auto-apply skipped for %s: %v", containerLabel(summary), err))
 				continue
 			default:
 				skipped++
+				skipReasons["request_build_failed"]++
 				t.log("WARN", fmt.Sprintf("Auto-apply skipped for %s: %v", containerLabel(summary), err))
 				continue
 			}
@@ -126,7 +137,16 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 		if !canStart {
 			skipped++
 			if reason != "" {
+				if strings.Contains(strings.ToLower(reason), "already running") {
+					skipReasons["already_running"]++
+				} else if strings.Contains(strings.ToLower(reason), "retry cooldown") {
+					skipReasons["retry_cooldown"]++
+				} else {
+					skipReasons["gated"]++
+				}
 				t.log("INFO", fmt.Sprintf("Auto-apply skipped for %s: %s", containerLabel(built.Summary), reason))
+			} else {
+				skipReasons["gated"]++
 			}
 			continue
 		}
@@ -134,6 +154,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 		resp, err := t.updateService.StartUpdate(built.Request)
 		if err != nil {
 			skipped++
+			skipReasons["start_failed"]++
 			t.log("ERROR", fmt.Sprintf("Auto-apply failed to start for %s: %v", containerLabel(built.Summary), err))
 			continue
 		}
@@ -144,6 +165,16 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 
 	if inspectable == 0 {
 		t.log("INFO", "Auto-apply cycle completed: no update candidates available")
+		return nil
+	}
+	if skipped > 0 {
+		t.log("INFO", fmt.Sprintf(
+			"Auto-apply cycle completed: candidates=%d started=%d skipped=%d skip_reasons=%s",
+			inspectable,
+			started,
+			skipped,
+			formatSkipReasonSummary(skipReasons),
+		))
 		return nil
 	}
 	t.log("INFO", fmt.Sprintf("Auto-apply cycle completed: candidates=%d started=%d skipped=%d", inspectable, started, skipped))
@@ -233,4 +264,26 @@ func envIntWithBounds(key string, fallback, minValue, maxValue int) int {
 		return maxValue
 	}
 	return parsed
+}
+
+func formatSkipReasonSummary(reasons map[string]int) string {
+	if len(reasons) == 0 {
+		return "none"
+	}
+	keys := make([]string, 0, len(reasons))
+	for key, count := range reasons {
+		if count <= 0 {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	if len(keys) == 0 {
+		return "none"
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%d", key, reasons[key]))
+	}
+	return strings.Join(parts, ",")
 }

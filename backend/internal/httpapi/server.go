@@ -1119,16 +1119,24 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				}
 				containerID := chi.URLParam(r, "id")
 				ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-				_, err := dockerClient.GetContainer(ctx, containerID)
+				container, err := dockerClient.GetContainer(ctx, containerID)
 				cancel()
 				if err != nil {
 					writeError(w, http.StatusNotFound, "container_not_found", err.Error())
 					return
 				}
-				go triggerContainerMalwareScans(containerID, scanService, settingsService, diagService)
+				canonicalID := strings.TrimSpace(container.ID)
+				if canonicalID == "" {
+					canonicalID = strings.TrimSpace(containerID)
+				}
+				if canonicalID == "" {
+					writeError(w, http.StatusBadRequest, "invalid_request", "container id is required")
+					return
+				}
+				go triggerContainerMalwareScans(canonicalID, scanService, settingsService, diagService)
 				writeJSON(w, http.StatusAccepted, map[string]string{
 					"status":      "queued",
-					"containerId": containerID,
+					"containerId": canonicalID,
 				})
 			})
 
@@ -1141,6 +1149,15 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				if containerID == "" {
 					writeError(w, http.StatusBadRequest, "invalid_request", "container id is required")
 					return
+				}
+				if dockerClient != nil {
+					resolveCtx, resolveCancel := context.WithTimeout(r.Context(), 3*time.Second)
+					if container, err := dockerClient.GetContainer(resolveCtx, containerID); err == nil {
+						if canonicalID := strings.TrimSpace(container.ID); canonicalID != "" {
+							containerID = canonicalID
+						}
+					}
+					resolveCancel()
 				}
 				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 				defer cancel()

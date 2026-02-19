@@ -148,3 +148,12 @@ func TestUpdateTaskScheduleRebindsEnabledTask(t *testing.T) {
 		t.Fatalf("expected updated cron spec, got %q", entry.CronSpec)
 	}
 }
+
+func TestShouldLogTaskLifecycle(t *testing.T) {
+	if shouldLogTaskLifecycle("metrics_collector") {
+		t.Fatalf("expected metrics_collector lifecycle logs to be suppressed")
+	}
+	if !shouldLogTaskLifecycle("docker_system_prune") {
+		t.Fatalf("expected non-noisy task lifecycle logs to remain enabled")
+	}
+}

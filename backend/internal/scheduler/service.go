@@ -192,16 +192,29 @@ func validateCronSpec(spec string) error {
 
 func (s *Service) scheduleTask(name, spec string, task Task) (cron.EntryID, error) {
 	return s.cron.AddFunc(spec, func() {
-		s.log("INFO", fmt.Sprintf("Executing scheduled task: %s", name))
+		if shouldLogTaskLifecycle(name) {
+			s.log("INFO", fmt.Sprintf("Executing scheduled task: %s", name))
+		}
 		if err := task.Run(context.Background()); err != nil {
 			s.log("ERROR", fmt.Sprintf("Error executing task %s: %v", name, err))
 		} else {
-			s.log("INFO", fmt.Sprintf("Scheduled task completed: %s", name))
+			if shouldLogTaskLifecycle(name) {
+				s.log("INFO", fmt.Sprintf("Scheduled task completed: %s", name))
+			}
 		}
 		if s.store != nil {
 			_ = s.store.UpdateLastRun(context.Background(), name, time.Now().Unix())
 		}
 	})
+}
+
+func shouldLogTaskLifecycle(taskName string) bool {
+	switch strings.ToLower(strings.TrimSpace(taskName)) {
+	case "metrics_collector":
+		return false
+	default:
+		return true
+	}
 }
 
 func (s *Service) RemoveTask(name string) {

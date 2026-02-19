@@ -229,3 +229,15 @@ func TestAutomatedUpdateApplyTask_RefreshesUpdateStatusBeforeApply(t *testing.T)
 		t.Fatalf("expected one auto-started update, got %d", len(updateSvc.started))
 	}
 }
+
+func TestFormatSkipReasonSummary_Deterministic(t *testing.T) {
+	got := formatSkipReasonSummary(map[string]int{
+		"retry_cooldown": 2,
+		"policy_manual":  1,
+		"start_failed":   0,
+	})
+	want := "policy_manual=1,retry_cooldown=2"
+	if got != want {
+		t.Fatalf("unexpected summary: got %q want %q", got, want)
+	}
+}
