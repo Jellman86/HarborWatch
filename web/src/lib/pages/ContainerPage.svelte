@@ -63,6 +63,10 @@
     let loadingIntel = $state(false);
     let savingIntel = $state(false);
 
+    function activeContainerId(): string {
+        return String(detail?.summary?.id || id || "").trim();
+    }
+
     async function loadDetail(silent = false) {
         if (!silent) {
             loading = true;
@@ -152,9 +156,14 @@
     }
 
     async function loadMalwareDetailsForContainer() {
+        const containerId = activeContainerId();
+        if (!containerId) {
+            malwareDetails = [];
+            return;
+        }
         loadingMalwareDetails = true;
         try {
-            const prefix = `container:${id}`;
+            const prefix = `container:${containerId}`;
             const res = await fetch(`/api/scans/malware/details?prefix=${encodeURIComponent(prefix)}&limit=40`);
             if (!res.ok) {
                 malwareDetails = [];
@@ -170,8 +179,13 @@
     }
 
     async function loadMalwareSummaryForContainer() {
+        const containerId = activeContainerId();
+        if (!containerId) {
+            if (detail) detail.malwareSummary = [];
+            return;
+        }
         try {
-            const res = await fetch(`/api/scans/malware/container/${id}/summary`);
+            const res = await fetch(`/api/scans/malware/container/${encodeURIComponent(containerId)}/summary`);
             if (!res.ok) {
                 if (detail) detail.malwareSummary = [];
                 return;
@@ -186,8 +200,13 @@
     }
 
     async function loadMalwareJobsForContainer() {
+        const containerId = activeContainerId();
+        if (!containerId) {
+            malwareJobs = [];
+            return;
+        }
         try {
-            const prefix = `container:${id}`;
+            const prefix = `container:${containerId}`;
             const res = await fetch(`/api/scans/jobs?type=malware&prefix=${encodeURIComponent(prefix)}&limit=20`);
             if (!res.ok) {
                 malwareJobs = [];
@@ -201,9 +220,14 @@
     }
 
     async function loadUpdateHistory() {
+        const containerId = activeContainerId();
+        if (!containerId) {
+            updateHistory = [];
+            return;
+        }
         loadingUpdateHistory = true;
         try {
-            const res = await fetch(`/api/updates/container/${id}?limit=20`);
+            const res = await fetch(`/api/updates/container/${encodeURIComponent(containerId)}?limit=20`);
             if (!res.ok) {
                 updateHistory = [];
                 return;
@@ -218,9 +242,14 @@
     }
 
     async function loadContainerIntel() {
+        const containerId = activeContainerId();
+        if (!containerId) {
+            intel = null;
+            return;
+        }
         loadingIntel = true;
         try {
-            const res = await fetch(`/api/docker/${encodeURIComponent(id)}/intel`);
+            const res = await fetch(`/api/docker/${encodeURIComponent(containerId)}/intel`);
             if (!res.ok) {
                 intel = null;
                 return;
@@ -240,9 +269,11 @@
 
     async function saveContainerIntel() {
         if (!intel) return;
+        const containerId = activeContainerId();
+        if (!containerId) return;
         savingIntel = true;
         try {
-            const res = await fetch(`/api/docker/${encodeURIComponent(id)}/intel`, {
+            const res = await fetch(`/api/docker/${encodeURIComponent(containerId)}/intel`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -302,13 +333,15 @@
 
     async function saveRules() {
         if (!detail?.rules) return;
+        const containerId = activeContainerId();
+        if (!containerId) return;
         if (lifecycleMode === "manual" && detail.rules.updatePolicy === "auto") {
             detail.rules.updatePolicy = "manual";
         }
         lifecycleMessage = "";
         savingRules = true;
         try {
-            const res = await fetch(`/api/docker/${id}/rules`, {
+            const res = await fetch(`/api/docker/${encodeURIComponent(containerId)}/rules`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(detail.rules)
@@ -331,11 +364,13 @@
     }
 
     async function runAudit() {
+        const containerId = activeContainerId();
+        if (!containerId) return;
         auditing = true;
         aiAuditMarkdown = "";
         aiAuditHtml = "";
         try {
-            const res = await fetch(`/api/ai/audit-compose/${id}`);
+            const res = await fetch(`/api/ai/audit-compose/${encodeURIComponent(containerId)}`);
             if (res.ok) {
                 const data = await res.json();
                 configYaml = data.config;
@@ -356,9 +391,15 @@
     }
 
     async function loadComposeAuditHistory(selectFirst = true) {
+        const containerId = activeContainerId();
+        if (!containerId) {
+            composeAuditHistory = [];
+            selectedComposeAuditId = "";
+            return;
+        }
         loadingComposeAuditHistory = true;
         try {
-            const res = await fetch(`/api/ai/audit-compose/${id}/history?limit=30`);
+            const res = await fetch(`/api/ai/audit-compose/${encodeURIComponent(containerId)}/history?limit=30`);
             if (!res.ok) {
                 composeAuditHistory = [];
                 return;
@@ -486,12 +527,14 @@
 
     async function triggerContainerMalwareScan() {
         if (runningMalwareScan) return;
+        const containerId = activeContainerId();
+        if (!containerId) return;
         runningMalwareScan = true;
         scanMessage = "Queueing ClamAV container scan...";
         const previousTop = detail?.malwareSummary?.[0]?.scannedAt || 0;
         const scanStartTs = Math.floor(Date.now() / 1000);
         try {
-            const res = await fetch(`/api/scans/malware/container/${id}`, { method: "POST" });
+            const res = await fetch(`/api/scans/malware/container/${encodeURIComponent(containerId)}`, { method: "POST" });
             if (!res.ok) {
                 const body = await res.json().catch(() => ({}));
                 throw new Error(body?.message || `scan failed (${res.status})`);

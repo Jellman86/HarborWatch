@@ -41,6 +41,7 @@
     let logLevel = $state("");
     let logSource = $state("");
     let selectedPreset = $state<PresetID>("all");
+    let hideMetricsCollectorNoise = $state(true);
     let activePresetLabel = $derived(presets.find((p) => p.id === selectedPreset)?.label || "All Logs");
 
     function normalizePreset(raw?: string): PresetID {
@@ -144,7 +145,18 @@
         return cls === preset;
     }
 
-    let visibleLogs = $derived(logs.filter((entry) => matchesPreset(entry, selectedPreset)));
+    function isMetricsCollectorNoise(entry: LogEntry): boolean {
+        const source = String(entry.source || "").toLowerCase();
+        if (!source.includes("scheduler")) return false;
+        const message = String(entry.message || "").toLowerCase();
+        return message.includes("metrics_collector") &&
+            (message.includes("executing scheduled task") || message.includes("scheduled task completed"));
+    }
+
+    let visibleLogs = $derived(
+        logs.filter((entry) => matchesPreset(entry, selectedPreset))
+            .filter((entry) => !hideMetricsCollectorNoise || !isMetricsCollectorNoise(entry))
+    );
 
     function classBadge(log: LogEntry): string {
         const cls = classifyLog(log);
@@ -308,6 +320,13 @@
                 <button type="submit" class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-black uppercase tracking-widest">Search</button>
                 <button type="button" onclick={() => applyPreset("all")} class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800/60">Clear</button>
             </form>
+            <button
+                type="button"
+                onclick={() => (hideMetricsCollectorNoise = !hideMetricsCollectorNoise)}
+                class="px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors {hideMetricsCollectorNoise ? 'border-brand-200 text-brand-700 bg-brand-50 dark:bg-brand-900/30 dark:text-brand-300 dark:border-brand-800/60' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'}"
+            >
+                {hideMetricsCollectorNoise ? "Hide Metrics Noise" : "Show Metrics Noise"}
+            </button>
         </div>
 
         <div class="md:hidden space-y-2">

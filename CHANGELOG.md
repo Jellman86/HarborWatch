@@ -2,6 +2,29 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.20] - 2026-02-19
+
+### Fixed
+- **Auto-Apply Skip Diagnostics:**
+  - `container_update_apply` now logs explicit skip reasons for each skipped candidate (global exclusion, locked/manual policy, cooldown/running gate, request build failures, and start failures).
+  - End-of-cycle auto-apply summary now includes a deterministic `skip_reasons=` breakdown so `candidates>0 started=0` outcomes are directly explainable from logs.
+- **Per-Container ClamAV Result Visibility:**
+  - Container malware summary and detail prefix matching now supports short container IDs as well as canonical full IDs.
+  - Malware scan trigger and summary APIs now resolve to canonical container IDs before queue/query, improving consistency across route forms.
+  - Container detail security/history fetches now use resolved canonical container IDs after load, preventing stale/missing results when navigating with non-canonical IDs.
+- **System Health Log Noise Control:**
+  - Scheduler now suppresses routine INFO lifecycle logs for `metrics_collector` (`Executing scheduled task...` / `Scheduled task completed...`) while preserving error visibility.
+  - System Health UI adds a default-on `Hide Metrics Noise` filter so historical scheduler spam is hidden immediately without losing other telemetry context.
+
+### Added
+- **Fleet Inventory Search + Automation Ignore Indicator:**
+  - Added live Fleet search filtering (name, ID, image, state, and labels).
+  - Added per-card `Ignored` badge showing whether a container is excluded by automation safety rules (derived from current settings ignore tokens).
+
+### Tests
+- `go test ./internal/httpapi ./internal/scanning ./internal/scheduler` (backend)
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.19] - 2026-02-19
 
 ### Fixed

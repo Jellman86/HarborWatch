@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import type { ContainerSummary, Metric } from "../api-types";
     import Sparkline from "../components/Sparkline.svelte";
     import { parseImageRef } from "../utils/image-ref";
@@ -10,6 +11,9 @@
 
     let sparklineMetrics = $state<Record<string, Metric[]>>({});
     let lastSparklineKey = $state("");
+    let searchQuery = $state("");
+    let ignoredTokens = $state<string[]>(["harborwatch"]);
+    let loadingIgnoreTokens = $state(false);
 
     const formatId = (id: string) => (id.length > 12 ? id.slice(0, 12) : id);
 
@@ -44,6 +48,63 @@
     const imageQualifier = (image: string) => parseImageRef(image).qualifier || ":latest";
 
     let safeContainers = $derived(containers || []);
+    const normalizedSearch = $derived(searchQuery.trim().toLowerCase());
+
+    function splitDelimitedTokens(raw: string): string[] {
+        return String(raw || "")
+            .split(/[,\n;\t\r]+/g)
+            .map((token) => token.trim().toLowerCase())
+            .filter((token) => token.length > 0);
+    }
+
+    function containerSearchText(summary: ContainerSummary): string {
+        const values: string[] = [];
+        values.push(String(summary.id || ""));
+        values.push(String(summary.image || ""));
+        values.push(String(summary.state || ""));
+        for (const name of summary.names || []) values.push(String(name || "").replace(/^\//, ""));
+        const labels = summary.labels || {};
+        for (const [key, value] of Object.entries(labels)) {
+            values.push(`${key}:${String(value || "")}`);
+        }
+        return values.join(" ").toLowerCase();
+    }
+
+    function matchesIgnoredToken(summary: ContainerSummary, token: string): boolean {
+        const normalized = String(token || "").trim().toLowerCase();
+        if (!normalized) return false;
+
+        const id = String(summary.id || "").trim().toLowerCase();
+        if (id && (id === normalized || id.startsWith(normalized))) return true;
+
+        const image = String(summary.image || "").trim().toLowerCase();
+        if (image && (image === normalized || image.includes(normalized))) return true;
+
+        for (const name of summary.names || []) {
+            const normalizedName = String(name || "").trim().replace(/^\//, "").toLowerCase();
+            if (!normalizedName) continue;
+            if (normalizedName === normalized || normalizedName.includes(normalized)) return true;
+        }
+
+        const labels = summary.labels || {};
+        for (const value of Object.values(labels)) {
+            const labelValue = String(value || "").trim().toLowerCase();
+            if (!labelValue) continue;
+            if (labelValue === normalized || labelValue.includes(normalized)) return true;
+        }
+        return false;
+    }
+
+    function isAutomationIgnored(summary: ContainerSummary): boolean {
+        return ignoredTokens.some((token) => matchesIgnoredToken(summary, token));
+    }
+
+    let filteredContainers = $derived(
+        safeContainers.filter((summary) => {
+            if (!normalizedSearch) return true;
+            return containerSearchText(summary).includes(normalizedSearch);
+        })
+    );
 
     function latestMetric(id: string): Metric | null {
         const series = sparklineMetrics[id] || [];
@@ -93,12 +154,35 @@
         }
     }
 
+    async function loadIgnoredContainerTokens() {
+        loadingIgnoreTokens = true;
+        try {
+            const res = await fetch("/api/settings");
+            if (!res.ok) {
+                ignoredTokens = ["harborwatch"];
+                return;
+            }
+            const payload = await res.json();
+            const merged = splitDelimitedTokens(String(payload?.automationIgnoredContainers || ""));
+            if (!merged.includes("harborwatch")) merged.push("harborwatch");
+            ignoredTokens = Array.from(new Set(merged));
+        } catch {
+            ignoredTokens = ["harborwatch"];
+        } finally {
+            loadingIgnoreTokens = false;
+        }
+    }
+
     $effect(() => {
         const ids = safeContainers.map((c) => c.id).filter(Boolean);
         const key = ids.join(",");
         if (key === lastSparklineKey) return;
         lastSparklineKey = key;
         loadSparklineMetrics(ids);
+    });
+
+    onMount(() => {
+        loadIgnoredContainerTokens();
     });
 </script>
 
@@ -108,18 +192,38 @@
             <h2 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Fleet Inventory</h2>
             <p class="text-xs text-slate-500 font-medium">Card-first status view with quick drill-down into container control pages.</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap justify-end">
+            <div class="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-2.5 py-1.5">
+                <input
+                    bind:value={searchQuery}
+                    placeholder="Search fleet..."
+                    class="w-44 md:w-56 bg-transparent text-[11px] text-slate-700 dark:text-slate-200 outline-none"
+                />
+                {#if searchQuery.trim()}
+                    <button
+                        type="button"
+                        onclick={() => (searchQuery = "")}
+                        class="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-brand-600"
+                    >
+                        Clear
+                    </button>
+                {/if}
+            </div>
             <span class="px-3 py-1 bg-brand-50 dark:bg-brand-900/30 rounded-full text-[10px] font-black text-brand-700 dark:text-brand-300 uppercase tracking-widest border border-brand-200 dark:border-brand-700/50">
                 Card View
             </span>
             <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
-                {safeContainers.length} Total
+                {filteredContainers.length}/{safeContainers.length} Visible
             </span>
         </div>
     </div>
 
+    {#if loadingIgnoreTokens}
+        <p class="text-[11px] text-slate-500">Resolving automation ignore state...</p>
+    {/if}
+
     <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
-        {#each safeContainers as c, i}
+        {#each filteredContainers as c, i}
             {@const current = latestMetric(c.id)}
             {@const memoryPct = memoryRatio(current)}
             <article
@@ -142,6 +246,11 @@
                             {#if c.updateAvailable}
                                 <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-lg text-[9px] font-black uppercase tracking-widest">
                                     Update
+                                </span>
+                            {/if}
+                            {#if isAutomationIgnored(c)}
+                                <span class="px-2 py-1 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                                    Ignored
                                 </span>
                             {/if}
                             <span class="px-2 py-1 rounded-lg text-[9px] font-black uppercase {stateColor(c.state)}">
@@ -229,7 +338,11 @@
             </article>
         {:else}
             <div class="col-span-full py-12 text-center text-slate-400 italic bg-slate-50 dark:bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800">
-                No containers found on socket
+                {#if normalizedSearch}
+                    No containers matched your search
+                {:else}
+                    No containers found on socket
+                {/if}
             </div>
         {/each}
     </div>
