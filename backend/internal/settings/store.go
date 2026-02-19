@@ -39,6 +39,13 @@ type Settings struct {
 	AutoUpgradeMaxConcurrency   int    `json:"autoUpgradeMaxConcurrency"`
 	AutoUpgradeMinRetryMinutes  int    `json:"autoUpgradeMinRetryMinutes"`
 	ClamAVSnapshotMaxBytes      int64  `json:"clamavSnapshotMaxBytes"`
+	RetentionLogsDays           int    `json:"retentionLogsDays"`
+	RetentionMetricsDays        int    `json:"retentionMetricsDays"`
+	RetentionScanResultsDays    int    `json:"retentionScanResultsDays"`
+	RetentionScanJobsDays       int    `json:"retentionScanJobsDays"`
+	RetentionUpdateRunsDays     int    `json:"retentionUpdateRunsDays"`
+	RetentionComposeAuditDays   int    `json:"retentionComposeAuditDays"`
+	RetentionAIUsageDays        int    `json:"retentionAIUsageDays"`
 
 	// Metadata (read-only info for UI)
 	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
@@ -77,6 +84,13 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		AutoUpgradeMaxConcurrency:   1,
 		AutoUpgradeMinRetryMinutes:  60,
 		ClamAVSnapshotMaxBytes:      2 << 30,
+		RetentionLogsDays:           30,
+		RetentionMetricsDays:        14,
+		RetentionScanResultsDays:    30,
+		RetentionScanJobsDays:       30,
+		RetentionUpdateRunsDays:     90,
+		RetentionComposeAuditDays:   90,
+		RetentionAIUsageDays:        180,
 		EnvironmentOverrides:        make(map[string]bool),
 	}
 
@@ -139,6 +153,20 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.AutoUpgradeMinRetryMinutes = parseStoredInt(value, st.AutoUpgradeMinRetryMinutes, 1, 24*60)
 		case "clamav_snapshot_max_bytes":
 			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
+		case "retention_logs_days":
+			st.RetentionLogsDays = parseStoredInt(value, st.RetentionLogsDays, 1, 3650)
+		case "retention_metrics_days":
+			st.RetentionMetricsDays = parseStoredInt(value, st.RetentionMetricsDays, 1, 3650)
+		case "retention_scan_results_days":
+			st.RetentionScanResultsDays = parseStoredInt(value, st.RetentionScanResultsDays, 1, 3650)
+		case "retention_scan_jobs_days":
+			st.RetentionScanJobsDays = parseStoredInt(value, st.RetentionScanJobsDays, 1, 3650)
+		case "retention_update_runs_days":
+			st.RetentionUpdateRunsDays = parseStoredInt(value, st.RetentionUpdateRunsDays, 1, 3650)
+		case "retention_compose_audit_days":
+			st.RetentionComposeAuditDays = parseStoredInt(value, st.RetentionComposeAuditDays, 1, 3650)
+		case "retention_ai_usage_days":
+			st.RetentionAIUsageDays = parseStoredInt(value, st.RetentionAIUsageDays, 1, 3650)
 		}
 	}
 
@@ -213,6 +241,25 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		st.EnvironmentOverrides["clamavSnapshotMaxBytes"] = true
 	}
 
+	retentionEnvMap := map[string]struct {
+		ptr    *int
+		envKey string
+	}{
+		"retentionLogsDays":         {&st.RetentionLogsDays, "HW_RETENTION_LOG_DAYS"},
+		"retentionMetricsDays":      {&st.RetentionMetricsDays, "HW_RETENTION_METRICS_DAYS"},
+		"retentionScanResultsDays":  {&st.RetentionScanResultsDays, "HW_RETENTION_SCAN_RESULTS_DAYS"},
+		"retentionScanJobsDays":     {&st.RetentionScanJobsDays, "HW_RETENTION_SCAN_JOBS_DAYS"},
+		"retentionUpdateRunsDays":   {&st.RetentionUpdateRunsDays, "HW_RETENTION_UPDATE_RUNS_DAYS"},
+		"retentionComposeAuditDays": {&st.RetentionComposeAuditDays, "HW_RETENTION_COMPOSE_AUDIT_DAYS"},
+		"retentionAIUsageDays":      {&st.RetentionAIUsageDays, "HW_RETENTION_AI_USAGE_DAYS"},
+	}
+	for jsonKey, mapping := range retentionEnvMap {
+		if val := strings.TrimSpace(os.Getenv(mapping.envKey)); val != "" {
+			*mapping.ptr = parseStoredInt(val, *mapping.ptr, 1, 3650)
+			st.EnvironmentOverrides[jsonKey] = true
+		}
+	}
+
 	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
 	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
 
@@ -229,6 +276,13 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	st.AutoUpgradeMaxConcurrency = parseStoredInt(strconv.Itoa(st.AutoUpgradeMaxConcurrency), 1, 1, 20)
 	st.AutoUpgradeMinRetryMinutes = parseStoredInt(strconv.Itoa(st.AutoUpgradeMinRetryMinutes), 60, 1, 24*60)
 	st.ClamAVSnapshotMaxBytes = parseStoredInt64(strconv.FormatInt(st.ClamAVSnapshotMaxBytes, 10), 2<<30, 1, 32<<30)
+	st.RetentionLogsDays = parseStoredInt(strconv.Itoa(st.RetentionLogsDays), 30, 1, 3650)
+	st.RetentionMetricsDays = parseStoredInt(strconv.Itoa(st.RetentionMetricsDays), 14, 1, 3650)
+	st.RetentionScanResultsDays = parseStoredInt(strconv.Itoa(st.RetentionScanResultsDays), 30, 1, 3650)
+	st.RetentionScanJobsDays = parseStoredInt(strconv.Itoa(st.RetentionScanJobsDays), 30, 1, 3650)
+	st.RetentionUpdateRunsDays = parseStoredInt(strconv.Itoa(st.RetentionUpdateRunsDays), 90, 1, 3650)
+	st.RetentionComposeAuditDays = parseStoredInt(strconv.Itoa(st.RetentionComposeAuditDays), 90, 1, 3650)
+	st.RetentionAIUsageDays = parseStoredInt(strconv.Itoa(st.RetentionAIUsageDays), 180, 1, 3650)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -260,6 +314,13 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"auto_upgrade_max_concurrency":   intString(st.AutoUpgradeMaxConcurrency),
 		"auto_upgrade_min_retry_minutes": intString(st.AutoUpgradeMinRetryMinutes),
 		"clamav_snapshot_max_bytes":      int64String(st.ClamAVSnapshotMaxBytes),
+		"retention_logs_days":            intString(st.RetentionLogsDays),
+		"retention_metrics_days":         intString(st.RetentionMetricsDays),
+		"retention_scan_results_days":    intString(st.RetentionScanResultsDays),
+		"retention_scan_jobs_days":       intString(st.RetentionScanJobsDays),
+		"retention_update_runs_days":     intString(st.RetentionUpdateRunsDays),
+		"retention_compose_audit_days":   intString(st.RetentionComposeAuditDays),
+		"retention_ai_usage_days":        intString(st.RetentionAIUsageDays),
 	}
 
 	jsonToDbKey := map[string]string{
@@ -286,6 +347,13 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"autoUpgradeMaxConcurrency":   "auto_upgrade_max_concurrency",
 		"autoUpgradeMinRetryMinutes":  "auto_upgrade_min_retry_minutes",
 		"clamavSnapshotMaxBytes":      "clamav_snapshot_max_bytes",
+		"retentionLogsDays":           "retention_logs_days",
+		"retentionMetricsDays":        "retention_metrics_days",
+		"retentionScanResultsDays":    "retention_scan_results_days",
+		"retentionScanJobsDays":       "retention_scan_jobs_days",
+		"retentionUpdateRunsDays":     "retention_update_runs_days",
+		"retentionComposeAuditDays":   "retention_compose_audit_days",
+		"retentionAIUsageDays":        "retention_ai_usage_days",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {

@@ -260,6 +260,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 
 	// 4. Metrics Setup
 	var metricService *metrics.Service
+	var metricStore *metrics.Store
 	if dockerClient != nil {
 		rawDocker, err := dockerengine.NewRawClient()
 		if err != nil {
@@ -267,7 +268,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				diagService.Log("ERROR", "Metrics", fmt.Sprintf("Failed to init raw docker client for metrics: %v", err))
 			}
 		} else if rawDocker != nil {
-			metricStore := metrics.NewStore(db)
+			metricStore = metrics.NewStore(db)
 			if err := metricStore.Init(context.Background()); err != nil {
 				return nil, nil, fmt.Errorf("init metrics store: %w", err)
 			}
@@ -302,7 +303,16 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	}
 
 	loadRuntimeSettings := func(ctx context.Context) settings.Settings {
-		st := settings.Settings{AutomationIgnoredContainers: "harborwatch"}
+		st := settings.Settings{
+			AutomationIgnoredContainers: "harborwatch",
+			RetentionLogsDays:           30,
+			RetentionMetricsDays:        14,
+			RetentionScanResultsDays:    30,
+			RetentionScanJobsDays:       30,
+			RetentionUpdateRunsDays:     90,
+			RetentionComposeAuditDays:   90,
+			RetentionAIUsageDays:        180,
+		}
 		if settingsStore == nil {
 			return st
 		}
@@ -313,6 +323,16 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			return st
 		}
 		return loaded
+	}
+
+	retentionDays := func(value int, fallback int) int {
+		if value <= 0 {
+			return fallback
+		}
+		if value > 3650 {
+			return 3650
+		}
+		return value
 	}
 
 	isIgnoredContainer := func(ctx context.Context, containerID string) bool {
@@ -510,9 +530,39 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				}()
 
 				schedSvc.RegisterTask("metrics_prune", func() scheduler.Task {
-					return metricService.GetPruneTask()
+					return scheduler.NewGenericTask("metrics_prune", func(ctx context.Context) error {
+						if metricStore == nil {
+							return nil
+						}
+						st := loadRuntimeSettings(ctx)
+						days := retentionDays(st.RetentionMetricsDays, 14)
+						olderThan := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Unix()
+						pruned, err := metricStore.PruneMetrics(ctx, olderThan)
+						if err != nil {
+							return err
+						}
+						if diagService != nil {
+							diagService.Log("INFO", "Scheduler", fmt.Sprintf("Metrics retention prune completed: deleted=%d days=%d", pruned, days))
+						}
+						return nil
+					})
 				})
-				if err := schedSvc.AddTask("0 0 0 * * *", metricService.GetPruneTask(), true); err != nil && diagService != nil {
+				if err := schedSvc.AddTask("0 0 0 * * *", scheduler.NewGenericTask("metrics_prune", func(ctx context.Context) error {
+					if metricStore == nil {
+						return nil
+					}
+					st := loadRuntimeSettings(ctx)
+					days := retentionDays(st.RetentionMetricsDays, 14)
+					olderThan := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Unix()
+					pruned, err := metricStore.PruneMetrics(ctx, olderThan)
+					if err != nil {
+						return err
+					}
+					if diagService != nil {
+						diagService.Log("INFO", "Scheduler", fmt.Sprintf("Metrics retention prune completed: deleted=%d days=%d", pruned, days))
+					}
+					return nil
+				}), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task metrics_prune: %v", err))
 				}
 			}
@@ -555,21 +605,118 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		}
 	}
 
-	// 7. Internal Maintenance: Diagnostic log pruning
+	// 7. Internal Maintenance: data lifecycle retention pruning
 	if diagService != nil {
 		schedSvc.RegisterTask("diag_log_prune", func() scheduler.Task {
 			return scheduler.NewGenericTask("diag_log_prune", func(ctx context.Context) error {
-				olderThan := time.Now().Add(-7 * 24 * time.Hour).Unix()
-				_, err := diagService.PruneLogs(ctx, olderThan)
-				return err
+				st := loadRuntimeSettings(ctx)
+				days := retentionDays(st.RetentionLogsDays, 30)
+				olderThan := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Unix()
+				pruned, err := diagService.PruneLogs(ctx, olderThan)
+				if err != nil {
+					return err
+				}
+				diagService.Log("INFO", "Scheduler", fmt.Sprintf("Diagnostic log retention prune completed: deleted=%d days=%d", pruned, days))
+				return nil
 			})
 		})
 		if err := schedSvc.AddTask("0 0 1 * * *", scheduler.NewGenericTask("diag_log_prune", func(ctx context.Context) error {
-			olderThan := time.Now().Add(-7 * 24 * time.Hour).Unix()
-			_, err := diagService.PruneLogs(ctx, olderThan)
-			return err
+			st := loadRuntimeSettings(ctx)
+			days := retentionDays(st.RetentionLogsDays, 30)
+			olderThan := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Unix()
+			pruned, err := diagService.PruneLogs(ctx, olderThan)
+			if err != nil {
+				return err
+			}
+			diagService.Log("INFO", "Scheduler", fmt.Sprintf("Diagnostic log retention prune completed: deleted=%d days=%d", pruned, days))
+			return nil
 		}), true); err != nil {
 			diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task diag_log_prune: %v", err))
+		}
+
+		runHistoryRetentionPrune := func(ctx context.Context) error {
+			st := loadRuntimeSettings(ctx)
+			now := time.Now().UTC()
+
+			var runErr error
+			setErr := func(err error) {
+				if err != nil && runErr == nil {
+					runErr = err
+				}
+			}
+
+			if scanStore != nil {
+				resultDays := retentionDays(st.RetentionScanResultsDays, 30)
+				resultCutoff := now.Add(-time.Duration(resultDays) * 24 * time.Hour).Unix()
+				vulnDeleted, err := scanStore.PruneVulnerabilityResults(ctx, resultCutoff)
+				if err != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Retention prune failed (scan_results): %v", err))
+					setErr(err)
+				} else {
+					malwareDeleted, malErr := scanStore.PruneMalwareResults(ctx, resultCutoff)
+					if malErr != nil {
+						diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Retention prune failed (malware_scan_results): %v", malErr))
+						setErr(malErr)
+					} else {
+						diagService.Log("INFO", "Scheduler", fmt.Sprintf("Scan result retention prune completed: vulnerability=%d malware=%d days=%d", vulnDeleted, malwareDeleted, resultDays))
+					}
+				}
+
+				jobDays := retentionDays(st.RetentionScanJobsDays, 30)
+				jobCutoff := now.Add(-time.Duration(jobDays) * 24 * time.Hour).Unix()
+				jobDeleted, err := scanStore.PruneScanJobs(ctx, jobCutoff)
+				if err != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Retention prune failed (scan_jobs): %v", err))
+					setErr(err)
+				} else {
+					diagService.Log("INFO", "Scheduler", fmt.Sprintf("Scan job retention prune completed: deleted=%d days=%d", jobDeleted, jobDays))
+				}
+			}
+
+			if updatesStore != nil {
+				updateDays := retentionDays(st.RetentionUpdateRunsDays, 90)
+				updateCutoff := now.Add(-time.Duration(updateDays) * 24 * time.Hour).Unix()
+				runDeleted, stepDeleted, err := updatesStore.PruneRuns(ctx, updateCutoff)
+				if err != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Retention prune failed (update_runs): %v", err))
+					setErr(err)
+				} else {
+					diagService.Log("INFO", "Scheduler", fmt.Sprintf("Update history retention prune completed: runs=%d steps=%d days=%d", runDeleted, stepDeleted, updateDays))
+				}
+			}
+
+			if composeAuditStore != nil {
+				composeDays := retentionDays(st.RetentionComposeAuditDays, 90)
+				composeCutoff := now.Add(-time.Duration(composeDays) * 24 * time.Hour).Unix()
+				composeDeleted, err := composeAuditStore.PruneComposeAudits(ctx, composeCutoff)
+				if err != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Retention prune failed (compose_audit_history): %v", err))
+					setErr(err)
+				} else {
+					diagService.Log("INFO", "Scheduler", fmt.Sprintf("Compose audit retention prune completed: deleted=%d days=%d", composeDeleted, composeDays))
+				}
+			}
+
+			if aiUsageStore != nil {
+				usageDays := retentionDays(st.RetentionAIUsageDays, 180)
+				usageCutoff := now.Add(-time.Duration(usageDays) * 24 * time.Hour).Unix()
+				usageDeleted, err := aiUsageStore.PruneUsage(ctx, usageCutoff)
+				if err != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Retention prune failed (ai_usage_events): %v", err))
+					setErr(err)
+				} else {
+					diagService.Log("INFO", "Scheduler", fmt.Sprintf("AI usage retention prune completed: deleted=%d days=%d", usageDeleted, usageDays))
+				}
+			}
+
+			return runErr
+		}
+
+		schedSvc.RegisterTask("history_retention_prune", func() scheduler.Task {
+			return scheduler.NewGenericTask("history_retention_prune", runHistoryRetentionPrune)
+		})
+		if err := schedSvc.AddTask("0 30 1 * * *", scheduler.NewGenericTask("history_retention_prune", runHistoryRetentionPrune), true); err != nil {
+			diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task history_retention_prune: %v", err))
 		}
 	}
 
@@ -645,6 +792,35 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					return
 				}
 				writeJSON(w, http.StatusOK, containers)
+			})
+
+			r.Get("/containers/intel-readiness", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+				defer cancel()
+				containers, err := dockerClient.ListContainers(ctx)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "docker_error", err.Error())
+					return
+				}
+
+				overrideMap := map[string]containerintel.Override{}
+				if intelService != nil {
+					if list, err := intelService.List(ctx); err == nil {
+						overrideMap = mapContainerIntelOverrides(list)
+					} else if diagService != nil {
+						diagService.Log("WARN", "Intel", fmt.Sprintf("Failed to load intelligence overrides for readiness endpoint: %v", err))
+					}
+				}
+
+				rows := make([]containerIntelResponse, 0, len(containers))
+				for _, summary := range containers {
+					rows = append(rows, effectiveContainerIntel(summary, overrideForContainerID(summary.ID, overrideMap)))
+				}
+				writeJSON(w, http.StatusOK, rows)
 			})
 
 			r.Get("/images", func(w http.ResponseWriter, r *http.Request) {

@@ -319,6 +319,42 @@ FROM scan_jobs
 	return out, nil
 }
 
+func (s *Store) PruneVulnerabilityResults(ctx context.Context, olderThan int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM scan_results WHERE scanned_at < ?", olderThan)
+	if err != nil {
+		return 0, fmt.Errorf("prune vulnerability scan results: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("vulnerability scan rows affected: %w", err)
+	}
+	return rows, nil
+}
+
+func (s *Store) PruneMalwareResults(ctx context.Context, olderThan int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM malware_scan_results WHERE scanned_at < ?", olderThan)
+	if err != nil {
+		return 0, fmt.Errorf("prune malware scan results: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("malware scan rows affected: %w", err)
+	}
+	return rows, nil
+}
+
+func (s *Store) PruneScanJobs(ctx context.Context, olderThan int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM scan_jobs WHERE started_at < ?", olderThan)
+	if err != nil {
+		return 0, fmt.Errorf("prune scan jobs: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("scan job rows affected: %w", err)
+	}
+	return rows, nil
+}
+
 func (s *Store) MarkRunningJobsFailed(ctx context.Context, reason string) (int64, error) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {

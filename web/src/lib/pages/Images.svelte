@@ -189,6 +189,12 @@
     const safeRows = $derived((imageRows && imageRows.length > 0) ? imageRows : (images as ImageIntelligenceRow[] || []));
     const imageRepo = (row: ImageIntelligenceRow) => parseImageRef(row.repoTags?.[0] || row.primaryRef || "").repository;
     const imageQualifier = (row: ImageIntelligenceRow) => parseImageRef(row.repoTags?.[0] || row.primaryRef || "").qualifier || ":latest";
+    const digestOnlyCount = $derived(safeRows.filter((row) => isDigestOnlyArtifact(row)).length);
+
+    function isDigestOnlyArtifact(img: ImageIntelligenceRow): boolean {
+        const ref = String(img.repoTags?.[0] || img.primaryRef || "").trim().toLowerCase();
+        return ref.startsWith("sha256:");
+    }
 
     function securitySummary(img: ImageIntelligenceRow): string {
         if (img.malwareInfected) return `Malware ${img.malwareThreatCount || 0}`;
@@ -200,6 +206,11 @@
     }
 
     function lifecycleSummary(img: ImageIntelligenceRow): string {
+        if (isDigestOnlyArtifact(img)) {
+            return img.pruneCandidate
+                ? "Digest artifact (may be retained by Docker references)"
+                : "Digest artifact in use";
+        }
         if (img.pruneCandidate) return "Prune next run";
         if (img.outdated) return "Outdated";
         return "In use";
@@ -259,6 +270,15 @@
         </div>
     {/if}
 
+    {#if digestOnlyCount > 0}
+        <div class="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Digest-Only Artifacts Detected ({digestOnlyCount})</p>
+            <p class="mt-1 text-[11px] text-amber-700/90 dark:text-amber-200/90">
+                `sha256:*` entries are OCI digest artifacts. Docker may keep them even after prune when they are still referenced by tagged images, manifest lists, or child image relationships.
+            </p>
+        </div>
+    {/if}
+
     {#if loading}
         <div class="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
             <div class="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
@@ -289,6 +309,9 @@
                     <div class="flex flex-wrap gap-1.5">
                         <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-200">{securitySummary(img)}</span>
                         <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-200">{lifecycleSummary(img)}</span>
+                        {#if isDigestOnlyArtifact(img)}
+                            <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Digest Artifact</span>
+                        {/if}
                     </div>
                     <p class="text-[10px] text-slate-400 font-mono">{formatId(img.id)}</p>
                 </article>
@@ -339,6 +362,9 @@
                             </td>
                             <td class="px-8 py-4">
                                 <div class="flex flex-wrap gap-1.5">
+                                    {#if isDigestOnlyArtifact(img)}
+                                        <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Digest Artifact</span>
+                                    {/if}
                                     {#if img.outdated}
                                         <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Outdated</span>
                                     {/if}

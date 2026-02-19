@@ -174,6 +174,18 @@ WHERE id = ?
 	return rec, nil
 }
 
+func (s *ComposeAuditSQLiteStore) PruneComposeAudits(ctx context.Context, olderThan int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM compose_audit_history WHERE created_at < ?", olderThan)
+	if err != nil {
+		return 0, fmt.Errorf("prune compose audit history: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("compose audit rows affected: %w", err)
+	}
+	return rows, nil
+}
+
 func newComposeAuditID() string {
 	var suffix [6]byte
 	if _, err := rand.Read(suffix[:]); err != nil {

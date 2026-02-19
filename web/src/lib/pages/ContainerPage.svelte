@@ -25,6 +25,17 @@
         derivedChangelogUrl?: string;
         effectiveRepositoryUrl?: string;
         effectiveChangelogUrl?: string;
+        repositoryProvider?: string;
+        hasRepository?: boolean;
+        hasChangelog?: boolean;
+        releaseIntelReady?: boolean;
+        fullAutomationReady?: boolean;
+        issues?: Array<{
+            code: string;
+            severity: "info" | "warning" | "error";
+            message: string;
+            action?: string;
+        }>;
         updatedAt?: number;
     }
 
@@ -597,6 +608,19 @@
         });
     }
 
+    function intelStatusClass(): string {
+        if (!intel) return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+        if (intel.fullAutomationReady) return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+        return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300";
+    }
+
+    function intelStatusLabel(): string {
+        if (!intel) return "Unknown";
+        if (intel.fullAutomationReady) return "Automation Ready";
+        if (intel.releaseIntelReady) return "Partial Readiness";
+        return "Action Needed";
+    }
+
     onMount(() => {
         loadDetail();
     });
@@ -651,6 +675,11 @@
                         {#if detail.summary.updateAvailable}
                             <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded text-[10px] font-black uppercase animate-pulse">
                                 Update Available
+                            </span>
+                        {/if}
+                        {#if intel && !intel.fullAutomationReady}
+                            <span class="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded text-[10px] font-black uppercase">
+                                Intel Needs Attention
                             </span>
                         {/if}
                     </div>
@@ -921,8 +950,24 @@
                     </div>
 
                     <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-                        <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Effective Metadata</h3>
+                        <div class="flex items-center justify-between gap-3">
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Effective Metadata</h3>
+                            <span class="px-2 py-1 rounded-lg text-[10px] font-black uppercase {intelStatusClass()}">{intelStatusLabel()}</span>
+                        </div>
                         {#if intel}
+                            {#if intel.issues && intel.issues.length > 0}
+                                <div class="rounded-xl border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-900/10 p-3 space-y-2">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">Intelligence Issues</p>
+                                    {#each intel.issues as issue}
+                                        <div class="border border-rose-200/80 dark:border-rose-900/50 rounded-lg px-2.5 py-2 bg-white/70 dark:bg-slate-900/20">
+                                            <p class="text-[11px] font-semibold text-rose-800 dark:text-rose-200">{issue.message}</p>
+                                            {#if issue.action}
+                                                <p class="mt-1 text-[10px] text-rose-700/90 dark:text-rose-200/90">{issue.action}</p>
+                                            {/if}
+                                        </div>
+                                    {/each}
+                                </div>
+                            {/if}
                             <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3">
                                 <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Derived Repository</p>
                                 <p class="text-xs text-slate-700 dark:text-slate-300 break-all mt-1">{intel.derivedRepositoryUrl || "None"}</p>
@@ -938,6 +983,10 @@
                             <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-brand-50 dark:bg-brand-900/20 p-3">
                                 <p class="text-[10px] font-black uppercase tracking-widest text-brand-700 dark:text-brand-300">Effective Changelog</p>
                                 <p class="text-xs text-brand-800 dark:text-brand-200 break-all mt-1">{intel.effectiveChangelogUrl || "None"}</p>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Release Provider</p>
+                                <p class="text-xs text-slate-700 dark:text-slate-300 break-all mt-1">{intel.repositoryProvider || "unknown"}</p>
                             </div>
                             <p class="text-[11px] text-slate-500">Last override update: {intel.updatedAt ? new Date(intel.updatedAt * 1000).toLocaleString() : "Never"}</p>
                         {:else}

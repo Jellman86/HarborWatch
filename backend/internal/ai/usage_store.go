@@ -175,3 +175,15 @@ ORDER BY day ASC
 
 	return out, nil
 }
+
+func (s *UsageSQLiteStore) PruneUsage(ctx context.Context, olderThan int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM ai_usage_events WHERE ts < ?", olderThan)
+	if err != nil {
+		return 0, fmt.Errorf("prune ai usage events: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("ai usage rows affected: %w", err)
+	}
+	return rows, nil
+}

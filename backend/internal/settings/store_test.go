@@ -98,3 +98,40 @@ func TestGetAppliesRuntimeEnvOverridesForNumericSettings(t *testing.T) {
 		t.Fatalf("expected clamavSnapshotMaxBytes override to be locked")
 	}
 }
+
+func TestGetAppliesRetentionEnvOverrides(t *testing.T) {
+	t.Setenv("HW_RETENTION_LOG_DAYS", "45")
+	t.Setenv("HW_RETENTION_METRICS_DAYS", "20")
+	t.Setenv("HW_RETENTION_SCAN_RESULTS_DAYS", "50")
+	t.Setenv("HW_RETENTION_SCAN_JOBS_DAYS", "55")
+	t.Setenv("HW_RETENTION_UPDATE_RUNS_DAYS", "120")
+	t.Setenv("HW_RETENTION_COMPOSE_AUDIT_DAYS", "150")
+	t.Setenv("HW_RETENTION_AI_USAGE_DAYS", "365")
+
+	store := newTestStore(t)
+	got, err := store.Get(context.Background())
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if got.RetentionLogsDays != 45 {
+		t.Fatalf("expected RetentionLogsDays=45, got %d", got.RetentionLogsDays)
+	}
+	if got.RetentionMetricsDays != 20 {
+		t.Fatalf("expected RetentionMetricsDays=20, got %d", got.RetentionMetricsDays)
+	}
+	if got.RetentionScanResultsDays != 50 {
+		t.Fatalf("expected RetentionScanResultsDays=50, got %d", got.RetentionScanResultsDays)
+	}
+	if got.RetentionScanJobsDays != 55 {
+		t.Fatalf("expected RetentionScanJobsDays=55, got %d", got.RetentionScanJobsDays)
+	}
+	if got.RetentionUpdateRunsDays != 120 {
+		t.Fatalf("expected RetentionUpdateRunsDays=120, got %d", got.RetentionUpdateRunsDays)
+	}
+	if got.RetentionComposeAuditDays != 150 {
+		t.Fatalf("expected RetentionComposeAuditDays=150, got %d", got.RetentionComposeAuditDays)
+	}
+	if got.RetentionAIUsageDays != 365 {
+		t.Fatalf("expected RetentionAIUsageDays=365, got %d", got.RetentionAIUsageDays)
+	}
+}

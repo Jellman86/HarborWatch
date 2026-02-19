@@ -38,3 +38,28 @@ func TestDeriveChangelogURLForGitLabRepo(t *testing.T) {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
+
+func TestDeriveRepositoryURLFromLSCRLinuxServerImage(t *testing.T) {
+	summary := gen.ContainerSummary{
+		Image:  "lscr.io/linuxserver/radarr:latest",
+		Labels: map[string]string{},
+	}
+	got := deriveRepositoryURL(summary)
+	want := "https://github.com/linuxserver/docker-radarr"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestEvaluateContainerIntelReadinessFlagsMissingRepo(t *testing.T) {
+	got := evaluateContainerIntelReadiness("", "")
+	if got.ReleaseIntelReady {
+		t.Fatalf("expected release intel to be false when repo is missing")
+	}
+	if got.FullAutomationReady {
+		t.Fatalf("expected full automation readiness to be false when metadata is missing")
+	}
+	if len(got.Issues) == 0 {
+		t.Fatalf("expected issues for missing metadata")
+	}
+}

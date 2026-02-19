@@ -183,3 +183,38 @@ LIMIT ?
 	}
 	return out, rows.Err()
 }
+
+func (s *Store) PruneRuns(ctx context.Context, olderThan int64) (int64, int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, fmt.Errorf("begin prune update runs tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stepRes, err := tx.ExecContext(ctx, `
+DELETE FROM update_steps
+WHERE run_id IN (SELECT id FROM update_runs WHERE updated_at < ?)
+`, olderThan)
+	if err != nil {
+		return 0, 0, fmt.Errorf("delete update steps: %w", err)
+	}
+
+	runRes, err := tx.ExecContext(ctx, "DELETE FROM update_runs WHERE updated_at < ?", olderThan)
+	if err != nil {
+		return 0, 0, fmt.Errorf("delete update runs: %w", err)
+	}
+
+	stepRows, err := stepRes.RowsAffected()
+	if err != nil {
+		return 0, 0, fmt.Errorf("update step rows affected: %w", err)
+	}
+	runRows, err := runRes.RowsAffected()
+	if err != nil {
+		return 0, 0, fmt.Errorf("update run rows affected: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("commit prune update runs tx: %w", err)
+	}
+	return runRows, stepRows, nil
+}

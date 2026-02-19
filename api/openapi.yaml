@@ -1015,6 +1015,7 @@ components:
         anthropicModel: { type: string }
         geminiKey: { type: string }
         geminiModel: { type: string }
+        aiPricingJson: { type: string }
         instanceUrl: { type: string }
         validateUrlPattern: { type: string }
         uiAnimationsEnabled: { type: boolean }
@@ -1023,6 +1024,13 @@ components:
         autoUpgradeMaxConcurrency: { type: integer, minimum: 1, maximum: 20 }
         autoUpgradeMinRetryMinutes: { type: integer, minimum: 1, maximum: 1440 }
         clamavSnapshotMaxBytes: { type: integer, format: int64, minimum: 1 }
+        retentionLogsDays: { type: integer, minimum: 1, maximum: 3650 }
+        retentionMetricsDays: { type: integer, minimum: 1, maximum: 3650 }
+        retentionScanResultsDays: { type: integer, minimum: 1, maximum: 3650 }
+        retentionScanJobsDays: { type: integer, minimum: 1, maximum: 3650 }
+        retentionUpdateRunsDays: { type: integer, minimum: 1, maximum: 3650 }
+        retentionComposeAuditDays: { type: integer, minimum: 1, maximum: 3650 }
+        retentionAIUsageDays: { type: integer, minimum: 1, maximum: 3650 }
         environmentOverrides:
           type: object
           additionalProperties: { type: boolean }

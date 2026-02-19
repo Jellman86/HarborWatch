@@ -1,23 +1,37 @@
 package httpapi
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/containerintel"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 )
 
+type containerIntelIssue struct {
+	Code     string `json:"code"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+	Action   string `json:"action,omitempty"`
+}
+
 type containerIntelResponse struct {
-	ContainerID            string `json:"containerId"`
-	ContainerName          string `json:"containerName,omitempty"`
-	Image                  string `json:"image,omitempty"`
-	OverrideRepositoryURL  string `json:"overrideRepositoryUrl,omitempty"`
-	OverrideChangelogURL   string `json:"overrideChangelogUrl,omitempty"`
-	DerivedRepositoryURL   string `json:"derivedRepositoryUrl,omitempty"`
-	DerivedChangelogURL    string `json:"derivedChangelogUrl,omitempty"`
-	EffectiveRepositoryURL string `json:"effectiveRepositoryUrl,omitempty"`
-	EffectiveChangelogURL  string `json:"effectiveChangelogUrl,omitempty"`
-	UpdatedAt              int64  `json:"updatedAt,omitempty"`
+	ContainerID            string                `json:"containerId"`
+	ContainerName          string                `json:"containerName,omitempty"`
+	Image                  string                `json:"image,omitempty"`
+	OverrideRepositoryURL  string                `json:"overrideRepositoryUrl,omitempty"`
+	OverrideChangelogURL   string                `json:"overrideChangelogUrl,omitempty"`
+	DerivedRepositoryURL   string                `json:"derivedRepositoryUrl,omitempty"`
+	DerivedChangelogURL    string                `json:"derivedChangelogUrl,omitempty"`
+	EffectiveRepositoryURL string                `json:"effectiveRepositoryUrl,omitempty"`
+	EffectiveChangelogURL  string                `json:"effectiveChangelogUrl,omitempty"`
+	RepositoryProvider     string                `json:"repositoryProvider,omitempty"`
+	HasRepository          bool                  `json:"hasRepository"`
+	HasChangelog           bool                  `json:"hasChangelog"`
+	ReleaseIntelReady      bool                  `json:"releaseIntelReady"`
+	FullAutomationReady    bool                  `json:"fullAutomationReady"`
+	Issues                 []containerIntelIssue `json:"issues,omitempty"`
+	UpdatedAt              int64                 `json:"updatedAt,omitempty"`
 }
 
 func deriveRepositoryURL(summary gen.ContainerSummary) string {
@@ -25,6 +39,7 @@ func deriveRepositoryURL(summary gen.ContainerSummary) string {
 		summary.Labels["harborwatch.intel.url"],
 		summary.Labels["org.opencontainers.image.source"],
 		summary.Labels["org.label-schema.vcs-url"],
+		repositoryURLFromGenericLabels(summary),
 		deriveRepositoryURLFromImage(summary.Image),
 	)
 }
@@ -46,6 +61,9 @@ func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Ove
 	derivedChangelog := deriveChangelogURL(summary, derivedRepo)
 	overrideRepo := strings.TrimSpace(ov.RepositoryURL)
 	overrideChangelog := strings.TrimSpace(ov.ChangelogURL)
+	effectiveRepo := firstNonEmpty(overrideRepo, derivedRepo)
+	effectiveChangelog := firstNonEmpty(overrideChangelog, derivedChangelog)
+	readiness := evaluateContainerIntelReadiness(effectiveRepo, effectiveChangelog)
 
 	return containerIntelResponse{
 		ContainerID:            summary.ID,
@@ -55,8 +73,14 @@ func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Ove
 		OverrideChangelogURL:   overrideChangelog,
 		DerivedRepositoryURL:   derivedRepo,
 		DerivedChangelogURL:    derivedChangelog,
-		EffectiveRepositoryURL: firstNonEmpty(overrideRepo, derivedRepo),
-		EffectiveChangelogURL:  firstNonEmpty(overrideChangelog, derivedChangelog),
+		EffectiveRepositoryURL: effectiveRepo,
+		EffectiveChangelogURL:  effectiveChangelog,
+		RepositoryProvider:     readiness.RepositoryProvider,
+		HasRepository:          readiness.HasRepository,
+		HasChangelog:           readiness.HasChangelog,
+		ReleaseIntelReady:      readiness.ReleaseIntelReady,
+		FullAutomationReady:    readiness.FullAutomationReady,
+		Issues:                 readiness.Issues,
 		UpdatedAt:              ov.UpdatedAt,
 	}
 }
@@ -73,6 +97,9 @@ func deriveRepositoryURLFromImage(imageRef string) string {
 	parts := splitPathParts(path)
 	if len(parts) == 0 {
 		return ""
+	}
+	if linuxServerRepo := deriveLinuxServerRepoURL(parts); linuxServerRepo != "" {
+		return linuxServerRepo
 	}
 	switch registry {
 	case "ghcr.io":
@@ -97,6 +124,11 @@ func deriveRepositoryURLFromImage(imageRef string) string {
 			return "https://hub.docker.com/r/library/" + parts[0]
 		}
 		return "https://hub.docker.com/r/" + parts[0] + "/" + parts[1]
+	case "lscr.io":
+		if len(parts) < 2 {
+			return ""
+		}
+		return "https://github.com/" + parts[0] + "/" + parts[1]
 	case "quay.io":
 		if len(parts) < 2 {
 			return ""
@@ -128,4 +160,164 @@ func splitImageRegistryAndPath(ref string) (string, string, bool) {
 		return "", "", false
 	}
 	return registry, path, true
+}
+
+func repositoryURLFromGenericLabels(summary gen.ContainerSummary) string {
+	candidates := []string{
+		summary.Labels["org.opencontainers.image.url"],
+		summary.Labels["org.opencontainers.image.documentation"],
+	}
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if _, _, ok := parseRepositoryRef(candidate); ok {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func deriveLinuxServerRepoURL(parts []string) string {
+	if len(parts) < 2 {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(parts[0]), "linuxserver") {
+		return ""
+	}
+	repo := strings.TrimSpace(parts[1])
+	if repo == "" {
+		return ""
+	}
+	if !strings.HasPrefix(repo, "docker-") {
+		repo = "docker-" + repo
+	}
+	return "https://github.com/linuxserver/" + repo
+}
+
+type intelReadiness struct {
+	RepositoryProvider  string
+	HasRepository       bool
+	HasChangelog        bool
+	ReleaseIntelReady   bool
+	FullAutomationReady bool
+	Issues              []containerIntelIssue
+}
+
+func evaluateContainerIntelReadiness(repoURL, changelogURL string) intelReadiness {
+	out := intelReadiness{
+		HasRepository: strings.TrimSpace(repoURL) != "",
+		HasChangelog:  strings.TrimSpace(changelogURL) != "",
+		Issues:        []containerIntelIssue{},
+	}
+
+	if !out.HasRepository {
+		out.Issues = append(out.Issues, containerIntelIssue{
+			Code:     "repository_missing",
+			Severity: "warning",
+			Message:  "Repository source could not be derived.",
+			Action:   "Set Repository URL Override or add an OCI source label (org.opencontainers.image.source).",
+		})
+	} else {
+		host, repoPath, ok := parseRepositoryRef(repoURL)
+		if !ok {
+			out.Issues = append(out.Issues, containerIntelIssue{
+				Code:     "repository_invalid",
+				Severity: "warning",
+				Message:  "Repository reference is not parseable for release analysis.",
+				Action:   "Use a repository URL such as https://github.com/owner/repo.",
+			})
+		} else {
+			provider := providerFromHost(host)
+			out.RepositoryProvider = provider
+			switch provider {
+			case "github", "gitlab", "gitea", "bitbucket":
+				out.ReleaseIntelReady = true
+			default:
+				out.ReleaseIntelReady = false
+			}
+
+			if provider == "generic" {
+				out.Issues = append(out.Issues, containerIntelIssue{
+					Code:     "release_provider_generic",
+					Severity: "warning",
+					Message:  "Repository host is not a first-class release provider.",
+					Action:   "Set repository override to upstream source (GitHub/GitLab/Gitea/Bitbucket) for richer release intelligence.",
+				})
+			}
+
+			repoPathLower := strings.ToLower(strings.TrimSpace(repoPath))
+			if strings.Contains(host, "docker.com") || strings.Contains(host, "docker.io") || strings.Contains(host, "quay.io") || strings.HasPrefix(repoPathLower, "r/") {
+				out.Issues = append(out.Issues, containerIntelIssue{
+					Code:     "repository_points_to_registry",
+					Severity: "info",
+					Message:  "Repository URL appears to be a registry page, not an upstream source repo.",
+					Action:   "Prefer an upstream source repository URL for higher quality AI release-note analysis.",
+				})
+			}
+		}
+	}
+
+	if !out.HasChangelog {
+		out.Issues = append(out.Issues, containerIntelIssue{
+			Code:     "changelog_missing",
+			Severity: "info",
+			Message:  "Changelog/release URL is not available.",
+			Action:   "Set Changelog URL Override to improve release note traceability.",
+		})
+	} else if !looksLikeHTTPURL(changelogURL) {
+		out.Issues = append(out.Issues, containerIntelIssue{
+			Code:     "changelog_invalid",
+			Severity: "warning",
+			Message:  "Changelog URL is not a valid HTTP(S) URL.",
+			Action:   "Provide a valid changelog or releases URL.",
+		})
+	}
+
+	out.FullAutomationReady = out.ReleaseIntelReady && out.HasChangelog
+	return out
+}
+
+func looksLikeHTTPURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	if parsed == nil {
+		return false
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	return (scheme == "http" || scheme == "https") && strings.TrimSpace(parsed.Hostname()) != ""
+}
+
+func mapContainerIntelOverrides(items []containerintel.Override) map[string]containerintel.Override {
+	out := make(map[string]containerintel.Override, len(items))
+	for _, item := range items {
+		key := strings.TrimSpace(item.ContainerID)
+		if key == "" {
+			continue
+		}
+		out[key] = item
+	}
+	return out
+}
+
+func overrideForContainerID(containerID string, overrides map[string]containerintel.Override) containerintel.Override {
+	id := strings.TrimSpace(containerID)
+	if id == "" || len(overrides) == 0 {
+		return containerintel.Override{}
+	}
+	if item, ok := overrides[id]; ok {
+		return item
+	}
+	for key, item := range overrides {
+		if key == "" {
+			continue
+		}
+		if strings.HasPrefix(id, key) || strings.HasPrefix(key, id) {
+			return item
+		}
+	}
+	return containerintel.Override{}
 }

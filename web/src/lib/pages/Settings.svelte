@@ -112,6 +112,13 @@
         autoUpgradeMaxConcurrency: 1,
         autoUpgradeMinRetryMinutes: 60,
         clamavSnapshotMaxBytes: 2147483648,
+        retentionLogsDays: 30,
+        retentionMetricsDays: 14,
+        retentionScanResultsDays: 30,
+        retentionScanJobsDays: 30,
+        retentionUpdateRunsDays: 90,
+        retentionComposeAuditDays: 90,
+        retentionAIUsageDays: 180,
         environmentOverrides: {}
     };
 
@@ -124,6 +131,7 @@
 
     let loading = $state(false);
     let saving = $state(false);
+    let domainToggleBusy = $state<AutomationDomain | "">("");
     let savingScheduleId = $state("");
     let testingProvider = $state("");
     let clamavStatus = $state<ClamAVSignatureStatus | null>(null);
@@ -172,7 +180,7 @@
             title: "Maintenance Automation",
             subtitle: "Keep host resources healthy and control data growth",
             accent: "#14b8a6",
-            tasks: ["docker_system_prune", "metrics_prune", "diag_log_prune"],
+            tasks: ["docker_system_prune", "metrics_prune", "diag_log_prune", "history_retention_prune"],
             flow: ["Measure Usage", "Prune Targets", "Reclaim Space", "Verify Capacity", "Notify Team"]
         },
         security: {
@@ -310,6 +318,8 @@
     }
 
     async function setDomainEnabled(domain: AutomationDomain, enabled: boolean) {
+        if (domainToggleBusy) return;
+        domainToggleBusy = domain;
         const scoped = schedulesForDomain(domain);
         try {
             let changed = 0;
@@ -325,6 +335,8 @@
             }
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to toggle automation domain");
+        } finally {
+            domainToggleBusy = "";
         }
     }
 
@@ -574,6 +586,13 @@
             settings.autoUpgradeMaxConcurrency = Math.max(1, Math.min(20, Number(settings.autoUpgradeMaxConcurrency || 1)));
             settings.autoUpgradeMinRetryMinutes = Math.max(1, Math.min(1440, Number(settings.autoUpgradeMinRetryMinutes || 60)));
             settings.clamavSnapshotMaxBytes = Math.max(1, Number(settings.clamavSnapshotMaxBytes || 2147483648));
+            settings.retentionLogsDays = Math.max(1, Math.min(3650, Number(settings.retentionLogsDays || 30)));
+            settings.retentionMetricsDays = Math.max(1, Math.min(3650, Number(settings.retentionMetricsDays || 14)));
+            settings.retentionScanResultsDays = Math.max(1, Math.min(3650, Number(settings.retentionScanResultsDays || 30)));
+            settings.retentionScanJobsDays = Math.max(1, Math.min(3650, Number(settings.retentionScanJobsDays || 30)));
+            settings.retentionUpdateRunsDays = Math.max(1, Math.min(3650, Number(settings.retentionUpdateRunsDays || 90)));
+            settings.retentionComposeAuditDays = Math.max(1, Math.min(3650, Number(settings.retentionComposeAuditDays || 90)));
+            settings.retentionAIUsageDays = Math.max(1, Math.min(3650, Number(settings.retentionAIUsageDays || 180)));
             const res = await fetch("/api/settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -707,6 +726,7 @@
             case "docker_system_prune": return "Docker System Prune";
             case "metrics_prune": return "Metrics Retention Prune";
             case "diag_log_prune": return "Diagnostics Log Prune";
+            case "history_retention_prune": return "Historical Data Retention Prune";
             case "security_sweep_trivy": return "Trivy Security Sweep";
             case "malware_sweep_clamav": return "ClamAV Malware Sweep";
             case "clamav_signature_update": return "ClamAV Signature Update";
@@ -726,6 +746,8 @@
                 return "Trims old metrics to keep database growth predictable.";
             case "diag_log_prune":
                 return "Deletes aged diagnostics logs after retention limits are reached.";
+            case "history_retention_prune":
+                return "Prunes aged scan history, update runs, compose audits, and AI usage records using configured lifecycle limits.";
             case "security_sweep_trivy":
                 return "Runs Trivy vulnerability scans and records findings for image risk evaluation.";
             case "malware_sweep_clamav":
@@ -907,15 +929,17 @@
                     <div class="flex items-center gap-2">
                         <button
                             onclick={() => setDomainEnabled(activeAutomationTab, true)}
-                            class="px-3 py-2 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-900/40 text-[10px] font-black uppercase tracking-widest"
+                            disabled={domainToggleBusy === activeAutomationTab}
+                            class="px-3 py-2 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-900/40 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
                         >
-                            Enable Domain
+                            {domainToggleBusy === activeAutomationTab ? "Applying..." : "Enable Domain"}
                         </button>
                         <button
                             onclick={() => setDomainEnabled(activeAutomationTab, false)}
-                            class="px-3 py-2 rounded-xl border border-rose-200 text-rose-700 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-900/40 text-[10px] font-black uppercase tracking-widest"
+                            disabled={domainToggleBusy === activeAutomationTab}
+                            class="px-3 py-2 rounded-xl border border-rose-200 text-rose-700 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-900/40 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
                         >
-                            Disable Domain
+                            {domainToggleBusy === activeAutomationTab ? "Applying..." : "Disable Domain"}
                         </button>
                     </div>
                 </div>
@@ -1561,6 +1585,44 @@
                         />
                         <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes)}</span>. Increase if large container mount snapshots are skipped.</p>
                     </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                    <div>
+                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">Data Lifecycle Retention</p>
+                        <p class="text-[11px] text-slate-500 mt-1">Controls how long operational history is retained before automatic cleanup removes old rows.</p>
+                    </div>
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label for="retention-logs-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">System Health Logs (days)</label>
+                            <input id="retention-logs-days" type="number" min="1" bind:value={settings.retentionLogsDays} disabled={isLocked("retentionLogsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        </div>
+                        <div class="space-y-2">
+                            <label for="retention-metrics-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Container Metrics (days)</label>
+                            <input id="retention-metrics-days" type="number" min="1" bind:value={settings.retentionMetricsDays} disabled={isLocked("retentionMetricsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        </div>
+                        <div class="space-y-2">
+                            <label for="retention-scan-results-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Security Scan Results (days)</label>
+                            <input id="retention-scan-results-days" type="number" min="1" bind:value={settings.retentionScanResultsDays} disabled={isLocked("retentionScanResultsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        </div>
+                        <div class="space-y-2">
+                            <label for="retention-scan-jobs-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Security Scan Jobs (days)</label>
+                            <input id="retention-scan-jobs-days" type="number" min="1" bind:value={settings.retentionScanJobsDays} disabled={isLocked("retentionScanJobsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        </div>
+                        <div class="space-y-2">
+                            <label for="retention-update-runs-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Upgrade Lifecycle Runs (days)</label>
+                            <input id="retention-update-runs-days" type="number" min="1" bind:value={settings.retentionUpdateRunsDays} disabled={isLocked("retentionUpdateRunsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        </div>
+                        <div class="space-y-2">
+                            <label for="retention-compose-audit-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Compose Audit History (days)</label>
+                            <input id="retention-compose-audit-days" type="number" min="1" bind:value={settings.retentionComposeAuditDays} disabled={isLocked("retentionComposeAuditDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        </div>
+                        <div class="space-y-2">
+                            <label for="retention-ai-usage-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">AI Usage History (days)</label>
+                            <input id="retention-ai-usage-days" type="number" min="1" bind:value={settings.retentionAIUsageDays} disabled={isLocked("retentionAIUsageDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-500">Lifecycle cleanup runs via <span class="font-mono">metrics_prune</span>, <span class="font-mono">diag_log_prune</span>, and <span class="font-mono">history_retention_prune</span>.</p>
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">

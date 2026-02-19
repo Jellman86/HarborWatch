@@ -11,9 +11,35 @@
 
     let sparklineMetrics = $state<Record<string, Metric[]>>({});
     let lastSparklineKey = $state("");
+    let intelByContainer = $state<Record<string, ContainerIntelReadiness>>({});
+    let lastIntelKey = $state("");
+    let imageRiskByKey = $state<Record<string, { critical: number; high: number; malwareInfected: boolean }>>({});
+    let lastRiskKey = $state("");
     let searchQuery = $state("");
+    type FleetFilter = "all" | "updates" | "intel" | "high-risk" | "ignored";
+    let activeFilter = $state<FleetFilter>("all");
     let ignoredTokens = $state<string[]>(["harborwatch"]);
     let loadingIgnoreTokens = $state(false);
+    let loadingIntelReadiness = $state(false);
+
+    interface ContainerIntelIssue {
+        code: string;
+        severity: "info" | "warning" | "error";
+        message: string;
+        action?: string;
+    }
+
+    interface ContainerIntelReadiness {
+        containerId: string;
+        effectiveRepositoryUrl?: string;
+        effectiveChangelogUrl?: string;
+        repositoryProvider?: string;
+        hasRepository?: boolean;
+        hasChangelog?: boolean;
+        releaseIntelReady?: boolean;
+        fullAutomationReady?: boolean;
+        issues?: ContainerIntelIssue[];
+    }
 
     const formatId = (id: string) => (id.length > 12 ? id.slice(0, 12) : id);
 
@@ -39,6 +65,59 @@
         if (!labels) return null;
         return labels["harborwatch.intel.url"] || labels["org.opencontainers.image.source"] || labels["org.label-schema.vcs-url"];
     };
+
+    function lookupIntel(summary: ContainerSummary): ContainerIntelReadiness | null {
+        const id = String(summary.id || "").trim();
+        if (!id) return null;
+        if (intelByContainer[id]) return intelByContainer[id];
+        for (const [key, value] of Object.entries(intelByContainer)) {
+            if (!key) continue;
+            if (id.startsWith(key) || key.startsWith(id)) return value;
+        }
+        return null;
+    }
+
+    function effectiveRepoURL(summary: ContainerSummary): string {
+        const intel = lookupIntel(summary);
+        const effective = String(intel?.effectiveRepositoryUrl || "").trim();
+        if (effective) return effective;
+        return String(getIntelURL(summary.labels) || "").trim();
+    }
+
+    function intelNeedsAttention(summary: ContainerSummary): boolean {
+        const intel = lookupIntel(summary);
+        if (!intel) return false;
+        return intel.fullAutomationReady === false || (intel.issues || []).length > 0;
+    }
+
+    function intelPrimaryIssue(summary: ContainerSummary): string {
+        const intel = lookupIntel(summary);
+        if (!intel) return "";
+        const first = (intel.issues || [])[0];
+        return String(first?.message || "").trim();
+    }
+
+    function normalizeImageKey(raw: string): string {
+        let value = String(raw || "").trim().toLowerCase();
+        if (!value) return "";
+        const at = value.indexOf("@");
+        if (at > 0) value = value.slice(0, at);
+        value = value.replace(/^docker\.io\//, "");
+        value = value.replace(/^index\.docker\.io\//, "");
+        value = value.replace(/^registry-1\.docker\.io\//, "");
+        value = value.replace(/^library\//, "");
+        return value;
+    }
+
+    function imageRisk(summary: ContainerSummary): { critical: number; high: number; malwareInfected: boolean } {
+        const key = normalizeImageKey(summary.image);
+        return imageRiskByKey[key] || { critical: 0, high: 0, malwareInfected: false };
+    }
+
+    function isHighRisk(summary: ContainerSummary): boolean {
+        const risk = imageRisk(summary);
+        return risk.malwareInfected || risk.critical > 0 || risk.high > 0;
+    }
 
     function handleTriggerScan(image: string) {
         onNavigate("security", { target: image });
@@ -103,6 +182,23 @@
         safeContainers.filter((summary) => {
             if (!normalizedSearch) return true;
             return containerSearchText(summary).includes(normalizedSearch);
+        })
+    );
+
+    let visibleContainers = $derived(
+        filteredContainers.filter((summary) => {
+            switch (activeFilter) {
+                case "updates":
+                    return !!summary.updateAvailable;
+                case "intel":
+                    return intelNeedsAttention(summary);
+                case "high-risk":
+                    return isHighRisk(summary);
+                case "ignored":
+                    return isAutomationIgnored(summary);
+                default:
+                    return true;
+            }
         })
     );
 
@@ -173,12 +269,82 @@
         }
     }
 
+    async function loadIntelReadiness() {
+        loadingIntelReadiness = true;
+        try {
+            const res = await fetch("/api/docker/containers/intel-readiness");
+            if (!res.ok) {
+                intelByContainer = {};
+                return;
+            }
+            const rows = await res.json();
+            const next: Record<string, ContainerIntelReadiness> = {};
+            if (Array.isArray(rows)) {
+                for (const row of rows) {
+                    const key = String(row?.containerId || "").trim();
+                    if (!key) continue;
+                    next[key] = row as ContainerIntelReadiness;
+                }
+            }
+            intelByContainer = next;
+        } catch {
+            intelByContainer = {};
+        } finally {
+            loadingIntelReadiness = false;
+        }
+    }
+
+    async function loadImageRiskSignals() {
+        try {
+            const res = await fetch("/api/docker/images/intelligence");
+            if (!res.ok) {
+                imageRiskByKey = {};
+                return;
+            }
+            const rows = await res.json();
+            const next: Record<string, { critical: number; high: number; malwareInfected: boolean }> = {};
+            if (Array.isArray(rows)) {
+                for (const row of rows) {
+                    const candidates = [row?.primaryRef, ...(Array.isArray(row?.repoTags) ? row.repoTags : [])];
+                    for (const candidate of candidates) {
+                        const key = normalizeImageKey(String(candidate || ""));
+                        if (!key) continue;
+                        next[key] = {
+                            critical: Number(row?.vulnerabilityCritical || 0),
+                            high: Number(row?.vulnerabilityHigh || 0),
+                            malwareInfected: !!row?.malwareInfected
+                        };
+                    }
+                }
+            }
+            imageRiskByKey = next;
+        } catch {
+            imageRiskByKey = {};
+        }
+    }
+
     $effect(() => {
         const ids = safeContainers.map((c) => c.id).filter(Boolean);
         const key = ids.join(",");
         if (key === lastSparklineKey) return;
         lastSparklineKey = key;
         loadSparklineMetrics(ids);
+    });
+
+    $effect(() => {
+        const ids = safeContainers.map((c) => c.id).filter(Boolean);
+        const key = ids.join(",");
+        if (key === lastIntelKey) return;
+        lastIntelKey = key;
+        loadIntelReadiness();
+    });
+
+    $effect(() => {
+        const refs = safeContainers.map((c) => normalizeImageKey(c.image)).filter(Boolean);
+        const key = refs.join(",");
+        if (key === lastRiskKey) return;
+        lastRiskKey = key;
+        loadImageRiskSignals();
     });
 
     onMount(() => {
@@ -213,9 +379,27 @@
                 Card View
             </span>
             <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
-                {filteredContainers.length}/{safeContainers.length} Visible
+                {visibleContainers.length}/{safeContainers.length} Visible
             </span>
         </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+        {#each [
+            { id: "all", label: "All" },
+            { id: "updates", label: "Upgrade Needed" },
+            { id: "intel", label: "Intel Issues" },
+            { id: "high-risk", label: "High Risk" },
+            { id: "ignored", label: "Ignored" }
+        ] as filter}
+            <button
+                type="button"
+                onclick={() => activeFilter = filter.id as FleetFilter}
+                class="px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest transition-colors {activeFilter === filter.id ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-300'}"
+            >
+                {filter.label}
+            </button>
+        {/each}
     </div>
 
     {#if loadingIgnoreTokens}
@@ -223,7 +407,7 @@
     {/if}
 
     <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
-        {#each filteredContainers as c, i}
+        {#each visibleContainers as c, i}
             {@const current = latestMetric(c.id)}
             {@const memoryPct = memoryRatio(current)}
             <article
@@ -246,6 +430,11 @@
                             {#if c.updateAvailable}
                                 <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-lg text-[9px] font-black uppercase tracking-widest">
                                     Update
+                                </span>
+                            {/if}
+                            {#if intelNeedsAttention(c)}
+                                <span class="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded-lg text-[9px] font-black uppercase tracking-widest" title={intelPrimaryIssue(c) || "Container intelligence requires attention"}>
+                                    Intel
                                 </span>
                             {/if}
                             {#if isAutomationIgnored(c)}
@@ -303,13 +492,20 @@
                             <span class="text-slate-400 italic font-medium">Standard</span>
                         {/if}
                     </div>
+
+                    {#if intelNeedsAttention(c)}
+                        <div class="rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-900/10 px-2.5 py-2">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">AI Automation Needs Metadata</p>
+                            <p class="mt-1 text-[10px] text-rose-700/90 dark:text-rose-200/90">{intelPrimaryIssue(c) || "Open Manage > Intelligence and configure repository/changelog overrides."}</p>
+                        </div>
+                    {/if}
                 </div>
 
                 <div class="px-5 py-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
                     <div class="flex gap-1">
-                        {#if getIntelURL(c.labels)}
+                        {#if effectiveRepoURL(c)}
                             <a
-                                href={getIntelURL(c.labels)}
+                                href={effectiveRepoURL(c)}
                                 target="_blank"
                                 class="p-2 text-slate-400 hover:text-brand-600 transition-colors"
                                 title="Open source repository"
@@ -340,10 +536,16 @@
             <div class="col-span-full py-12 text-center text-slate-400 italic bg-slate-50 dark:bg-slate-900/50 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800">
                 {#if normalizedSearch}
                     No containers matched your search
+                {:else if activeFilter !== "all"}
+                    No containers matched the selected filter
                 {:else}
                     No containers found on socket
                 {/if}
             </div>
         {/each}
     </div>
+
+    {#if loadingIntelReadiness}
+        <p class="text-[11px] text-slate-500">Resolving container intelligence readiness...</p>
+    {/if}
 </div>

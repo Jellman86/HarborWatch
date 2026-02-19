@@ -2,6 +2,52 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.7.21] - 2026-02-19
+
+### Added
+- **Container Intelligence Readiness Signals:**
+  - Added `GET /api/docker/containers/intel-readiness` to return centralized per-container metadata readiness, effective repo/changelog links, provider classification, and actionable issue diagnostics.
+  - Container intelligence responses now include readiness fields (`hasRepository`, `hasChangelog`, `releaseIntelReady`, `fullAutomationReady`) plus issue details for operator guidance.
+- **Data Lifecycle Retention Controls:**
+  - Added configurable retention settings for:
+    - `retentionLogsDays`
+    - `retentionMetricsDays`
+    - `retentionScanResultsDays`
+    - `retentionScanJobsDays`
+    - `retentionUpdateRunsDays`
+    - `retentionComposeAuditDays`
+    - `retentionAIUsageDays`
+  - Added new maintenance scheduler task `history_retention_prune` to clean aged scan history, update runs/steps, compose audit history, and AI usage events.
+
+### Changed
+- **Repository/Changelog Derivation Robustness:**
+  - Expanded repository derivation fallback logic to include additional OCI metadata and improved registry heuristics (including LinuxServer image mapping).
+  - Fleet cards now use effective intelligence-derived repository links instead of label-only links.
+- **Fleet Triage UX:**
+  - Added Fleet filter pills for rapid scoping: `All`, `Upgrade Needed`, `Intel Issues`, `High Risk`, and `Ignored`.
+  - High-risk filtering now incorporates image intelligence signals (critical/high vulnerabilities and malware detections).
+- **Fleet + Container UX for AI Automation Readiness:**
+  - Fleet cards now surface an `Intel` warning badge and inline guidance when metadata is insufficient for robust AI release-note automation.
+  - Container detail pages now expose explicit intelligence readiness state and issue/action lists in the intelligence tab.
+- **Image Repository Clarity for Digest Artifacts:**
+  - Added explicit UI explanation for digest-only `sha256:*` artifacts and why they can remain after prune when Docker reference graphs still require them.
+- **Retention Runtime Wiring:**
+  - `metrics_prune` and `diag_log_prune` now respect configured retention days instead of fixed hardcoded windows.
+  - Added environment override support for retention settings:
+    - `HW_RETENTION_LOG_DAYS`
+    - `HW_RETENTION_METRICS_DAYS`
+    - `HW_RETENTION_SCAN_RESULTS_DAYS`
+    - `HW_RETENTION_SCAN_JOBS_DAYS`
+    - `HW_RETENTION_UPDATE_RUNS_DAYS`
+    - `HW_RETENTION_COMPOSE_AUDIT_DAYS`
+    - `HW_RETENTION_AI_USAGE_DAYS`
+- **Automation Settings Feedback:**
+  - Domain enable/disable buttons now show active apply-state feedback and disable while updates are in flight, removing ambiguous click behavior.
+
+### Tests
+- `go test ./...` (backend)
+- `npm --prefix web run build` (frontend)
+
 ## [0.7.20] - 2026-02-19
 
 ### Fixed
