@@ -34,7 +34,7 @@
                     <img 
                         src="/logo-64.png" 
                         alt="HarborWatch" 
-                        class="h-14 w-14 flex-shrink-0 transition-all duration-500 {hasActiveJobs ? 'ring-4 ring-cyan-500/30 animate-pulse rounded-full' : ''}" 
+                        class="h-20 w-20 flex-shrink-0 transition-all duration-500 {hasActiveJobs ? 'ring-4 ring-cyan-500/30 animate-pulse rounded-full' : ''}" 
                     />
                     {#if hasActiveJobs}
                         <span class="absolute -top-1 -right-1 flex h-3 w-3">
@@ -56,7 +56,7 @@
                     class="md:hidden absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                     aria-label="Close Navigation"
                 >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
         </button>
@@ -70,7 +70,7 @@
                 onclick={() => handleNavClick(item.path)}
                 title={collapsed ? item.label : ''}
             >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 transition-all duration-300 group-hover:scale-110 {currentRoute === item.path ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 group-hover:text-cyan-500'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 flex-shrink-0 transition-all duration-300 group-hover:scale-110 {currentRoute === item.path ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 group-hover:text-cyan-500'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
                 </svg>
                 {#if !collapsed}
@@ -87,13 +87,13 @@
             onclick={() => themeStore.toggle()}
             title={collapsed ? 'Toggle Theme' : ''}
         >
-            <div class="h-5 w-5 flex items-center justify-center transition-transform group-hover:rotate-12">
+            <div class="h-6 w-6 flex items-center justify-center transition-transform group-hover:rotate-12">
                 {#if themeStore.isDark}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                 {:else}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                     </svg>
                 {/if}
@@ -109,7 +109,7 @@
             aria-label={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
             title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-500 {collapsed ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 transition-transform duration-500 {collapsed ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
             </svg>
         </button>
