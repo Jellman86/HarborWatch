@@ -244,6 +244,10 @@
         {#await import("./lib/pages/Diagnostics.svelte") then Mod}
           <Mod.default params={routeParams} />
         {/await}
+      {:else if currentRoute === 'ai-history'}
+        {#await import("./lib/pages/AIHistory.svelte") then Mod}
+          <Mod.default />
+        {/await}
       {:else if currentRoute === 'settings'}
         {#await import("./lib/pages/Settings.svelte") then Mod}
           <Mod.default />
