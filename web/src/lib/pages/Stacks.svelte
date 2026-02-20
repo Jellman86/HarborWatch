@@ -1,9 +1,15 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { toasts } from "../stores/ToastStore";
+
+    let { onNavigate } = $props<{
+        onNavigate: (route: string, params?: any) => void;
+    }>();
 
     // Component State
     let stacks = $state<any[]>([]);
     let loading = $state(true);
+    let redeploying = $state<Record<number, boolean>>({});
     let error = $state("");
 
     async function loadStacks() {
@@ -24,6 +30,28 @@
             error = "Could not connect to backend";
         } finally {
             loading = false;
+        }
+    }
+
+    async function redeployStack(id: number) {
+        if (redeploying[id]) return;
+        redeploying[id] = true;
+        toasts.info(`Triggering redeploy for stack ${id}...`);
+        try {
+            const res = await fetch(`/api/portainer/stacks/${id}/redeploy`, {
+                method: "POST"
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toasts.success(data.message || "Redeploy triggered successfully");
+                await loadStacks();
+            } else {
+                toasts.error(data.message || "Redeploy failed");
+            }
+        } catch (e) {
+            toasts.error("Failed to trigger redeploy");
+        } finally {
+            redeploying[id] = false;
         }
     }
 
@@ -97,6 +125,7 @@
                         <th class="px-8 py-4">Engine Type</th>
                         <th class="px-8 py-4">Endpoint</th>
                         <th class="px-8 py-4">Status</th>
+                        <th class="px-8 py-4 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
@@ -117,6 +146,34 @@
                                 <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase {statusColor(s.Status)}">
                                     {s.Status === 1 ? 'Active' : 'Inactive'}
                                 </span>
+                            </td>
+                            <td class="px-8 py-4 text-right">
+                                <div class="flex justify-end gap-2">
+                                    <button 
+                                        onclick={() => onNavigate('containers', { search: s.Name })}
+                                        class="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all border border-slate-200 dark:border-slate-700 shadow-sm"
+                                        title="View containers in this stack"
+                                    >
+                                        Manage
+                                    </button>
+                                    {#if s.Type === 2}
+                                        <button 
+                                            onclick={() => redeployStack(s.Id)}
+                                            disabled={redeploying[s.Id]}
+                                            class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[9px] font-black uppercase tracking-widest rounded-lg transition-all shadow-lg shadow-brand-500/20 flex items-center gap-2"
+                                            title="Redeploy stack and pull latest images"
+                                        >
+                                            {#if redeploying[s.Id]}
+                                                <div class="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            {:else}
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            {/if}
+                                            Redeploy
+                                        </button>
+                                    {/if}
+                                </div>
                             </td>
                         </tr>
                     {/each}

@@ -4,8 +4,9 @@
     import Sparkline from "../components/Sparkline.svelte";
     import { parseImageRef } from "../utils/image-ref";
 
-    let { containers, onNavigate } = $props<{
+    let { containers, params, onNavigate } = $props<{
         containers: ContainerSummary[];
+        params?: { search?: string };
         onNavigate: (route: string, params?: any) => void;
     }>();
 
@@ -16,6 +17,19 @@
     let imageRiskByKey = $state<Record<string, { critical: number; high: number; malwareInfected: boolean }>>({});
     let lastRiskKey = $state("");
     let searchQuery = $state("");
+
+    $effect(() => {
+        if (params?.search) {
+            searchQuery = params.search;
+        }
+    });
+
+    $effect(() => {
+        if (params?.search) {
+            searchQuery = params.search;
+        }
+    });
+
     type FleetFilter = "all" | "updates" | "intel" | "high-risk" | "ignored";
     let activeFilter = $state<FleetFilter>("all");
     let ignoredTokens = $state<string[]>(["harborwatch"]);

@@ -88,3 +88,38 @@ func (c *Client) GetStackFile(ctx context.Context, stackID int) (string, error) 
 
 	return data.StackFileContent, nil
 }
+
+func (c *Client) UpdateStack(ctx context.Context, stackID int, endpointID int, yaml string, env []map[string]string, prune bool, pullImage bool) error {
+	payload := map[string]any{
+		"StackFileContent": yaml,
+		"Env":              env,
+		"Prune":            prune,
+		"PullImage":        pullImage,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/api/stacks/%d?endpointId=%d", c.baseURL, stackID, endpointID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, strings.NewReader(string(data)))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("X-API-Key", c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("portainer api error: status %d", resp.StatusCode)
+	}
+
+	return nil
+}

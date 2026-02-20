@@ -2298,20 +2298,72 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 			})
 		})
 
-		r.Get("/portainer/stacks", func(w http.ResponseWriter, r *http.Request) {
-			if currentPortainerService == nil {
-				writeError(w, http.StatusServiceUnavailable, "portainer_unavailable", "Portainer integration not configured")
-				return
-			}
-			stacks, err := currentPortainerService.ListStacks(r.Context())
-			if err != nil {
-				writeError(w, http.StatusBadGateway, "portainer_error", err.Error())
-				return
-			}
-			if stacks == nil {
-				stacks = []portainer.Stack{}
-			}
-			writeJSON(w, http.StatusOK, stacks)
+		r.Route("/portainer/stacks", func(r chi.Router) {
+			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				if currentPortainerService == nil {
+					writeError(w, http.StatusServiceUnavailable, "portainer_unavailable", "Portainer integration not configured")
+					return
+				}
+				stacks, err := currentPortainerService.ListStacks(r.Context())
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "portainer_error", err.Error())
+					return
+				}
+				if stacks == nil {
+					stacks = []portainer.Stack{}
+				}
+				writeJSON(w, http.StatusOK, stacks)
+			})
+
+			r.Post("/{id}/redeploy", func(w http.ResponseWriter, r *http.Request) {
+				if currentPortainerService == nil {
+					writeError(w, http.StatusServiceUnavailable, "portainer_unavailable", "Portainer integration not configured")
+					return
+				}
+				idStr := chi.URLParam(r, "id")
+				id, err := strconv.Atoi(idStr)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_id", "Stack ID must be an integer")
+					return
+				}
+
+				ctx := r.Context()
+				// 1. Get current stack file
+				yaml, err := currentPortainerService.GetStackFile(ctx, id)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "portainer_error", "Failed to retrieve stack file: "+err.Error())
+					return
+				}
+
+				// 2. Find endpoint ID from stack list
+				stacks, err := currentPortainerService.ListStacks(ctx)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "portainer_error", "Failed to list stacks to find endpoint ID: "+err.Error())
+					return
+				}
+
+				var targetStack *portainer.Stack
+				for _, s := range stacks {
+					if s.ID == id {
+						targetStack = &s
+						break
+					}
+				}
+
+				if targetStack == nil {
+					writeError(w, http.StatusNotFound, "stack_not_found", "Stack not found in Portainer")
+					return
+				}
+
+				// 3. Trigger update with PullImage=true
+				err = currentPortainerService.UpdateStack(ctx, id, targetStack.EndpointID, yaml, nil, true, true)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "portainer_error", "Redeploy failed: "+err.Error())
+					return
+				}
+
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Stack redeploy triggered with image pull"})
+			})
 		})
 	})
 
