@@ -3,7 +3,7 @@
 export type HealthResponse = { status: string; service: string; version: string };
 export type Metric = { containerId: string; timestamp: number; cpuPercent: number; memoryUsage: number; memoryLimit: number; pids: number };
 export type AuditJobSummary = { id: string; type: string; target: string; containerId?: string; status: string; error?: string; startedAt: number; completedAt?: number };
-export type ContainerSummary = { id: string; names: string[]; image: string; state: string; status: string; labels: Record<string, string>; updateAvailable: boolean };
+export type ContainerSummary = { id: string; names: string[]; image: string; state: string; status: string; health: string; labels: Record<string, string>; updateAvailable: boolean };
 export type ContainerDetail = { summary: ContainerSummary; diskUsage?: ContainerDiskUsage; vulnerabilitySummary?: ScanSummary; malwareSummary?: MalwareScanSummary[]; recentMetrics?: Metric[]; actionHistory?: AuditJobSummary[]; rules?: ContainerRules };
 export type ContainerDiskUsage = { writableBytes?: number; rootFsBytes?: number; mountCount?: number; hostTotalBytes?: number; hostAvailableBytes?: number; hostUsedBytes?: number };
 export type ContainerRules = { containerId: string; updatePolicy: 'auto' | 'manual' | 'locked'; validateUrl?: string; validateMode?: 'http' | 'docker' | 'both'; validateTimeoutSec?: number; validateIntervalSec?: number; aiValidateLogs?: boolean; autoRollback: boolean; inheritAutomation?: boolean; upgradesAutomation?: boolean; maintenanceAutomation?: boolean; securityAutomation?: boolean };

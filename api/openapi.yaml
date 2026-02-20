@@ -762,6 +762,7 @@ components:
         image: { type: string }
         state: { type: string }
         status: { type: string }
+        health: { type: string }
         labels: { type: object, additionalProperties: { type: string } }
         updateAvailable: { type: boolean }
     ImageSummary:

@@ -56,6 +56,19 @@
         }
     };
 
+    const healthColor = (health: string) => {
+        switch (health.toLowerCase()) {
+            case "healthy":
+                return "bg-emerald-500";
+            case "unhealthy":
+                return "bg-rose-500";
+            case "starting":
+                return "bg-amber-500";
+            default:
+                return "";
+        }
+    };
+
     const getPolicy = (labels: Record<string, string>) => {
         if (!labels) return null;
         return labels["harborwatch.update.policy"] || (labels["harborwatch.enable"] === "true" ? "auto" : null);
@@ -441,6 +454,12 @@
                                 <span class="px-2 py-1 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest">
                                     Ignored
                                 </span>
+                            {/if}
+                            {#if c.health && c.health !== "none"}
+                                <div class="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    <span class="w-1.5 h-1.5 rounded-full {healthColor(c.health)} animate-pulse"></span>
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">{c.health}</span>
+                                </div>
                             {/if}
                             <span class="px-2 py-1 rounded-lg text-[9px] font-black uppercase {stateColor(c.state)}">
                                 {c.state}

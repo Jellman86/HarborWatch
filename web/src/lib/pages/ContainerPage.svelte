@@ -635,6 +635,19 @@
             default: return 'bg-slate-500';
         }
     };
+
+    const healthColor = (health: string | undefined) => {
+        switch (health?.toLowerCase()) {
+            case "healthy":
+                return "bg-emerald-500";
+            case "unhealthy":
+                return "bg-rose-500";
+            case "starting":
+                return "bg-amber-500";
+            default:
+                return "";
+        }
+    };
 </script>
 
 <div class="space-y-8">
@@ -675,6 +688,12 @@
                         <h2 class="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight truncate max-w-full">
                             {detail.summary.names?.[0]?.replace(/^\//, '') ?? 'unnamed'}
                         </h2>
+                        {#if detail.summary.health && detail.summary.health !== "none"}
+                             <span class="px-2 py-1 bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded text-[9px] font-black uppercase flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full {healthColor(detail.summary.health)} animate-pulse"></span>
+                                {detail.summary.health}
+                            </span>
+                        {/if}
                         {#if detail.summary.updateAvailable}
                             <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded text-[9px] font-black uppercase animate-pulse whitespace-nowrap">
                                 Update Available

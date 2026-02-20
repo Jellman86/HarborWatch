@@ -91,6 +91,7 @@ func (c *Client) ListContainers(ctx context.Context) ([]gen.ContainerSummary, er
 			Image:           item.Image,
 			State:           item.State,
 			Status:          item.Status,
+			Health:          parseHealth(item.Status),
 			Labels:          item.Labels,
 			UpdateAvailable: globalUpdateStore.Get(item.Image),
 		})
@@ -129,15 +130,35 @@ func (c *Client) GetContainer(ctx context.Context, id string) (gen.ContainerSumm
 		labels = map[string]string{}
 	}
 
+	health := "none"
+	if item.State.Health != nil {
+		health = strings.ToLower(item.State.Health.Status)
+	}
+
 	return gen.ContainerSummary{
 		ID:              item.ID,
 		Names:           names,
 		Image:           item.Config.Image,
 		State:           state,
 		Status:          status,
+		Health:          health,
 		Labels:          labels,
 		UpdateAvailable: globalUpdateStore.Get(item.Config.Image),
 	}, nil
+}
+
+func parseHealth(status string) string {
+	s := strings.ToLower(status)
+	if strings.Contains(s, "(healthy)") {
+		return "healthy"
+	}
+	if strings.Contains(s, "(unhealthy)") {
+		return "unhealthy"
+	}
+	if strings.Contains(s, "(health: starting)") {
+		return "starting"
+	}
+	return "none"
 }
 
 func (c *Client) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
@@ -443,6 +464,9 @@ type containerInspectJSON struct {
 		Status  string `json:"Status"`
 		Running bool   `json:"Running"`
 		Dead    bool   `json:"Dead"`
+		Health  *struct {
+			Status string `json:"Status"`
+		} `json:"Health"`
 	} `json:"State"`
 	Config struct {
 		Image  string            `json:"Image"`
