@@ -12,23 +12,24 @@ import (
 type JobType string
 
 const (
-	JobTypeUpdate  JobType = "update"
-	JobTypeScan    JobType = "scan"
+	JobTypeUpdate   JobType = "update"
+	JobTypeScan     JobType = "scan"
 	JobTypeRedeploy JobType = "redeploy"
 )
 
 // Job represents a queued or running task.
 type Job struct {
-	ID        string
-	Type      JobType
-	Subtype   string // e.g. "trivy", "clamav"
-	Target    string // Usually ContainerID or Image name
-	TargetName string // Friendly name
-	Progress  int
-	Status    string
-	Message   string
-	StartedAt int64
-	Cancel    context.CancelFunc
+	ID           string
+	Type         JobType
+	Subtype      string // e.g. "trivy", "clamav"
+	Target       string // Usually ContainerID or Image name
+	TargetName   string // Friendly name
+	Progress     int
+	ProgressMode string // measured | estimated
+	Status       string
+	Message      string
+	StartedAt    int64
+	Cancel       context.CancelFunc
 }
 
 // Manager coordinates heavy operations with global concurrency limits and per-container locking.
@@ -36,7 +37,7 @@ type Manager struct {
 	mu             sync.RWMutex
 	jobs           map[string]*Job
 	containerLocks map[string]string // containerID -> jobID
-	
+
 	maxConcurrency int
 	activeSlots    chan struct{}
 }
@@ -56,7 +57,7 @@ func NewManager(maxConcurrency int) *Manager {
 func (m *Manager) SetMaxConcurrency(n int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if n <= 0 {
 		n = 1
 	}
@@ -64,10 +65,10 @@ func (m *Manager) SetMaxConcurrency(n int) {
 		return
 	}
 
-	// Adjusting a semaphore at runtime is tricky in Go. 
+	// Adjusting a semaphore at runtime is tricky in Go.
 	// For simplicity, we keep the existing channel and just update the limit for FUTURE jobs
 	// if we were to recreate the channel. But since it's a buffered channel, we can't easily
-	// resize it. We'll stick to the initial limit for this session or implement a more 
+	// resize it. We'll stick to the initial limit for this session or implement a more
 	// dynamic semaphore if really needed.
 	m.maxConcurrency = n
 }
@@ -106,16 +107,33 @@ func (m *Manager) ReleaseSlot(jobID, containerID string) {
 func (m *Manager) RegisterJob(job *Job) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if job.ProgressMode == "" {
+		job.ProgressMode = "measured"
+	}
 	m.jobs[job.ID] = job
 }
 
 func (m *Manager) UpdateJob(id string, progress int, status, message string) {
+	m.UpdateJobWithMode(id, progress, status, message, "")
+}
+
+func (m *Manager) UpdateJobWithMode(id string, progress int, status, message, progressMode string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if j, ok := m.jobs[id]; ok {
 		j.Progress = progress
-		j.Status = status
-		j.Message = message
+		if status != "" {
+			j.Status = status
+		}
+		if message != "" {
+			j.Message = message
+		}
+		if progressMode != "" {
+			j.ProgressMode = progressMode
+		}
+		if j.ProgressMode == "" {
+			j.ProgressMode = "measured"
+		}
 	}
 }
 
@@ -137,7 +155,7 @@ func (m *Manager) CancelAll() {
 	}
 	// Also clear container locks
 	m.containerLocks = make(map[string]string)
-	
+
 	// Drain semaphore
 	for {
 		select {
@@ -151,7 +169,7 @@ func (m *Manager) CancelAll() {
 func (m *Manager) ActiveJobs() []gen.JobProgress {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	out := make([]gen.JobProgress, 0, len(m.jobs))
 	for _, j := range m.jobs {
 		typeName := string(j.Type)
@@ -159,13 +177,14 @@ func (m *Manager) ActiveJobs() []gen.JobProgress {
 			typeName += ":" + j.Subtype
 		}
 		out = append(out, gen.JobProgress{
-			ID:        j.ID,
-			Type:      typeName,
-			Target:    j.TargetName,
-			Status:    j.Status,
-			Message:   j.Message,
-			Progress:  j.Progress,
-			StartedAt: j.StartedAt,
+			ID:           j.ID,
+			Type:         typeName,
+			Target:       j.TargetName,
+			Status:       j.Status,
+			Message:      j.Message,
+			Progress:     j.Progress,
+			ProgressMode: j.ProgressMode,
+			StartedAt:    j.StartedAt,
 		})
 	}
 	return out

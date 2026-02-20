@@ -9,6 +9,7 @@ go test ./... >/dev/null
 
 if [ -d "$ROOT_DIR/web/node_modules" ]; then
   cd "$ROOT_DIR/web"
+  npx tsc --noEmit >/dev/null
   npm run build >/dev/null
 fi
 

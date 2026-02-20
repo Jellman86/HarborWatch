@@ -9,6 +9,7 @@ go test ./...
 
 if [ -d "$ROOT_DIR/web/node_modules" ]; then
   cd "$ROOT_DIR/web"
+  npx tsc --noEmit
   npm run build
 else
   echo "Skipping frontend build test (web/node_modules missing)"

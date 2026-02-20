@@ -202,30 +202,17 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan started job=%s target=%s", jobID, target))
 	}
 
-	s.setJobProgressWithMessage(jobID, 10, "Scanning vulnerabilities")
-	
-	// Start simulated progress trickler
+	s.setJobProgressWithMessage(jobID, 20, "Scanning vulnerabilities")
+
+	// Estimated progress advances within scan phase while the scanner runs.
 	stopTrickle := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		prog := 10
-		for {
-			select {
-			case <-stopTrickle:
-				return
-			case <-ticker.C:
-				if prog < 70 {
-					prog += 2
-					s.setJobProgress(jobID, prog)
-				}
-			}
-		}
+		s.runBoundedEstimatedProgress(jobID, 20, 75, envDuration("HW_TRIVY_SCAN_TIMEOUT", 15*time.Minute), 5*time.Second, stopTrickle)
 	}()
 
 	result, err := s.scanner.Scan(ctx, target)
 	close(stopTrickle) // Stop the trickler
-	
+
 	if err != nil {
 		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
 			s.setJobCancelled(jobID, "scan cancelled by user")
@@ -239,7 +226,7 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 		return
 	}
 
-	s.setJobProgressWithMessage(jobID, 80, "Persisting results")
+	s.setJobProgressWithMessage(jobID, 82, "Persisting results")
 	if err := s.store.SaveResult(ctx, result); err != nil {
 		s.setJobFailed(jobID, err)
 		return
@@ -288,25 +275,12 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan started job=%s target=%s path=%s", jobID, targetLabel, scanPath))
 	}
 
-	s.setJobProgressWithMessage(jobID, 20, "Scanning filesystem")
+	s.setJobProgressWithMessage(jobID, 25, "Scanning filesystem")
 
-	// Start simulated progress trickler
+	// Estimated progress advances within scan phase while the scanner runs.
 	stopTrickle := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		prog := 20
-		for {
-			select {
-			case <-stopTrickle:
-				return
-			case <-ticker.C:
-				if prog < 80 {
-					prog += 3
-					s.setJobProgress(jobID, prog)
-				}
-			}
-		}
+		s.runBoundedEstimatedProgress(jobID, 25, 85, envDuration("HW_CLAMAV_SCAN_TIMEOUT", 15*time.Minute), 5*time.Second, stopTrickle)
 	}()
 
 	result, err := s.malwareScanner.ScanPath(ctx, scanPath)
@@ -326,7 +300,7 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 	}
 	result.Target = targetLabel
 
-	s.setJobProgressWithMessage(jobID, 85, "Persisting results")
+	s.setJobProgressWithMessage(jobID, 88, "Persisting results")
 	if err := s.store.SaveMalwareResult(ctx, result); err != nil {
 		s.setJobFailed(jobID, err)
 		return
@@ -341,7 +315,11 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 }
 
 func (s *Service) setJobProgress(jobID string, progress int) {
-	s.setJobProgressWithMessage(jobID, progress, "")
+	s.setJobProgressWithMessageAndMode(jobID, progress, "", "measured")
+}
+
+func (s *Service) setJobProgressEstimated(jobID string, progress int) {
+	s.setJobProgressWithMessageAndMode(jobID, progress, "", "estimated")
 }
 
 func (s *Service) setJobMessage(jobID string, message string) {
@@ -360,6 +338,10 @@ func (s *Service) setJobMessage(jobID string, message string) {
 }
 
 func (s *Service) setJobProgressWithMessage(jobID string, progress int, message string) {
+	s.setJobProgressWithMessageAndMode(jobID, progress, message, "measured")
+}
+
+func (s *Service) setJobProgressWithMessageAndMode(jobID string, progress int, message, progressMode string) {
 	s.mu.Lock()
 	job, ok := s.jobs[jobID]
 	if !ok || (job.Status != "running" && job.Status != "queued") {
@@ -372,8 +354,48 @@ func (s *Service) setJobProgressWithMessage(jobID string, progress int, message 
 	}
 	s.jobs[jobID] = job
 	s.mu.Unlock()
-	s.jobManager.UpdateJob(jobID, progress, job.Status, message)
+	s.jobManager.UpdateJobWithMode(jobID, progress, job.Status, message, progressMode)
 	_ = s.store.UpdateJobProgress(context.Background(), jobID, job.Status, progress)
+}
+
+func (s *Service) runBoundedEstimatedProgress(jobID string, start, cap int, budget, interval time.Duration, stop <-chan struct{}) {
+	if cap <= start {
+		return
+	}
+	if budget <= 0 {
+		budget = 15 * time.Minute
+	}
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	startTime := time.Now()
+	last := start
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			elapsed := time.Since(startTime)
+			frac := float64(elapsed) / float64(budget)
+			if frac < 0 {
+				frac = 0
+			}
+			if frac > 1 {
+				frac = 1
+			}
+			next := start + int(frac*float64(cap-start))
+			if next > cap {
+				next = cap
+			}
+			if next > last {
+				last = next
+				s.setJobProgressEstimated(jobID, next)
+			}
+		}
+	}
 }
 
 func (s *Service) setJobFailed(jobID string, err error) {

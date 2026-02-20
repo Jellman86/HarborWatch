@@ -43,6 +43,7 @@ jobs:
       - name: Build frontend
         run: |
           cd web
+          npx tsc --noEmit
           npm run build
 
   docker-build-check:

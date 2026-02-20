@@ -57,6 +57,8 @@
         return last.message || last.status;
     });
 
+    let hasEstimatedProgress = $derived.by(() => jobs.some((j) => j.progressMode === "estimated"));
+
     let showDetails = $state(false);
     let cancellingAll = $state(false);
 
@@ -91,7 +93,15 @@
         <div class="max-w-[120rem] mx-auto px-4 md:px-8 py-3 relative z-10">
             <div class="flex flex-col gap-2">
                 <div class="flex items-center justify-between gap-4">
-                    <div class="flex items-center gap-3 min-w-0 flex-1" onmouseenter={() => showDetails = true} onmouseleave={() => showDetails = false}>
+                    <div 
+                        class="flex items-center gap-3 min-w-0 flex-1 cursor-help focus:outline-none focus:ring-2 focus:ring-brand-500 rounded-lg" 
+                        onmouseenter={() => showDetails = true} 
+                        onmouseleave={() => showDetails = false}
+                        onclick={() => showDetails = !showDetails}
+                        role="button"
+                        tabindex="0"
+                        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showDetails = !showDetails }}
+                    >
                         <div class="w-6 h-6 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 flex-shrink-0">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -114,6 +124,11 @@
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
                                 {aggregateProgress}% Total
                             </p>
+                            {#if hasEstimatedProgress}
+                                <p class="text-[8px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest whitespace-nowrap">
+                                    Estimated
+                                </p>
+                            {/if}
                         </div>
 
                         <button 
