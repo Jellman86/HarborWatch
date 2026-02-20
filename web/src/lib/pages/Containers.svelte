@@ -52,6 +52,8 @@
         hasChangelog?: boolean;
         releaseIntelReady?: boolean;
         fullAutomationReady?: boolean;
+        portainerManaged?: boolean;
+        portainerConfigured?: boolean;
         issues?: ContainerIntelIssue[];
     }
 
@@ -457,6 +459,11 @@
                             {#if c.updateAvailable}
                                 <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-lg text-[9px] font-black uppercase tracking-widest">
                                     Update
+                                </span>
+                            {/if}
+                            {#if lookupIntel(c)?.portainerManaged && !lookupIntel(c)?.portainerConfigured}
+                                <span class="px-2 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest" title="Portainer integration required for safe updates">
+                                    Portainer
                                 </span>
                             {/if}
                             {#if intelNeedsAttention(c)}

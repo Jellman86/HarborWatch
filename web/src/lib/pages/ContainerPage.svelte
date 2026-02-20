@@ -30,6 +30,8 @@
         hasChangelog?: boolean;
         releaseIntelReady?: boolean;
         fullAutomationReady?: boolean;
+        portainerManaged?: boolean;
+        portainerConfigured?: boolean;
         issues?: Array<{
             code: string;
             severity: "info" | "warning" | "error";
@@ -800,6 +802,24 @@
                 </div>
             {:else if activeTab === 'lifecycle'}
                 <div class="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {#if intel?.portainerManaged && !intel?.portainerConfigured}
+                        <div class="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50 p-4 rounded-2xl flex items-start gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <div class="text-xs">
+                                <p class="font-black text-amber-900 dark:text-amber-200 uppercase tracking-tight">Portainer Integration Required</p>
+                                <p class="text-amber-800/80 dark:text-amber-300/70 mt-1">
+                                    This container is managed by Portainer. HarborWatch requires Portainer API access to safely update this stack and preserve its configuration and secrets.
+                                </p>
+                                <button 
+                                    onclick={() => onNavigate('settings')}
+                                    class="mt-2 text-amber-700 dark:text-amber-400 font-black uppercase hover:underline"
+                                >Configure Portainer in Settings &rarr;</button>
+                            </div>
+                        </div>
+                    {/if}
+
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                         <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
                             <div>
@@ -847,8 +867,9 @@
                                     </button>
                                     <button
                                         onclick={openManualUpdate}
-                                        disabled={detail.rules.updatePolicy === "locked"}
+                                        disabled={detail.rules.updatePolicy === "locked" || (intel?.portainerManaged && !intel?.portainerConfigured)}
                                         class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                                        title={intel?.portainerManaged && !intel?.portainerConfigured ? "Portainer integration required" : ""}
                                     >
                                         Trigger Upgrade
                                     </button>

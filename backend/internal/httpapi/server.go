@@ -835,7 +835,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 
 				rows := make([]containerIntelResponse, 0, len(containers))
 				for _, summary := range containers {
-					rows = append(rows, effectiveContainerIntel(summary, overrideForContainerID(summary.ID, overrideMap)))
+					rows = append(rows, effectiveContainerIntel(summary, overrideForContainerID(summary.ID, overrideMap), currentPortainerService))
 				}
 				writeJSON(w, http.StatusOK, rows)
 			})
@@ -1188,7 +1188,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 						return
 					}
 					summary := loadContainerSummary(ctx, id)
-					writeJSON(w, http.StatusOK, effectiveContainerIntel(summary, ov))
+					writeJSON(w, http.StatusOK, effectiveContainerIntel(summary, ov, currentPortainerService))
 				}
 
 				saveIntel := func(w http.ResponseWriter, r *http.Request) {
@@ -1223,7 +1223,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					}
 					ov, _ := intelService.Get(ctx, id)
 					summary := loadContainerSummary(ctx, id)
-					writeJSON(w, http.StatusOK, effectiveContainerIntel(summary, ov))
+					writeJSON(w, http.StatusOK, effectiveContainerIntel(summary, ov, currentPortainerService))
 				}
 
 				router.Get("/", getIntel)
@@ -1540,6 +1540,8 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					switch {
 					case errors.Is(err, ErrUpdatePolicyLocked):
 						writeError(w, http.StatusLocked, "update_policy_locked", err.Error())
+					case errors.Is(err, ErrPortainerIntegrationRequired):
+						writeError(w, http.StatusPreconditionFailed, "portainer_required", err.Error())
 					default:
 						writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 					}

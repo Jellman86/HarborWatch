@@ -31,6 +31,8 @@ type containerIntelResponse struct {
 	ReleaseIntelReady      bool                  `json:"releaseIntelReady"`
 	FullAutomationReady    bool                  `json:"fullAutomationReady"`
 	Issues                 []containerIntelIssue `json:"issues,omitempty"`
+	PortainerManaged       bool                  `json:"portainerManaged"`
+	PortainerConfigured    bool                  `json:"portainerConfigured"`
 	UpdatedAt              int64                 `json:"updatedAt,omitempty"`
 }
 
@@ -56,7 +58,7 @@ func deriveChangelogURL(summary gen.ContainerSummary, repoURL string) string {
 	return deriveDefaultChangelogURL(repoURL)
 }
 
-func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Override) containerIntelResponse {
+func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Override, portainerService PortainerClient) containerIntelResponse {
 	derivedRepo := deriveRepositoryURL(summary)
 	derivedChangelog := deriveChangelogURL(summary, derivedRepo)
 	overrideRepo := strings.TrimSpace(ov.RepositoryURL)
@@ -64,6 +66,24 @@ func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Ove
 	effectiveRepo := firstNonEmpty(overrideRepo, derivedRepo)
 	effectiveChangelog := firstNonEmpty(overrideChangelog, derivedChangelog)
 	readiness := evaluateContainerIntelReadiness(effectiveRepo, effectiveChangelog)
+
+	portainerManaged := false
+	if summary.Labels != nil {
+		if _, ok := summary.Labels["io.portainer.stack_id"]; ok {
+			portainerManaged = true
+		}
+	}
+	portainerConfigured := portainerService != nil
+
+	if portainerManaged && !portainerConfigured {
+		readiness.Issues = append(readiness.Issues, containerIntelIssue{
+			Code:     "portainer_integration_missing",
+			Severity: "error",
+			Message:  "Portainer integration is required for this container's lifecycle management.",
+			Action:   "Configure Portainer API in Settings > Integrations to enable safe updates.",
+		})
+		readiness.FullAutomationReady = false
+	}
 
 	return containerIntelResponse{
 		ContainerID:            summary.ID,
@@ -81,6 +101,8 @@ func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Ove
 		ReleaseIntelReady:      readiness.ReleaseIntelReady,
 		FullAutomationReady:    readiness.FullAutomationReady,
 		Issues:                 readiness.Issues,
+		PortainerManaged:       portainerManaged,
+		PortainerConfigured:    portainerConfigured,
 		UpdatedAt:              ov.UpdatedAt,
 	}
 }

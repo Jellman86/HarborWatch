@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	ErrUpdatePolicyLocked  = errors.New("update policy is locked")
-	ErrUpdatePolicyNotAuto = errors.New("update policy is not auto")
+	ErrUpdatePolicyLocked          = errors.New("update policy is locked")
+	ErrUpdatePolicyNotAuto         = errors.New("update policy is not auto")
+	ErrPortainerIntegrationRequired = errors.New("portainer integration required for this container")
 )
 
 type updateRequestBuildOptions struct {
@@ -137,7 +138,7 @@ func buildUpdateRequestForContainer(
 	if intelService != nil {
 		intelCtx, intelCancel := context.WithTimeout(ctx, 3*time.Second)
 		if ov, err := intelService.Get(intelCtx, containerID); err == nil {
-			merged := effectiveContainerIntel(out.Summary, ov)
+			merged := effectiveContainerIntel(out.Summary, ov, portainerService)
 			repoURL = firstNonEmpty(merged.EffectiveRepositoryURL, repoURL)
 			changelogURL = firstNonEmpty(merged.EffectiveChangelogURL, changelogURL)
 		}
@@ -157,13 +158,15 @@ func buildUpdateRequestForContainer(
 	isPortainer := false
 	stackID := 0
 	endpointID := 0
-	if portainerService != nil && out.Summary.Labels != nil {
+	if out.Summary.Labels != nil {
 		if sid, ok := out.Summary.Labels["io.portainer.stack_id"]; ok {
+			if portainerService == nil {
+				return out, fmt.Errorf("%w: container %s is managed by a Portainer stack", ErrPortainerIntegrationRequired, containerID)
+			}
 			if parsed, err := strconv.Atoi(sid); err == nil {
 				isPortainer = true
 				stackID = parsed
 				// Try to find the endpoint ID. It might be in labels or we query Portainer.
-				// io.portainer.endpoint_id is often present.
 				if eid, ok := out.Summary.Labels["io.portainer.endpoint_id"]; ok {
 					if parsedE, err := strconv.Atoi(eid); err == nil {
 						endpointID = parsedE
