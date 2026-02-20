@@ -13,6 +13,7 @@
     import DiskUsagePanel from "../components/DiskUsagePanel.svelte";
     import MalwareScanPanel from "../components/MalwareScanPanel.svelte";
     import TrivyFindingsPanel from "../components/TrivyFindingsPanel.svelte";
+    import PortainerLogo from "../components/PortainerLogo.svelte";
     import { toasts } from "../stores/ToastStore";
 
     interface ContainerIntelRecord {
@@ -702,7 +703,8 @@
                             </span>
                         {/if}
                         {#if intel?.portainerManaged}
-                            <span class="px-2 py-1 {intel?.portainerConfigured ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-amber-500 text-white'} rounded text-[9px] font-black uppercase whitespace-nowrap">
+                            <span class="px-2 py-1 {intel?.portainerConfigured ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-amber-500 text-white'} rounded text-[9px] font-black uppercase whitespace-nowrap flex items-center gap-1.5">
+                                <PortainerLogo size={12} />
                                 Portainer Managed
                             </span>
                         {/if}
