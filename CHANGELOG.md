@@ -5,15 +5,18 @@ All notable changes to HarborWatch are documented in this file.
 ## [0.8.0] - 2026-02-20
 
 ### Added
+- **AI Intelligence Logs View:**
+  - Launched a dedicated **AI History** page providing a 14-day visual activity timeline of AI requests.
+  - Implemented an expandable audit trail allowing side-by-side review of raw prompts and AI responses.
+  - Added full-text search and feature-based filtering for AI interaction history.
 - **Global Job Coordination (JobManager):**
   - Implemented a centralized **JobManager** backend service to coordinate all "heavy" operations (Trivy Scans, ClamAV Scans, Updates, and Redeployments).
-  - Added global concurrency limits (configurable via `AutoUpgradeMaxConcurrency`) and strict per-container locking to prevent conflicting operations.
-  - Enhanced the global progress bar to show friendly container names and accurately reflect all queued and running tasks.
-- **AI Transparency & Logging:**
-  - Added full **AI Conversation Logging** to SQLite, recording raw prompts and responses for all AI-assisted actions.
-  - Implemented a new **AI Conversation History** section in Settings for full auditability of AI decisions.
-- **Diagnostics Paging:**
-  - Updated the system logs API and backend to support SQL-level filtering and paging (`limit`/`offset`), enabling smooth browsing of large log histories.
+  - Added global concurrency limits (configurable via **Settings > Automation > General**) and strict per-container locking.
+  - **Cancel All:** Added a global "Cancel All" capability to immediately terminate all active background tasks via the UI and API.
+  - **Simulated Progress:** Implemented active progress trickling for long-running Trivy and ClamAV scans to ensure the UI remains responsive and informative.
+- **Advanced Diagnostics & Paging:**
+  - Re-engineered the System Health logs with full windowed pagination and clickable page numbers.
+  - Added support for "First" and "Last" page navigation and total result counts for filtered log views.
 - **Global Progress Notification System:**
   - Implemented a sleek, sticky progress header that aggregates all active background jobs (scans, updates).
   - Added detailed job status messages (e.g., "Scanning vulnerabilities...", "Backing up...") and per-job progress tracking (0-100%).
@@ -31,20 +34,27 @@ All notable changes to HarborWatch are documented in this file.
   - Implemented **Safety Gates**: Backend and UI now actively block "Local" update attempts on Portainer-managed containers if the API is not configured, preventing configuration divergence.
   - Added interactive **Amber Warning Badges** and guidance alerts for containers requiring Portainer API setup.
 - **Performance & Efficiency:**
-  - **Smart Polling**: Frontend background task polling now implements an intelligent backoff (slowing from 5s to 30s when idle) to reduce server load.
+  - **Smart Polling**: Frontend background task polling now implements an intelligent backoff.
+  - **Background Data Refresh**: Added a 30s background poll for container and image data to ensure the UI stays synchronized with external orchestrators (like Portainer).
 - **Robustness & Recovery:**
   - Added startup reconciliation for update jobs; stale `running` jobs are now automatically failed on restart to prevent "stuck" UI states.
   - Fixed semaphore deadlock in ClamAV signature updates by making slot acquisition context-aware.
   - Increased Portainer API client timeout to 300s to handle large image pulls during stack redeployments.
 
 ### Changed
+- **Settings UI Reorganization:**
+  - Created a dedicated **General** automation sub-tab for global configurations.
+  - Moved "Max Concurrent Tasks" and "Automation Safety Exclusions" to the General tab for better visibility.
+- **Fleet UI Modernization:**
+  - **Grayscale Ignored Containers:** Ignored containers are now visually dimmed to clearly distinguish them from active managed assets.
+  - **Icon-Only Status Pills:** Converted text-heavy pills (Online, Healthy, Update, etc.) to compact icons with tooltips, maximizing space for container names.
 - **Enhanced Ignore Logic:**
   - Expanded the default container ignore list to include `portainer-ce` and `ix-portainer`.
   - Updated matching logic to use robust case-insensitive substring matching (`strings.Contains`) consistently across backend and frontend.
 - **UI/UX Refinements:**
   - Fixed sidebar logo scaling to prevent distortion when collapsed.
   - Removed redundant top sidebar collapse button.
-  - Resolved layout overlaps in Fleet card headers by enabling flex-wrap and better text truncation.
+  - Resolved layout overlaps in Fleet card headers.
 - **CPU Metrics Normalization:**
   - Implemented configurable CPU reporting: Added a toggle in **Settings > Appearance** to switch between **Normalized (System Total)** and **Raw (Per-Core)** views.
   - Default calculation aligns with host-level monitors like TrueNAS Scale (Total System Capacity).
