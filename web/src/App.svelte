@@ -155,7 +155,11 @@
         </svg>
       </button>
       <div class="flex items-center gap-2">
-        <img src="/logo-64.png" alt="HarborWatch" class="h-8 w-8" />
+        <img 
+          src="/logo-64.png" 
+          alt="HarborWatch" 
+          class="h-8 w-8 {activeJobs.length > 0 ? 'ring-2 ring-cyan-500/20 animate-pulse rounded-full' : ''}" 
+        />
         <h1 class="text-sm font-black uppercase tracking-wider truncate max-w-[150px]">HarborWatch</h1>
       </div>
     </div>
@@ -173,7 +177,7 @@
     ></button>
   {/if}
 
-  <Sidebar {currentRoute} onNavigate={navigate} />
+  <Sidebar {currentRoute} onNavigate={navigate} hasActiveJobs={activeJobs.length > 0} />
 
   <main
     class="app-main min-h-screen transition-[padding-left] duration-300"

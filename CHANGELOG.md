@@ -37,7 +37,8 @@ All notable changes to HarborWatch are documented in this file.
 - **Stellar Compass Aesthetic Overhaul:**
   - Replaced the "Signpost" theme with the new **Stellar Compass** identity, featuring a "Void Navy", "Cyber Cyan", and "Data Emerald" palette.
   - Implemented technical grid backgrounds, sharper geometric precision (reduced radii), and "Outline + Glow" UI components.
-  - Scaled and integrated the new high-detail nautical logo across all views.
+  - Scaled and integrated the new high-detail nautical logo across all views with an automated "active pulse" for background tasks.
+  - **Audit Refinements**: Resolved dark-mode contrast issues for secondary text and fixed mobile sidebar interaction blocking.
 - **UI Refinements:**
   - Integrated dedicated **Portainer Logo** indicators into Fleet and Detail views for clearer orchestration context.
 - **Automation Safety:**

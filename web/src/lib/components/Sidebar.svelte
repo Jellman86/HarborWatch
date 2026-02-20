@@ -2,9 +2,10 @@
     import { themeStore } from '../stores/theme.svelte';
     import { layoutStore } from '../stores/layout.svelte';
 
-    let { currentRoute, onNavigate } = $props<{
+    let { currentRoute, onNavigate, hasActiveJobs = false } = $props<{
         currentRoute: string;
         onNavigate: (path: string) => void;
+        hasActiveJobs?: boolean;
     }>();
 
     let collapsed = $derived(layoutStore.sidebarCollapsed);
@@ -25,13 +26,17 @@
     }
 </script>
 
-<aside class="fixed left-0 top-0 h-full bg-white dark:bg-slate-900 shadow-xl border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col z-50 {collapsed ? 'w-20' : 'w-64'} {layoutStore.mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}">
-    <!-- Logo -->
-    <div class="flex items-center justify-between p-4 h-16 border-b border-slate-100 dark:border-slate-800">
-        <div class="flex items-center gap-3">
-            <img src="/logo-64.png" alt="HarborWatch" class="h-10 w-10 flex-shrink-0" />
-            {#if !collapsed}
-                <div class="flex flex-col overflow-hidden">
+<aside class="fixed left-0 top-0 h-full bg-white dark:bg-slate-900 shadow-xl border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col z-50 {collapsed ? 'w-20' : 'w-64'} {layoutStore.mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 pointer-events-none md:pointer-events-auto'}">
+        <div class="flex-1 flex flex-col min-h-0 pointer-events-auto">
+            <!-- Logo -->
+            <div class="flex items-center justify-between p-4 h-16 border-b border-slate-100 dark:border-slate-800">
+                <div class="flex items-center gap-3">
+                    <img 
+                        src="/logo-64.png" 
+                        alt="HarborWatch" 
+                        class="h-10 w-10 flex-shrink-0 transition-all duration-500 {hasActiveJobs ? 'ring-4 ring-cyan-500/20 animate-pulse rounded-full' : ''}" 
+                    />
+                    {#if !collapsed}                <div class="flex flex-col overflow-hidden">
                     <h1 class="text-sm font-black text-slate-900 dark:text-white leading-tight truncate uppercase tracking-wider">HarborWatch</h1>
                     <span class="text-[10px] font-black text-brand-500 dark:text-brand-400 uppercase tracking-tighter">Stellar Compass</span>
                 </div>
@@ -98,5 +103,6 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
             </svg>
         </button>
+    </div>
     </div>
 </aside>
