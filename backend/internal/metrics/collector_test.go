@@ -19,7 +19,7 @@ func TestComputeCPUPercent_UsesOnlineCPUsWhenPercpuMissing(t *testing.T) {
 	stats.PreCPUStats.CPUUsage.PercpuUsage = nil
 
 	got := computeCPUPercent(stats)
-	want := 80.0 // (1e9/5e9) * 4 * 100
+	want := 20.0 // (1e9/5e9) * 100
 	if math.Abs(got-want) > 0.0001 {
 		t.Fatalf("unexpected cpu percent: got %.4f want %.4f", got, want)
 	}
@@ -35,7 +35,7 @@ func TestComputeCPUPercent_UsesPercpuLengthFallback(t *testing.T) {
 	stats.CPUStats.CPUUsage.PercpuUsage = []uint64{1, 2}
 
 	got := computeCPUPercent(stats)
-	want := 100.0 // (1e9/2e9) * 2 * 100
+	want := 50.0 // (1e9/2e9) * 100
 	if math.Abs(got-want) > 0.0001 {
 		t.Fatalf("unexpected cpu percent: got %.4f want %.4f", got, want)
 	}

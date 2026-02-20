@@ -62,7 +62,7 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 	job := gen.ScanJobStatus{
 		JobID:     jobID,
 		Target:    target,
-		Status:    "running",
+		Status:    "queued",
 		StartedAt: time.Now().UTC().Unix(),
 		Source:    s.scanner.Name(),
 	}
@@ -80,7 +80,7 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 
 	go s.run(jobID, target, runCtx)
 
-	return gen.ScanStartResponse{JobID: jobID, Status: "running"}, nil
+	return gen.ScanStartResponse{JobID: jobID, Status: "queued"}, nil
 }
 
 func (s *Service) StartMalwareScan(target string) (gen.ScanStartResponse, error) {
@@ -94,7 +94,11 @@ func (s *Service) ClamAVSignatureStatus(ctx context.Context) (ClamAVSignatureSta
 }
 
 func (s *Service) UpdateClamAVSignatures(ctx context.Context) (string, error) {
-	s.clamavSem <- struct{}{}
+	select {
+	case s.clamavSem <- struct{}{}:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 	defer func() { <-s.clamavSem }()
 
 	updateCtx, cancel := context.WithTimeout(ctx, envDuration("HW_CLAMAV_UPDATE_TIMEOUT", 10*time.Minute))
@@ -155,10 +159,11 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 	}
 	go s.runMalware(jobID, targetLabel, scanPath, cleanupPath, runCtx)
 
-	return gen.ScanStartResponse{JobID: jobID, Status: "running"}, nil
+	return gen.ScanStartResponse{JobID: jobID, Status: "queued"}, nil
 }
 
 func (s *Service) run(jobID, target string, runCtx context.Context) {
+	s.setJobProgressWithMessage(jobID, 0, "Waiting for concurrency slot")
 	if !acquireScanSlot(runCtx, s.trivySem) {
 		s.setJobCancelled(jobID, "scan cancelled before execution")
 		return
@@ -171,11 +176,12 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 		s.setJobCancelled(jobID, "scan cancelled before execution")
 		return
 	}
+	s.setJobProgressWithMessage(jobID, 5, "Initializing scan engine")
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan started job=%s target=%s", jobID, target))
 	}
 
-	s.setJobProgressWithMessage(jobID, 10, "Initializing scan engine")
+	s.setJobProgressWithMessage(jobID, 10, "Scanning vulnerabilities")
 	result, err := s.scanner.Scan(ctx, target)
 	if err != nil {
 		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
@@ -210,6 +216,7 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 		defer func() { _ = os.RemoveAll(cleanupPath) }()
 	}
 
+	s.setJobProgressWithMessage(jobID, 0, "Waiting for concurrency slot")
 	if !acquireScanSlot(runCtx, s.clamavSem) {
 		s.setJobCancelled(jobID, "scan cancelled before execution")
 		return
@@ -222,7 +229,7 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 		s.setJobCancelled(jobID, "scan cancelled before execution")
 		return
 	}
-	s.setJobProgress(jobID, 5)
+	s.setJobProgressWithMessage(jobID, 5, "Initializing scan engine")
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan started job=%s target=%s path=%s", jobID, targetLabel, scanPath))
 	}

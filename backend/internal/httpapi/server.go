@@ -350,7 +350,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			return false
 		}
 		st := loadRuntimeSettings(ctx)
-		tokens := append(splitDelimitedTokens(st.AutomationIgnoredContainers), "harborwatch")
+		tokens := append(splitDelimitedTokens(st.AutomationIgnoredContainers), "harborwatch", "portainer")
 		seen := map[string]struct{}{}
 		unique := make([]string, 0, len(tokens))
 		for _, token := range tokens {

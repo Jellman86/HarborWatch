@@ -182,10 +182,6 @@ ON CONFLICT(container_id) DO UPDATE SET
 }
 
 func normalizeAutomationDefaults(r *ContainerRules) {
-	if !r.InheritAutomation && !r.UpgradesAutomation && !r.MaintenanceAutomation && !r.SecurityAutomation {
-		// Treat all-false payloads as unset/legacy and fall back to safe defaults.
-		r.InheritAutomation = true
-	}
 	if r.InheritAutomation {
 		if !r.UpgradesAutomation {
 			r.UpgradesAutomation = true

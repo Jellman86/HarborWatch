@@ -79,21 +79,18 @@ func (c *Collector) collectOne(ctx context.Context, id string) error {
 }
 
 func computeCPUPercent(stats container.StatsResponse) float64 {
-	cpuCount := cpuCoreCount(stats)
-	if cpuCount <= 0 {
-		cpuCount = 1
-	}
-
 	// Primary path: delta-based CPU% (matches Docker CLI behavior).
+	// We do NOT multiply by cpuCount here because we want "Total System Capacity" percentage
+	// to align with host-level monitors (e.g. TrueNAS Scale).
 	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage) - float64(stats.PreCPUStats.CPUUsage.TotalUsage)
 	systemDelta := float64(stats.CPUStats.SystemUsage) - float64(stats.PreCPUStats.SystemUsage)
 	if systemDelta > 0 && cpuDelta >= 0 {
-		return normalizeCPUPercent((cpuDelta / systemDelta) * cpuCount * 100)
+		return normalizeCPUPercent((cpuDelta / systemDelta) * 100)
 	}
 
 	// Fallback for engines that do not provide valid pre-CPU snapshots.
 	if stats.CPUStats.SystemUsage > 0 && stats.CPUStats.CPUUsage.TotalUsage > 0 {
-		return normalizeCPUPercent((float64(stats.CPUStats.CPUUsage.TotalUsage) / float64(stats.CPUStats.SystemUsage)) * cpuCount * 100)
+		return normalizeCPUPercent((float64(stats.CPUStats.CPUUsage.TotalUsage) / float64(stats.CPUStats.SystemUsage)) * 100)
 	}
 
 	return 0
