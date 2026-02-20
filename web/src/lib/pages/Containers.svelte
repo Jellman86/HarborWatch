@@ -443,8 +443,9 @@
         {#each visibleContainers as c, i}
             {@const current = latestMetric(c.id)}
             {@const memoryPct = memoryRatio(current)}
+            {@const ignored = isAutomationIgnored(c)}
             <article
-                class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col group hover:border-brand-500 transition-all opacity-0 animate-reveal"
+                class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col group hover:border-brand-500 transition-all opacity-0 animate-reveal {ignored ? 'opacity-60 grayscale-[0.8] brightness-95' : ''}"
                 style="animation-delay: {0.08 + (i * 0.03)}s"
             >
                 <div class="p-5 flex-1 space-y-4">
@@ -459,43 +460,47 @@
                             </button>
                             <p class="text-[10px] font-mono text-slate-400 mt-1 uppercase tracking-widest">{formatId(c.id)}</p>
                         </div>
-                        <div class="flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
+                        <div class="flex flex-wrap items-center justify-end gap-1.5 flex-shrink-0">
                             {#if c.updateAvailable}
-                                <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                                    Update
+                                <span class="p-1.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-lg" title="Software Update Available">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                                    </svg>
                                 </span>
                             {/if}
                             {#if lookupIntel(c)?.portainerManaged}
-                                {#if lookupIntel(c)?.portainerConfigured}
-                                    <span class="px-2 py-1 bg-cyan-500/10 text-cyan-500 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1 badge-cyan-glow" title="Managed by Portainer">
-                                        <PortainerLogo size={10} />
-                                        Portainer
-                                    </span>
-                                {:else}
-                                    <span class="px-2 py-1 bg-amber-500 text-white rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1" title="Portainer integration required for safe updates">
-                                        <PortainerLogo size={10} />
-                                        Portainer
-                                    </span>
-                                {/if}
-                            {/if}
-                            {#if intelNeedsAttention(c)}
-                                <span class="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded-lg text-[9px] font-black uppercase tracking-widest" title={intelPrimaryIssue(c) || "Container intelligence requires attention"}>
-                                    Intel
+                                <span class="p-1.5 {lookupIntel(c)?.portainerConfigured ? 'bg-cyan-500/10 text-cyan-500' : 'bg-amber-500 text-white'} rounded-lg" title={lookupIntel(c)?.portainerConfigured ? "Managed by Portainer" : "Portainer integration required for safe updates"}>
+                                    <PortainerLogo size={14} />
                                 </span>
                             {/if}
-                            {#if isAutomationIgnored(c)}
-                                <span class="px-2 py-1 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                                    Ignored
+                            {#if intelNeedsAttention(c)}
+                                <span class="p-1.5 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded-lg" title={intelPrimaryIssue(c) || "Container intelligence requires attention"}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                    </svg>
+                                </span>
+                            {/if}
+                            {#if ignored}
+                                <span class="p-1.5 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200 rounded-lg" title="Ignored from Automation">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A8.014 8.014 0 004 10V4.414L2.293 3.707a1 1 0 001.414-1.414zM5 10a5 5 0 015-5h.414l1.414 1.414L10 7.828V10a3 3 0 00-3 3H5v-3z" clip-rule="evenodd" />
+                                        <path d="M10 15a3 3 0 002.828-2l1.414 1.414A5.002 5.002 0 0110 17H5v-2h5z" />
+                                    </svg>
                                 </span>
                             {/if}
                             {#if c.health && c.health !== "none"}
-                                <div class="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                                    <span class="w-1.5 h-1.5 rounded-full {healthColor(c.health)} animate-pulse"></span>
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">{c.health}</span>
+                                <div class="flex items-center p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700" title={`Health: ${c.health}`}>
+                                    <span class="w-2 h-2 rounded-full {healthColor(c.health)} {c.health === 'starting' ? 'animate-pulse' : ''}"></span>
                                 </div>
                             {/if}
-                            <span class="px-2 py-1 rounded-lg text-[9px] font-black uppercase {stateColor(c.state)}">
-                                {c.state}
+                            <span class="p-1.5 rounded-lg {stateColor(c.state)}" title={`Status: ${c.state}`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                    {#if c.state.toLowerCase() === 'running'}
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                                    {:else}
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v6a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
+                                    {/if}
+                                </svg>
                             </span>
                         </div>
                     </div>
@@ -538,11 +543,19 @@
                     <div class="flex items-center justify-between text-[10px] pt-1">
                         <span class="text-slate-500 uppercase tracking-widest font-black">Automation Policy</span>
                         {#if getPolicy(c.labels)}
-                            <span class="px-2 py-0.5 bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 rounded-md text-[9px] font-black uppercase tracking-tighter">
-                                {getPolicy(c.labels)}
-                            </span>
+                            <div class="flex items-center gap-1.5 px-2 py-0.5 bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 rounded-md" title={`Policy: ${getPolicy(c.labels)}`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14H8a2 2 0 002 2 2 2 0 002-2z" />
+                                </svg>
+                                <span class="text-[9px] font-black uppercase tracking-tighter">{getPolicy(c.labels)}</span>
+                            </div>
                         {:else}
-                            <span class="text-slate-400 italic font-medium">Standard (Manual)</span>
+                            <div class="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 rounded-md" title="Manual Control Only">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd" />
+                                </svg>
+                                <span class="text-[9px] font-black uppercase tracking-tighter">Manual</span>
+                            </div>
                         {/if}
                     </div>
 
