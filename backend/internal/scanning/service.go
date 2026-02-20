@@ -203,7 +203,29 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 	}
 
 	s.setJobProgressWithMessage(jobID, 10, "Scanning vulnerabilities")
+	
+	// Start simulated progress trickler
+	stopTrickle := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		prog := 10
+		for {
+			select {
+			case <-stopTrickle:
+				return
+			case <-ticker.C:
+				if prog < 70 {
+					prog += 2
+					s.setJobProgress(jobID, prog)
+				}
+			}
+		}
+	}()
+
 	result, err := s.scanner.Scan(ctx, target)
+	close(stopTrickle) // Stop the trickler
+	
 	if err != nil {
 		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
 			s.setJobCancelled(jobID, "scan cancelled by user")
@@ -268,7 +290,29 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 	}
 
 	s.setJobProgressWithMessage(jobID, 20, "Scanning filesystem")
+
+	// Start simulated progress trickler
+	stopTrickle := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		prog := 20
+		for {
+			select {
+			case <-stopTrickle:
+				return
+			case <-ticker.C:
+				if prog < 80 {
+					prog += 3
+					s.setJobProgress(jobID, prog)
+				}
+			}
+		}
+	}()
+
 	result, err := s.malwareScanner.ScanPath(ctx, scanPath)
+	close(stopTrickle) // Stop the trickler
+
 	if err != nil {
 		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
 			s.setJobCancelled(jobID, "scan cancelled by user")
