@@ -814,6 +814,7 @@ components:
         type: { type: string }
         target: { type: string }
         status: { type: string }
+        message: { type: string }
         progress: { type: integer, minimum: 0, maximum: 100 }
         startedAt: { type: integer, format: int64 }
     DiagnosticsSnapshot:

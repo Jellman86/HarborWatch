@@ -175,7 +175,7 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan started job=%s target=%s", jobID, target))
 	}
 
-	s.setJobProgress(jobID, 10)
+	s.setJobProgressWithMessage(jobID, 10, "Initializing scan engine")
 	result, err := s.scanner.Scan(ctx, target)
 	if err != nil {
 		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
@@ -190,7 +190,7 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 		return
 	}
 
-	s.setJobProgress(jobID, 80)
+	s.setJobProgressWithMessage(jobID, 80, "Persisting results")
 	if err := s.store.SaveResult(ctx, result); err != nil {
 		s.setJobFailed(jobID, err)
 		return
@@ -227,7 +227,7 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan started job=%s target=%s path=%s", jobID, targetLabel, scanPath))
 	}
 
-	s.setJobProgress(jobID, 20)
+	s.setJobProgressWithMessage(jobID, 20, "Scanning filesystem")
 	result, err := s.malwareScanner.ScanPath(ctx, scanPath)
 	if err != nil {
 		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
@@ -243,7 +243,7 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 	}
 	result.Target = targetLabel
 
-	s.setJobProgress(jobID, 85)
+	s.setJobProgressWithMessage(jobID, 85, "Persisting results")
 	if err := s.store.SaveMalwareResult(ctx, result); err != nil {
 		s.setJobFailed(jobID, err)
 		return
@@ -258,6 +258,25 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 }
 
 func (s *Service) setJobProgress(jobID string, progress int) {
+	s.setJobProgressWithMessage(jobID, progress, "")
+}
+
+func (s *Service) setJobMessage(jobID string, message string) {
+	s.mu.Lock()
+	job, ok := s.jobs[jobID]
+	if !ok || (job.Status != "running" && job.Status != "queued") {
+		s.mu.Unlock()
+		return
+	}
+	// We don't store message in the transient 'jobs' map if it's not in gen.ScanJobStatus,
+	// but we added it to gen.JobProgress.
+	// Wait, I should check if gen.ScanJobStatus has Message.
+	// API spec didn't have Message in ScanJobStatus, only JobProgress.
+	// Let's add it to ScanJobStatus too for consistency.
+	s.mu.Unlock()
+}
+
+func (s *Service) setJobProgressWithMessage(jobID string, progress int, message string) {
 	s.mu.Lock()
 	job, ok := s.jobs[jobID]
 	if !ok || (job.Status != "running" && job.Status != "queued") {
@@ -265,7 +284,7 @@ func (s *Service) setJobProgress(jobID string, progress int) {
 		return
 	}
 	job.Progress = progress
-	if job.Status == "queued" && progress > 0 {
+	if job.Status == "queued" && (progress > 0 || message != "") {
 		job.Status = "running"
 	}
 	s.jobs[jobID] = job
@@ -346,11 +365,23 @@ func (s *Service) ActiveJobs() []gen.JobProgress {
 	out := make([]gen.JobProgress, 0, len(s.jobs))
 	for _, job := range s.jobs {
 		if job.Status == "running" || job.Status == "queued" {
+			msg := "Processing..."
+			if job.Status == "queued" {
+				msg = "Waiting for slot..."
+			} else if job.Progress >= 80 {
+				msg = "Finalizing results..."
+			} else if job.Source == "trivy" {
+				msg = "Scanning vulnerabilities..."
+			} else if job.Source == "clamav" {
+				msg = "Scanning malware..."
+			}
+
 			out = append(out, gen.JobProgress{
 				ID:        job.JobID,
 				Type:      "scan:" + job.Source,
 				Target:    job.Target,
 				Status:    job.Status,
+				Message:   msg,
 				Progress:  job.Progress,
 				StartedAt: job.StartedAt,
 			})

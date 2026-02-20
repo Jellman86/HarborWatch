@@ -205,10 +205,11 @@ LIMIT ?
 
 func (s *Store) ListActiveRuns(ctx context.Context) ([]gen.UpdateJobStatus, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, container_id, target_image, validate_url, status, progress, created_at, updated_at, error, ai_analysis
-FROM update_runs
-WHERE status = 'running' OR status = 'queued'
-ORDER BY created_at DESC
+SELECT r.id, r.container_id, r.target_image, r.validate_url, r.status, r.progress, r.created_at, r.updated_at, r.error, r.ai_analysis,
+       (SELECT message FROM update_steps WHERE run_id = r.id ORDER BY id DESC LIMIT 1) as last_message
+FROM update_runs r
+WHERE r.status = 'running' OR r.status = 'queued'
+ORDER BY r.created_at DESC
 `)
 	if err != nil {
 		return nil, fmt.Errorf("list active update runs: %w", err)
@@ -219,7 +220,8 @@ ORDER BY created_at DESC
 	for rows.Next() {
 		var item gen.UpdateJobStatus
 		var aiRaw string
-		if err := rows.Scan(&item.JobID, &item.ContainerID, &item.TargetImage, &item.ValidateURL, &item.Status, &item.Progress, &item.CreatedAt, &item.UpdatedAt, &item.Error, &aiRaw); err != nil {
+		var lastMsg sql.NullString
+		if err := rows.Scan(&item.JobID, &item.ContainerID, &item.TargetImage, &item.ValidateURL, &item.Status, &item.Progress, &item.CreatedAt, &item.UpdatedAt, &item.Error, &aiRaw, &lastMsg); err != nil {
 			return nil, fmt.Errorf("scan update run row: %w", err)
 		}
 		if aiRaw != "" {
@@ -228,6 +230,7 @@ ORDER BY created_at DESC
 				item.AIAnalysis = &summary
 			}
 		}
+		item.Message = lastMsg.String
 		item.Steps = []gen.UpdateStepEvent{}
 		out = append(out, item)
 	}

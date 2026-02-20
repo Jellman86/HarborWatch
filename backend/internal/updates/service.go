@@ -126,6 +126,7 @@ func (s *Service) ActiveJobs() []gen.JobProgress {
 			Type:      "update",
 			Target:    run.ContainerID,
 			Status:    run.Status,
+			Message:   run.Message,
 			Progress:  run.Progress,
 			StartedAt: run.CreatedAt,
 		})
