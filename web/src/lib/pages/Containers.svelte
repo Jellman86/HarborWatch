@@ -461,10 +461,16 @@
                                     Update
                                 </span>
                             {/if}
-                            {#if lookupIntel(c)?.portainerManaged && !lookupIntel(c)?.portainerConfigured}
-                                <span class="px-2 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest" title="Portainer integration required for safe updates">
-                                    Portainer
-                                </span>
+                            {#if lookupIntel(c)?.portainerManaged}
+                                {#if lookupIntel(c)?.portainerConfigured}
+                                    <span class="px-2 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg text-[9px] font-black uppercase tracking-widest" title="Managed by Portainer">
+                                        Portainer
+                                    </span>
+                                {:else}
+                                    <span class="px-2 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest" title="Portainer integration required for safe updates">
+                                        Portainer
+                                    </span>
+                                {/if}
                             {/if}
                             {#if intelNeedsAttention(c)}
                                 <span class="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded-lg text-[9px] font-black uppercase tracking-widest" title={intelPrimaryIssue(c) || "Container intelligence requires attention"}>

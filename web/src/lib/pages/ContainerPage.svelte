@@ -701,6 +701,11 @@
                                 Update Available
                             </span>
                         {/if}
+                        {#if intel?.portainerManaged}
+                            <span class="px-2 py-1 {intel?.portainerConfigured ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-amber-500 text-white'} rounded text-[9px] font-black uppercase whitespace-nowrap">
+                                Portainer Managed
+                            </span>
+                        {/if}
                     </div>
                     <p class="text-slate-500 font-mono text-[10px] md:text-sm mt-1 truncate max-w-full">{detail.summary.image}</p>
                 </div>
