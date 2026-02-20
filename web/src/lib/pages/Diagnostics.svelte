@@ -40,6 +40,8 @@
     let logSearch = $state("");
     let logLevel = $state("");
     let logSource = $state("");
+    let logPage = $state(0);
+    let logLimit = 100;
     let selectedPreset = $state<PresetID>("all");
     let hideMetricsCollectorNoise = $state(true);
     let activePresetLabel = $derived(presets.find((p) => p.id === selectedPreset)?.label || "All Logs");
@@ -67,7 +69,11 @@
     }
 
     function logsEndpoint(): string {
-        const params = new URLSearchParams({ limit: "50" });
+        const offset = logPage * logLimit;
+        const params = new URLSearchParams({ 
+            limit: String(logLimit),
+            offset: String(offset)
+        });
         const query = String(logSearch || "").trim();
         const level = String(logLevel || "").trim();
         const source = String(logSource || "").trim();
@@ -195,12 +201,14 @@
     }
 
     function applyLogSearch() {
+        logPage = 0;
         loading = true;
         void loadData();
     }
 
     function applyPreset(id: PresetID, reload = true) {
         selectedPreset = id;
+        logPage = 0;
         if (id === "errors") {
             logLevel = "ERROR";
         } else if (logLevel === "ERROR") {
@@ -218,6 +226,12 @@
         if (reload) {
             applyLogSearch();
         }
+    }
+
+    function changePage(delta: number) {
+        logPage = Math.max(0, logPage + delta);
+        loading = true;
+        void loadData();
     }
 </script>
 
@@ -314,6 +328,28 @@
             >
                 {hideMetricsCollectorNoise ? "Hide Metrics Noise" : "Show Metrics Noise"}
             </button>
+        </div>
+
+        <div class="flex items-center justify-between gap-4 py-2 px-1">
+            <div class="flex items-center gap-2">
+                <button
+                    onclick={() => changePage(-1)}
+                    disabled={logPage === 0 || loading}
+                    class="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-all"
+                >
+                    Previous
+                </button>
+                <button
+                    onclick={() => changePage(1)}
+                    disabled={logs.length < logLimit || loading}
+                    class="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-all"
+                >
+                    Next
+                </button>
+            </div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Page {logPage + 1}
+            </div>
         </div>
 
         <div class="md:hidden space-y-2">
