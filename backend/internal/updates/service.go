@@ -204,6 +204,8 @@ func (s *Service) execute(jobID string, req Request) {
 		s.rollback(jobID, req, err)
 		return
 	}
+	// On success, cleanup backups
+	_ = s.runStep(ctx, jobID, "cleanup", func(ctx context.Context) error { return s.executor.Cleanup(ctx, req) })
 	if req.AIValidateLogs && s.ai != nil && s.ai.HasProvider() {
 		if err := s.runStep(ctx, jobID, "ai_health_assessment", func(ctx context.Context) error {
 			logTail := envInt("HW_AI_HEALTH_LOG_TAIL", 300, 50, 2000)

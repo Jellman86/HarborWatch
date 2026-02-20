@@ -604,7 +604,10 @@
         onNavigate("updates", {
             containerId: detail.summary.id,
             targetImage: detail.summary.image,
-            validateUrl: detail.rules?.validateUrl || ""
+            validateUrl: detail.rules?.validateUrl || "",
+            validateMode: detail.rules?.validateMode || "both",
+            validateTimeoutSec: detail.rules?.validateTimeoutSec || 45,
+            validateIntervalSec: detail.rules?.validateIntervalSec || 2
         });
     }
 
@@ -657,52 +660,47 @@
         </div>
     {:else if detail}
         <!-- Header -->
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-800 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
-            <div class="flex items-center gap-6">
-                <div class="relative">
-                    <div class="w-20 h-20 rounded-2xl bg-brand-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none overflow-hidden">
+            <div class="flex items-center gap-4 md:gap-6 min-w-0">
+                <div class="relative flex-shrink-0">
+                    <div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-brand-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 md:h-10 md:w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
                     </div>
-                    <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-white dark:border-slate-800 {stateColor(detail.summary.state)}"></div>
+                    <div class="absolute -bottom-1 -right-1 w-5 h-5 md:w-6 md:h-6 rounded-full border-4 border-white dark:border-slate-800 {stateColor(detail.summary.state)}"></div>
                 </div>
-                <div>
-                    <div class="flex items-center gap-3">
-                        <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="text-xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight truncate max-w-full">
                             {detail.summary.names?.[0]?.replace(/^\//, '') ?? 'unnamed'}
                         </h2>
                         {#if detail.summary.updateAvailable}
-                            <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded text-[10px] font-black uppercase animate-pulse">
+                            <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded text-[9px] font-black uppercase animate-pulse whitespace-nowrap">
                                 Update Available
                             </span>
                         {/if}
-                        {#if intel && !intel.fullAutomationReady}
-                            <span class="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded text-[10px] font-black uppercase">
-                                Intel Needs Attention
-                            </span>
-                        {/if}
                     </div>
-                    <p class="text-slate-500 font-mono text-sm mt-1">{detail.summary.image}</p>
+                    <p class="text-slate-500 font-mono text-[10px] md:text-sm mt-1 truncate max-w-full">{detail.summary.image}</p>
                 </div>
             </div>
 
-            <div class="flex gap-2">
-                <button class="px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:scale-105 transition-all">
+            <div class="flex gap-2 w-full md:w-auto">
+                <button class="flex-1 md:flex-none px-4 md:px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:scale-105 transition-all">
                     Restart
                 </button>
-                <button class="px-6 py-3 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-rose-500/20 hover:scale-105 transition-all">
+                <button class="flex-1 md:flex-none px-4 md:px-6 py-3 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-rose-500/20 hover:scale-105 transition-all">
                     Stop
                 </button>
             </div>
         </div>
 
         <!-- Navigation Tabs -->
-        <div class="flex gap-1 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-fit border border-slate-200 dark:border-slate-800">
+        <div class="flex flex-wrap gap-1 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-full md:w-fit border border-slate-200 dark:border-slate-800">
             {#each ['insights', 'security', 'lifecycle', 'intelligence', 'configuration'] as tab}
                 <button 
                     onclick={() => activeTab = tab}
-                    class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {activeTab === tab ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                    class="flex-1 md:flex-none px-3 md:px-6 py-2.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all {activeTab === tab ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
                 >
                     {tab}
                 </button>

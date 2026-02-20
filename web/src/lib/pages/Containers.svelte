@@ -456,40 +456,41 @@
                         </div>
                     </div>
 
-                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-3 py-2">
-                        <div class="flex items-center justify-between mb-1">
-                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">CPU (1h)</span>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-300">{formatPercent(current?.cpuPercent)}</span>
+                    <!-- Simplified Metrics Section -->
+                    <div class="py-2 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex flex-col">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Resource Load</span>
+                                <div class="flex items-baseline gap-1.5">
+                                    <span class="text-xl font-black text-slate-900 dark:text-white">{formatPercent(current?.cpuPercent)}</span>
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase">CPU</span>
+                                </div>
+                            </div>
+                            <div class="w-32 h-10">
+                                <Sparkline metrics={sparklineMetrics[c.id] || []} />
+                            </div>
                         </div>
-                        <Sparkline metrics={sparklineMetrics[c.id] || []} />
+
+                        <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                            <div class="flex flex-col">
+                                <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Memory</span>
+                                <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{formatBytes(current?.memoryUsage)}</span>
+                            </div>
+                            <div class="flex flex-col items-end">
+                                <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Threads</span>
+                                <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{current?.pids ?? 0} PIDs</span>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-2">
-                        <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-2">
-                            <p class="text-[9px] uppercase font-black tracking-widest text-slate-400">CPU Now</p>
-                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{formatPercent(current?.cpuPercent)}</p>
-                        </div>
-                        <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-2">
-                            <p class="text-[9px] uppercase font-black tracking-widest text-slate-400">Memory</p>
-                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{formatBytes(current?.memoryUsage)}</p>
-                            {#if memoryPct !== null}
-                                <p class="text-[10px] text-slate-500 mt-0.5">{memoryPct.toFixed(0)}%</p>
-                            {/if}
-                        </div>
-                        <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-2">
-                            <p class="text-[9px] uppercase font-black tracking-widest text-slate-400">PIDs</p>
-                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{current?.pids ?? 0}</p>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center justify-between text-[10px]">
-                        <span class="text-slate-500 uppercase tracking-widest font-black">Policy</span>
+                    <div class="flex items-center justify-between text-[10px] pt-1">
+                        <span class="text-slate-500 uppercase tracking-widest font-black">Automation Policy</span>
                         {#if getPolicy(c.labels)}
                             <span class="px-2 py-0.5 bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 rounded-md text-[9px] font-black uppercase tracking-tighter">
                                 {getPolicy(c.labels)}
                             </span>
                         {:else}
-                            <span class="text-slate-400 italic font-medium">Standard</span>
+                            <span class="text-slate-400 italic font-medium">Standard (Manual)</span>
                         {/if}
                     </div>
 

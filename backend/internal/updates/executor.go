@@ -23,6 +23,7 @@ type Executor interface {
 	Pull(ctx context.Context, req Request) error
 	Recreate(ctx context.Context, req Request) error
 	Validate(ctx context.Context, req Request) error
+	Cleanup(ctx context.Context, req Request) error
 	Rollback(ctx context.Context, req Request, cause error) error
 }
 
@@ -143,7 +144,10 @@ func (CommandExecutor) Validate(ctx context.Context, req Request) error {
 	}
 
 	deadline := time.Now().Add(timeout)
+	currentInterval := interval
+	maxInterval := 30 * time.Second
 	var lastErr error
+
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
@@ -172,13 +176,44 @@ func (CommandExecutor) Validate(ctx context.Context, req Request) error {
 		if httpOK && dockerOK {
 			return nil
 		}
-		time.Sleep(interval)
+
+		// Wait with current interval, then backoff.
+		timer := time.NewTimer(currentInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+			// Exponential backoff
+			currentInterval *= 2
+			if currentInterval > maxInterval {
+				currentInterval = maxInterval
+			}
+		}
 	}
 
 	if lastErr == nil {
 		lastErr = errors.New("health checks did not reach healthy state before timeout")
 	}
 	return fmt.Errorf("validation timed out: %w", lastErr)
+}
+
+func (CommandExecutor) Cleanup(ctx context.Context, req Request) error {
+	// Find all backups for this container
+	findCmd := exec.CommandContext(ctx, "docker", "ps", "-a", "--filter", fmt.Sprintf("name=%s_backup_", req.ContainerID), "--format", "{{.Names}}")
+	out, err := findCmd.Output()
+	if err != nil {
+		return nil // Ignore if we can't find them or command fails
+	}
+	backups := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, b := range backups {
+		name := strings.TrimSpace(b)
+		if name != "" {
+			// Silently remove backup containers
+			_ = exec.CommandContext(ctx, "docker", "rm", "-f", name).Run()
+		}
+	}
+	return nil
 }
 
 func (CommandExecutor) Rollback(ctx context.Context, req Request, cause error) error {

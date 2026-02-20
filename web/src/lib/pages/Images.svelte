@@ -218,15 +218,15 @@
 </script>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between opacity-0 animate-reveal">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-0 animate-reveal">
         <div class="border-l-4 border-brand-600 pl-4">
             <h2 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Image Repository</h2>
             <p class="text-xs text-slate-500 font-medium">Local artifact storage and versioning history.</p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 w-full md:w-auto">
             <button 
                 onclick={loadImages}
-                class="p-2 text-slate-400 hover:text-brand-600 transition-colors"
+                class="flex-1 md:flex-none p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-brand-600 transition-colors flex items-center justify-center"
                 title="Refresh Registry"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -236,7 +236,7 @@
             <button 
                 onclick={pruneImages}
                 disabled={pruning}
-                class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-rose-500/20 disabled:opacity-50 flex items-center gap-2"
+                class="flex-[3] md:flex-none px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-rose-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -319,7 +319,8 @@
         </div>
 
         <div class="hidden md:block bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden opacity-0 animate-reveal stagger-1">
-            <table class="w-full text-left border-collapse">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[800px]">
                 <thead>
                     <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">
                         <th class="px-8 py-4">Artifact ID</th>
@@ -381,5 +382,6 @@
                 </tbody>
             </table>
         </div>
+    </div>
     {/if}
 </div>

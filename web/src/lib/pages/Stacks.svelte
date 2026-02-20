@@ -49,14 +49,14 @@
 </script>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between opacity-0 animate-reveal">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-0 animate-reveal">
         <div class="border-l-4 border-brand-600 pl-4">
             <h2 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Stack Explorer</h2>
             <p class="text-xs text-slate-500 font-medium">Remote orchestration discovery via Portainer API.</p>
         </div>
         <button 
             onclick={loadStacks}
-            class="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-2"
+            class="w-full md:w-auto px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center gap-2"
         >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -88,7 +88,8 @@
         </div>
     {:else}
         <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden opacity-0 animate-reveal stagger-1">
-            <table class="w-full text-left border-collapse">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[600px]">
                 <thead>
                     <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">
                         <th class="px-8 py-4">ID</th>
@@ -122,5 +123,6 @@
                 </tbody>
             </table>
         </div>
+    </div>
     {/if}
 </div>

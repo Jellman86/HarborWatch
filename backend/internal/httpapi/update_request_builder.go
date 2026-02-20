@@ -33,6 +33,9 @@ func buildUpdateRequestForContainer(
 	containerID string,
 	targetImage string,
 	validateURL string,
+	validateMode string,
+	validateTimeoutSec int,
+	validateIntervalSec int,
 	dockerClient DockerClient,
 	rulesService RulesService,
 	settingsService SettingsService,
@@ -85,6 +88,15 @@ func buildUpdateRequestForContainer(
 	// Respect explicit request overrides so we do not perform unnecessary auto-derivation work.
 	if validateURL != "" {
 		effectiveRules.ValidateURL = validateURL
+	}
+	if validateMode != "" {
+		effectiveRules.ValidateMode = validateMode
+	}
+	if validateTimeoutSec > 0 {
+		effectiveRules.ValidateTimeoutSec = validateTimeoutSec
+	}
+	if validateIntervalSec > 0 {
+		effectiveRules.ValidateIntervalSec = validateIntervalSec
 	}
 	effectiveRules = effectiveContainerRules(ctx, out.Summary, effectiveRules, settingsService, diagService)
 	effectiveRules.UpdatePolicy = normalizeUpdatePolicy(effectiveRules.UpdatePolicy)

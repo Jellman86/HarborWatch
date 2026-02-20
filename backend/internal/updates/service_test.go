@@ -68,6 +68,12 @@ func (f fakeExecutor) Validate(ctx context.Context, req Request) error {
 	}
 	return nil
 }
+func (f fakeExecutor) Cleanup(ctx context.Context, req Request) error {
+	if f.failStep == "cleanup" {
+		return errors.New("cleanup failed")
+	}
+	return nil
+}
 func (f fakeExecutor) Rollback(ctx context.Context, req Request, cause error) error {
 	if f.failStep == "rollback" {
 		return errors.New("rollback failed")

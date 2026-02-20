@@ -4,7 +4,14 @@
 
     // Component State
     let { params } = $props<{
-        params?: { containerId: string; targetImage: string; validateUrl: string };
+        params?: { 
+            containerId: string; 
+            targetImage: string; 
+            validateUrl: string;
+            validateMode?: string;
+            validateTimeoutSec?: number;
+            validateIntervalSec?: number;
+        };
     }>();
 
     let updateJob = $state<UpdateJobStatus | null>(null);
@@ -13,6 +20,9 @@
     let updateContainerId = $state("");
     let updateTargetImage = $state("");
     let validateURL = $state("http://localhost:18080/health");
+    let validateMode = $state("both");
+    let validateTimeout = $state(45);
+    let validateInterval = $state(2);
 
     // Pre-fill form from params when they change
     $effect(() => {
@@ -20,6 +30,9 @@
             updateContainerId = params.containerId;
             updateTargetImage = params.targetImage;
             validateURL = params.validateUrl;
+            if (params.validateMode) validateMode = params.validateMode;
+            if (params.validateTimeoutSec) validateTimeout = params.validateTimeoutSec;
+            if (params.validateIntervalSec) validateInterval = params.validateIntervalSec;
         }
     });
 
@@ -74,7 +87,10 @@
                 body: JSON.stringify({ 
                     containerId: updateContainerId, 
                     targetImage: updateTargetImage, 
-                    validateUrl: validateURL 
+                    validateUrl: validateURL,
+                    validateMode: validateMode,
+                    validateTimeoutSec: validateTimeout,
+                    validateIntervalSec: validateInterval
                 })
             });
             connectUpdateEvents(response.jobId);
@@ -98,6 +114,7 @@
         { id: 'pull', label: 'Pull Image' },
         { id: 'recreate', label: 'Recreate' },
         { id: 'validate', label: 'Validate' },
+        { id: 'cleanup', label: 'Cleanup' },
     ];
 
     onDestroy(() => {
@@ -124,6 +141,22 @@
             <div class="space-y-1">
                 <label for="validate-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Health URL</label>
                 <input id="validate-url" bind:value={validateURL} placeholder="http://..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+            </div>
+            <div class="space-y-1">
+                <label for="validate-mode" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation Mode</label>
+                <select id="validate-mode" bind:value={validateMode} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all">
+                    <option value="both">Both (HTTP + Docker)</option>
+                    <option value="http">HTTP Only</option>
+                    <option value="docker">Docker Only</option>
+                </select>
+            </div>
+            <div class="space-y-1">
+                <label for="validate-timeout" class="text-[10px] font-black uppercase text-slate-400 ml-1">Timeout (sec)</label>
+                <input id="validate-timeout" type="number" bind:value={validateTimeout} min="1" max="600" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
+            </div>
+            <div class="space-y-1">
+                <label for="validate-interval" class="text-[10px] font-black uppercase text-slate-400 ml-1">Initial Interval (sec)</label>
+                <input id="validate-interval" type="number" bind:value={validateInterval} min="1" max="30" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all" />
             </div>
         </div>
 

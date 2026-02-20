@@ -959,6 +959,9 @@ components:
         containerId: { type: string }
         targetImage: { type: string }
         validateUrl: { type: string }
+        validateTimeoutSec: { type: integer }
+        validateIntervalSec: { type: integer }
+        validateMode: { type: string, enum: [http, docker, both] }
     UpdateStartResponse:
       type: object
       required: [jobId, status]

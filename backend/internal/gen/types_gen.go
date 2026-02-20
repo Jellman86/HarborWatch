@@ -25,7 +25,7 @@ type ClamAVSignatureStatus struct { EngineVersion string `json:"engineVersion"`;
 type MalwareScanSummary struct { Target string `json:"target"`; Source string `json:"source"`; ScannedAt int64 `json:"scannedAt"`; Infected bool `json:"infected"`; ThreatsFound []string `json:"threatsFound"` }
 type ReleaseExcerpt struct { Tag string `json:"tag"`; Text string `json:"text"`; Weight int `json:"weight"` }
 type ReleaseRiskSummary struct { Repo string `json:"repo"`; LatestTag string `json:"latestTag"`; LatestPublishedAt int64 `json:"latestPublishedAt"`; ReleasesAnalyzed int `json:"releasesAnalyzed"`; TotalRisk int `json:"totalRisk"`; BreakingChangeLikely bool `json:"breakingChangeLikely"`; HighlightedExcerpts []ReleaseExcerpt `json:"highlightedExcerpts"`; GeneratedAt int64 `json:"generatedAt"` }
-type UpdateStartRequest struct { ContainerID string `json:"containerId"`; TargetImage string `json:"targetImage"`; ValidateURL string `json:"validateUrl"` }
+type UpdateStartRequest struct { ContainerID string `json:"containerId"`; TargetImage string `json:"targetImage"`; ValidateURL string `json:"validateUrl"`; ValidateTimeoutSec int `json:"validateTimeoutSec"`; ValidateIntervalSec int `json:"validateIntervalSec"`; ValidateMode string `json:"validateMode"` }
 type UpdateStartResponse struct { JobID string `json:"jobId"`; Status string `json:"status"` }
 type UpdateStepEvent struct { JobID string `json:"jobId"`; Step string `json:"step"`; Status string `json:"status"`; Message string `json:"message"`; Timestamp int64 `json:"timestamp"` }
 type AIAnalysisSummary struct { RiskScore int `json:"riskScore"`; RiskLevel string `json:"riskLevel"`; Summary string `json:"summary"`; BreakingChanges []string `json:"breakingChanges"` }
