@@ -5,10 +5,19 @@ All notable changes to HarborWatch are documented in this file.
 ## [0.8.0] - 2026-02-20
 
 ### Added
+- **Global Job Coordination (JobManager):**
+  - Implemented a centralized **JobManager** backend service to coordinate all "heavy" operations (Trivy Scans, ClamAV Scans, Updates, and Redeployments).
+  - Added global concurrency limits (configurable via `AutoUpgradeMaxConcurrency`) and strict per-container locking to prevent conflicting operations.
+  - Enhanced the global progress bar to show friendly container names and accurately reflect all queued and running tasks.
+- **AI Transparency & Logging:**
+  - Added full **AI Conversation Logging** to SQLite, recording raw prompts and responses for all AI-assisted actions.
+  - Implemented a new **AI Conversation History** section in Settings for full auditability of AI decisions.
+- **Diagnostics Paging:**
+  - Updated the system logs API and backend to support SQL-level filtering and paging (`limit`/`offset`), enabling smooth browsing of large log histories.
 - **Global Progress Notification System:**
   - Implemented a sleek, sticky progress header that aggregates all active background jobs (scans, updates).
   - Added detailed job status messages (e.g., "Scanning vulnerabilities...", "Backing up...") and per-job progress tracking (0-100%).
-  - Unified active job discovery via `/api/diagnostics/snapshot`.
+  - Unified active job discovery via `/api/system/status`.
 - **Visual Health Indicators:**
   - Added real-time health status pulse dots and badges to Fleet Inventory and Container Detail views.
   - Supports `healthy`, `unhealthy`, and `starting` states derived directly from Docker Engine health checks.
@@ -26,8 +35,16 @@ All notable changes to HarborWatch are documented in this file.
 - **Robustness & Recovery:**
   - Added startup reconciliation for update jobs; stale `running` jobs are now automatically failed on restart to prevent "stuck" UI states.
   - Fixed semaphore deadlock in ClamAV signature updates by making slot acquisition context-aware.
+  - Increased Portainer API client timeout to 300s to handle large image pulls during stack redeployments.
 
 ### Changed
+- **Enhanced Ignore Logic:**
+  - Expanded the default container ignore list to include `portainer-ce` and `ix-portainer`.
+  - Updated matching logic to use robust case-insensitive substring matching (`strings.Contains`) consistently across backend and frontend.
+- **UI/UX Refinements:**
+  - Fixed sidebar logo scaling to prevent distortion when collapsed.
+  - Removed redundant top sidebar collapse button.
+  - Resolved layout overlaps in Fleet card headers by enabling flex-wrap and better text truncation.
 - **CPU Metrics Normalization:**
   - Implemented configurable CPU reporting: Added a toggle in **Settings > Appearance** to switch between **Normalized (System Total)** and **Raw (Per-Core)** views.
   - Default calculation aligns with host-level monitors like TrueNAS Scale (Total System Capacity).
