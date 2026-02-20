@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -87,9 +88,20 @@ type UsageSummary struct {
 	DailyBreakdown []UsageDailyBreakdown `json:"dailyBreakdown"`
 }
 
+type ConversationRecord struct {
+	Timestamp int64  `json:"timestamp"`
+	Provider  string `json:"provider"`
+	Model     string `json:"model"`
+	Feature   string `json:"feature"`
+	Prompt    string `json:"prompt"`
+	Response  string `json:"response"`
+}
+
 type UsageStore interface {
 	RecordUsage(ctx context.Context, rec UsageRecord) error
+	RecordConversation(ctx context.Context, rec ConversationRecord) error
 	SummaryUsage(ctx context.Context, from, to int64) (UsageSummary, error)
+	ListConversations(ctx context.Context, limit, offset int) ([]ConversationRecord, error)
 }
 
 type usageRecorderProvider interface {
@@ -153,7 +165,17 @@ func (s *Service) AnalyzeReleaseNotes(ctx context.Context, notes string) (Analys
 	if provider == nil {
 		return AnalysisResult{}, errors.New("no AI provider configured")
 	}
-	return provider.AnalyzeReleaseNotes(ctx, notes)
+	res, err := provider.AnalyzeReleaseNotes(ctx, notes)
+	if err == nil {
+		respBytes, _ := json.Marshal(res)
+		s.recordConversation(ConversationRecord{
+			Provider: provider.Name(),
+			Feature:  "release_analysis",
+			Prompt:   notes,
+			Response: string(respBytes),
+		})
+	}
+	return res, err
 }
 
 func (s *Service) AuditCompose(ctx context.Context, yamlStr string) (string, error) {
@@ -168,7 +190,16 @@ func (s *Service) AuditCompose(ctx context.Context, yamlStr string) (string, err
 		return "", fmt.Errorf("invalid YAML syntax: %w", err)
 	}
 
-	return provider.AuditCompose(ctx, yamlStr)
+	res, err := provider.AuditCompose(ctx, yamlStr)
+	if err == nil {
+		s.recordConversation(ConversationRecord{
+			Provider: provider.Name(),
+			Feature:  "compose_audit",
+			Prompt:   yamlStr,
+			Response: res,
+		})
+	}
+	return res, err
 }
 
 func (s *Service) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
@@ -176,7 +207,17 @@ func (s *Service) AnalyzeMetrics(ctx context.Context, id string, metrics []any) 
 	if provider == nil {
 		return "", errors.New("no AI provider configured")
 	}
-	return provider.AnalyzeMetrics(ctx, id, metrics)
+	res, err := provider.AnalyzeMetrics(ctx, id, metrics)
+	if err == nil {
+		prompt := fmt.Sprintf("Metrics for %s: %v", id, metrics)
+		s.recordConversation(ConversationRecord{
+			Provider: provider.Name(),
+			Feature:  "metrics_analysis",
+			Prompt:   prompt,
+			Response: res,
+		})
+	}
+	return res, err
 }
 
 func (s *Service) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error) {
@@ -184,7 +225,17 @@ func (s *Service) AnalyzeHealthLogs(ctx context.Context, containerID string, log
 	if provider == nil {
 		return HealthAssessment{}, errors.New("no AI provider configured")
 	}
-	return provider.AnalyzeHealthLogs(ctx, containerID, logs)
+	res, err := provider.AnalyzeHealthLogs(ctx, containerID, logs)
+	if err == nil {
+		respBytes, _ := json.Marshal(res)
+		s.recordConversation(ConversationRecord{
+			Provider: provider.Name(),
+			Feature:  "health_log_analysis",
+			Prompt:   fmt.Sprintf("Logs for %s:\n%s", containerID, logs),
+			Response: string(respBytes),
+		})
+	}
+	return res, err
 }
 
 func (s *Service) UsageSummary(ctx context.Context, from, to int64) (UsageSummary, error) {
@@ -199,6 +250,14 @@ func (s *Service) UsageSummary(ctx context.Context, from, to int64) (UsageSummar
 		}, nil
 	}
 	return store.SummaryUsage(ctx, from, to)
+}
+
+func (s *Service) ListConversations(ctx context.Context, limit, offset int) ([]ConversationRecord, error) {
+	store := s.currentUsageStore()
+	if store == nil {
+		return []ConversationRecord{}, nil
+	}
+	return store.ListConversations(ctx, limit, offset)
 }
 
 func (s *Service) bindUsageRecorderLocked(provider Provider) {
@@ -247,4 +306,21 @@ func (s *Service) recordUsage(rec UsageRecord) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_ = store.RecordUsage(ctx, rec)
+}
+
+func (s *Service) recordConversation(rec ConversationRecord) {
+	store := s.currentUsageStore()
+	if store == nil {
+		return
+	}
+	rec.Provider = strings.ToLower(strings.TrimSpace(rec.Provider))
+	if rec.Provider == "" {
+		rec.Provider = "unknown"
+	}
+	if rec.Timestamp <= 0 {
+		rec.Timestamp = time.Now().UTC().Unix()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = store.RecordConversation(ctx, rec)
 }

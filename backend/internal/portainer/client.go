@@ -42,7 +42,7 @@ func NewClient(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		apiKey:  apiKey,
-		http:    &http.Client{Timeout: 10 * time.Second},
+		http:    &http.Client{Timeout: 300 * time.Second},
 	}
 }
 

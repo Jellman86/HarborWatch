@@ -7,18 +7,24 @@
     }>();
 
     // Calculate aggregated progress (average of all active jobs)
-    let aggregateProgress = $derived(
-        jobs.length > 0 
-            ? Math.round(jobs.reduce((acc, job) => acc + (job.progress || 0), 0) / jobs.length)
-            : 0
-    );
+    // Handle indeterminate states (progress < 0) by treating them as 0 for averaging but showing pulse
+    let aggregateProgress = $derived.by(() => {
+        if (jobs.length === 0) return 0;
+        const known = jobs.filter(j => j.progress >= 0);
+        if (known.length === 0) return 0;
+        return Math.round(known.reduce((acc, job) => acc + job.progress, 0) / known.length);
+    });
 
-    const formatTarget = (t: string) => t.replace(/^\//, '');
+    const formatTarget = (t: string) => t.replace(/^\//, '').replace(/^container:/, '').replace(/^image:/, '');
 
     const jobVerb = (type: string) => {
         if (type === "update") return "Updating";
-        if (type === "scan:trivy") return "Scanning (Vulnerability)";
-        if (type === "scan:clamav") return "Scanning (Malware)";
+        if (type.startsWith("scan:")) {
+            if (type === "scan:trivy") return "Scanning (Vulnerability)";
+            if (type === "scan:clamav") return "Scanning (Malware)";
+            return "Scanning";
+        }
+        if (type === "redeploy") return "Redeploying";
         return "Processing";
     };
 
@@ -42,13 +48,13 @@
 
     let currentMessage = $derived.by(() => {
         if (jobs.length === 0) return "";
-        if (jobs.length === 1) return jobs[0].message || jobs[0].status;
         
-        // For multiple, show the message of the most recently updated or just a generic one
-        // Let's just show the last job's message if it has one
-        const withMsg = jobs.filter(j => j.message);
-        if (withMsg.length > 0) return withMsg[0].message;
-        return "Multiple tasks running...";
+        // Prefer showing the most 'interesting' message (e.g. not just 'queued')
+        const active = jobs.find(j => j.status === 'running' && j.message);
+        if (active) return active.message;
+        
+        const last = jobs[jobs.length - 1];
+        return last.message || last.status;
     });
 
     let showDetails = $state(false);

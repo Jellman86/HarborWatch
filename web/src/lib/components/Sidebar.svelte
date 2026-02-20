@@ -28,20 +28,8 @@
 
 <aside class="fixed left-0 top-0 h-full bg-white dark:bg-[#020617] shadow-2xl border-r border-slate-200 dark:border-cyan-500/10 transition-all duration-300 flex flex-col z-50 {collapsed ? 'w-20' : 'w-64'} {layoutStore.mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 pointer-events-none md:pointer-events-auto'}">
     <div class="flex-1 flex flex-col min-h-0 pointer-events-auto">
-        <!-- Logo -->        <!-- Logo and Brand -->
+        <!-- Logo and Brand -->
         <div class="relative flex flex-col items-center w-full p-6 h-auto border-b border-slate-100 dark:border-cyan-500/5 text-center gap-4">
-            <!-- Collapse Toggle (Desktop) -->
-            <button
-                class="hidden md:flex absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-all duration-300 hover:bg-slate-50 dark:hover:bg-cyan-500/5 z-10"
-                onclick={() => layoutStore.toggleSidebar()}
-                aria-label={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-                title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-500 {collapsed ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                </svg>
-            </button>
-
             <!-- Mobile Close -->
             <button 
                 onclick={() => layoutStore.closeMobileSidebar()}
@@ -57,7 +45,7 @@
                 <img 
                     src="/logo-64.png" 
                     alt="HarborWatch" 
-                    class="h-20 w-20 flex-shrink-0 transition-all duration-500 {hasActiveJobs ? 'ring-4 ring-cyan-500/30 animate-pulse rounded-full' : ''}" 
+                    class="flex-shrink-0 transition-all duration-500 {collapsed ? 'h-10 w-10' : 'h-20 w-20'} {hasActiveJobs ? 'ring-4 ring-cyan-500/30 animate-pulse rounded-full' : ''}" 
                 />
                 {#if hasActiveJobs}
                     <span class="absolute -top-1 -right-1 flex h-3 w-3">

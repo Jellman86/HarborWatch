@@ -175,6 +175,9 @@ func (f fakeAIService) AnalyzeMetrics(ctx context.Context, id string, metrics []
 func (f fakeAIService) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (ai.HealthAssessment, error) {
 	return ai.HealthAssessment{Healthy: true, Confidence: 80, Summary: "healthy"}, nil
 }
+func (f fakeAIService) ListConversations(ctx context.Context, limit, offset int) ([]ai.ConversationRecord, error) {
+	return []ai.ConversationRecord{}, nil
+}
 
 type fakePortainerClient struct {
 	yaml string
@@ -300,14 +303,39 @@ type fakeDiagService struct {
 }
 
 func (f fakeDiagService) Log(level, source, message string) {}
-func (f fakeDiagService) ListLogs(ctx context.Context, limit int) ([]diag.LogEntry, error) {
-	if len(f.logs) == 0 {
+func (f fakeDiagService) ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]diag.LogEntry, error) {
+	var filtered []diag.LogEntry
+	for _, entry := range f.logs {
+		if level != "" && !strings.EqualFold(entry.Level, level) {
+			continue
+		}
+		if source != "" && !strings.Contains(strings.ToLower(entry.Source), strings.ToLower(source)) {
+			continue
+		}
+		if since > 0 && entry.Timestamp < since {
+			continue
+		}
+		if search != "" {
+			haystack := strings.ToLower(entry.Level + " " + entry.Source + " " + entry.Message)
+			if !strings.Contains(haystack, strings.ToLower(search)) {
+				continue
+			}
+		}
+		filtered = append(filtered, entry)
+	}
+
+	if len(filtered) == 0 {
 		return nil, nil
 	}
-	if len(f.logs) > limit {
-		return f.logs[:limit], nil
+	start := offset
+	if start >= len(filtered) {
+		return nil, nil
 	}
-	return f.logs, nil
+	end := start + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	return filtered[start:end], nil
 }
 func (f fakeDiagService) GetSystemStatus() diag.SystemStatus {
 	return diag.SystemStatus{Uptime: 42, NumGoroutine: 9}
@@ -401,7 +429,7 @@ func (panicUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, f
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	ts := httptest.NewServer(NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil))
+	ts := httptest.NewServer(NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil))
 	defer ts.Close()
 	resp, err := http.Get(ts.URL + "/health")
 	if err != nil || resp.StatusCode != http.StatusOK {
@@ -410,7 +438,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestDockerContainersEndpoint(t *testing.T) {
-	mux := NewMuxWithDeps(fakeDockerClient{containers: []gen.ContainerSummary{{ID: "abc", Image: "nginx:latest", State: "running"}}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(fakeDockerClient{containers: []gen.ContainerSummary{{ID: "abc", Image: "nginx:latest", State: "running"}}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers", nil))
 	if rec.Code != http.StatusOK {
@@ -424,7 +452,7 @@ func TestDockerContainersEndpoint(t *testing.T) {
 
 func TestReleaseSummaryEndpoint(t *testing.T) {
 	fake := fakeReleaseService{summary: gen.ReleaseRiskSummary{Repo: "Jellman86/HarborWatch", TotalRisk: 42}}
-	mux := NewMuxWithDeps(nil, nil, fake, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, fake, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/releases/summary?repo=Jellman86/HarborWatch", nil))
 	if rec.Code != http.StatusOK {
@@ -434,7 +462,7 @@ func TestReleaseSummaryEndpoint(t *testing.T) {
 
 func TestUpdateEndpoints(t *testing.T) {
 	up := fakeUpdateService{startResp: gen.UpdateStartResponse{JobID: "u1", Status: "running"}, job: &gen.UpdateJobStatus{JobID: "u1", Status: "running"}}
-	mux := NewMuxWithDeps(nil, nil, nil, up, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, up, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 
 	recRun := httptest.NewRecorder()
 	mux.ServeHTTP(recRun, httptest.NewRequest(http.MethodPost, "/api/updates/run", strings.NewReader(`{"containerId":"c1","targetImage":"img","validateUrl":"http://x"}`)))
@@ -474,6 +502,7 @@ func TestUpdateRunEndpoint_BlockedWhenPolicyLocked(t *testing.T) {
 			ValidateURL:  "http://x",
 		}},
 		nil,
+		nil,
 	)
 
 	rec := httptest.NewRecorder()
@@ -496,7 +525,7 @@ func TestScanCancelEndpoint(t *testing.T) {
 			},
 		},
 	}
-	mux := NewMuxWithDeps(nil, scans, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, scans, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/scans/jobs/s1/cancel", nil))
@@ -525,7 +554,7 @@ func TestScanJobsListEndpoint(t *testing.T) {
 			},
 		},
 	}
-	mux := NewMuxWithDeps(nil, scans, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, scans, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/scans/jobs?type=malware&prefix=container:c1&limit=10", nil))
@@ -542,7 +571,7 @@ func TestScanJobsListEndpoint(t *testing.T) {
 }
 
 func TestAuditComposeByID_DockerUnavailable(t *testing.T) {
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, fakeAIService{enabled: true}, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, fakeAIService{enabled: true}, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ai/audit-compose/c1", nil))
 	if rec.Code != http.StatusServiceUnavailable {
@@ -568,6 +597,7 @@ func TestAuditComposeByID_PersistsAndReturnsHTML(t *testing.T) {
 		fakeRulesService{},
 		nil,
 		history,
+		nil,
 	)
 
 	rec := httptest.NewRecorder()
@@ -634,6 +664,7 @@ func TestAuditComposeHistoryEndpoints(t *testing.T) {
 		fakeRulesService{},
 		nil,
 		history,
+		nil,
 	)
 
 	recList := httptest.NewRecorder()
@@ -664,7 +695,7 @@ func TestAuditComposeHistoryEndpoints(t *testing.T) {
 }
 
 func TestRulesRoute_BackwardCompatibleContainersPath(t *testing.T) {
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers/c1/rules", nil))
 	if rec.Code != http.StatusOK {
@@ -673,7 +704,7 @@ func TestRulesRoute_BackwardCompatibleContainersPath(t *testing.T) {
 }
 
 func TestFleetAdviceEndpoint(t *testing.T) {
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	body := strings.NewReader(`[{"id":"c1","names":["/web"],"image":"nginx:latest","state":"running","status":"Up","labels":{},"updateAvailable":true}]`)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/ai/fleet-advice", body))
@@ -690,7 +721,7 @@ func TestFleetAdviceEndpoint(t *testing.T) {
 }
 
 func TestAIUsageEndpointGracefulWithoutUsageStore(t *testing.T) {
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, fakeAIService{enabled: false}, nil, nil, nil, fakeNotificationService{}, fakeSettingsService{}, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, fakeAIService{enabled: false}, nil, nil, nil, fakeNotificationService{}, fakeSettingsService{}, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ai/usage?span=7d", nil))
 	if rec.Code != http.StatusOK {
@@ -707,7 +738,7 @@ func TestAIUsageEndpointGracefulWithoutUsageStore(t *testing.T) {
 
 func TestDockerPruneEndpoint_TriggersSchedulerTask(t *testing.T) {
 	sched := &fakeSchedulerServiceWithRun{}
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, sched, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, sched, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/docker/prune", nil))
 	if rec.Code != http.StatusAccepted {
@@ -725,7 +756,7 @@ func TestMetricsBatchEndpoint(t *testing.T) {
 			"c2": {{ContainerID: "c2", Timestamp: 2, CPUPercent: 20}},
 		},
 	}
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, m, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, m, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	body := strings.NewReader(`{"ids":["c1","c2"],"duration":"1h"}`)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/metrics/batch", body))
@@ -747,7 +778,7 @@ func TestDockerContainerLogsEndpoint(t *testing.T) {
 			Combined: "hello\nworld",
 		},
 	}
-	mux := NewMuxWithDeps(docker, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(docker, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/c1/logs?tail=10&since=1h&timestamps=1", nil))
 	if rec.Code != http.StatusOK {
@@ -772,7 +803,7 @@ func TestSystemLogsFilters(t *testing.T) {
 			{Timestamp: 300, Level: "ERROR", Source: "Docker", Message: "boom"},
 		},
 	}
-	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, diagSvc, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, diagSvc, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/system/logs?limit=10&level=error&source=docker&since=250", nil))
 	if rec.Code != http.StatusOK {
@@ -801,7 +832,7 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 		images:     []gen.ImageSummary{{ID: "img1", RepoTags: []string{"nginx:latest"}}},
 		logs:       dockerengine.ContainerLogs{Combined: "x"},
 	}
-	mux := NewMuxWithDeps(docker, fakeScanService{}, nil, nil, fakeAuditService{}, nil, fakeSchedulerService{}, nil, diagSvc, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil)
+	mux := NewMuxWithDeps(docker, fakeScanService{}, nil, nil, fakeAuditService{}, nil, fakeSchedulerService{}, nil, diagSvc, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/diagnostics/snapshot?containerId=c1&includeFleet=1", nil))
 	if rec.Code != http.StatusOK {

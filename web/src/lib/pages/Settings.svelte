@@ -77,6 +77,15 @@
         daily: AIUsageDaily[];
     }
 
+    interface AIConversation {
+        timestamp: number;
+        provider: string;
+        model: string;
+        feature: string;
+        prompt: string;
+        response: string;
+    }
+
     const weekdayOptions: Array<{ value: number; label: string }> = [
         { value: 0, label: "Sun" },
         { value: 1, label: "Mon" },
@@ -143,6 +152,8 @@
     let aiUsageLoading = $state(false);
     let aiUsageError = $state("");
     let aiSpendRows = $derived(Array.isArray(aiUsage?.daily) ? aiUsage.daily : []);
+    let aiConvs = $state<AIConversation[]>([]);
+    let aiConvsLoading = $state(false);
 
     // Latest curated model choices (validated against provider docs, February 2026).
     const latestModelsByProvider: Record<AIProvider, ModelOption[]> = {
@@ -234,7 +245,7 @@
         if (!lowered) return false;
 
         const id = String(container.id || "").trim().toLowerCase();
-        if (id && (id === lowered || id.startsWith(lowered))) return true;
+        if (id && id.includes(lowered)) return true;
 
         const image = String(container.image || "").trim().toLowerCase();
         if (image && (image === lowered || image.includes(lowered))) return true;
@@ -560,6 +571,19 @@
             aiUsageError = e instanceof Error ? e.message : "Failed to load AI usage";
         } finally {
             aiUsageLoading = false;
+        }
+    }
+
+    async function loadAIConversations() {
+        aiConvsLoading = true;
+        try {
+            const res = await fetch("/api/ai/conversations?limit=25");
+            if (!res.ok) throw new Error("Failed to load conversations");
+            aiConvs = await res.json();
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "Failed to load AI conversations");
+        } finally {
+            aiConvsLoading = false;
         }
     }
 
@@ -1397,6 +1421,54 @@
                         class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                     ></textarea>
                     <p class="text-[11px] text-slate-500">If empty, HarborWatch displays token usage only. No external pricing lookup is performed.</p>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Conversation History</h3>
+                            <p class="text-[11px] text-slate-500">Review recent AI prompts and responses recorded by the system.</p>
+                        </div>
+                        <button
+                            onclick={loadAIConversations}
+                            disabled={aiConvsLoading || !settings.aiEnabled}
+                            class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                        >
+                            {aiConvsLoading ? 'Loading...' : 'Show Recent Conversations'}
+                        </button>
+                    </div>
+
+                    {#if aiConvs.length > 0}
+                        <div class="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                            {#each aiConvs as conv}
+                                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-4 space-y-3">
+                                    <div class="flex items-center justify-between gap-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="px-2 py-0.5 bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 rounded text-[9px] font-black uppercase tracking-widest">{conv.feature}</span>
+                                            <span class="text-[10px] text-slate-400 font-mono">{new Date(conv.timestamp * 1000).toLocaleString()}</span>
+                                        </div>
+                                        <div class="text-[9px] font-black text-slate-500 uppercase tracking-tighter">
+                                            {conv.provider} • {conv.model}
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        <div class="space-y-1.5">
+                                            <p class="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Prompt</p>
+                                            <div class="bg-slate-50 dark:bg-slate-900 rounded-xl p-3 text-[11px] font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words border border-slate-100 dark:border-slate-800">
+                                                {conv.prompt}
+                                            </div>
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <p class="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Response</p>
+                                            <div class="bg-brand-50/30 dark:bg-brand-900/10 rounded-xl p-3 text-[11px] font-mono text-brand-700 dark:text-brand-300 whitespace-pre-wrap break-words border border-brand-100/50 dark:border-brand-900/20">
+                                                {conv.response}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">

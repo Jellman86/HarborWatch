@@ -15,6 +15,7 @@ import (
 
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 )
@@ -53,18 +54,19 @@ type DiagService interface {
 }
 
 type Service struct {
-	store     *Store
-	executor  Executor
-	ai        *ai.Service
-	notif     *notifications.Service
-	diag      DiagService
-	portainer PortainerClient
+	store      *Store
+	executor   Executor
+	ai         *ai.Service
+	notif      *notifications.Service
+	diag       DiagService
+	portainer  PortainerClient
+	jobManager *jobs.Manager
 
 	mu          sync.RWMutex
 	subscribers map[string][]chan gen.UpdateStepEvent
 }
 
-func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notifications.Service, diag DiagService, portainer PortainerClient) *Service {
+func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notifications.Service, diag DiagService, portainer PortainerClient, jm *jobs.Manager) *Service {
 	return &Service{
 		store:       store,
 		executor:    executor,
@@ -72,6 +74,7 @@ func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notif
 		notif:       notif,
 		diag:        diag,
 		portainer:   portainer,
+		jobManager:  jm,
 		subscribers: map[string][]chan gen.UpdateStepEvent{},
 	}
 }
@@ -128,25 +131,7 @@ func (s *Service) ListContainerJobs(ctx context.Context, containerID string, lim
 }
 
 func (s *Service) ActiveJobs() []gen.JobProgress {
-	// We don't have a local cache of runs, so we query the store.
-	// This is slightly less efficient but keeps the service stateless regarding active runs.
-	runs, err := s.store.ListActiveRuns(context.Background())
-	if err != nil {
-		return nil
-	}
-	out := make([]gen.JobProgress, 0, len(runs))
-	for _, run := range runs {
-		out = append(out, gen.JobProgress{
-			ID:        run.JobID,
-			Type:      "update",
-			Target:    run.ContainerID,
-			Status:    run.Status,
-			Message:   run.Message,
-			Progress:  run.Progress,
-			StartedAt: run.CreatedAt,
-		})
-	}
-	return out
+	return s.jobManager.ActiveJobs()
 }
 
 func (s *Service) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
@@ -170,24 +155,40 @@ func (s *Service) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 }
 
 func (s *Service) setRunProgress(jobID string, status string, progress int) {
-	s.mu.Lock()
-	// We don't have a local cache of runs, so we just update the store.
-	s.mu.Unlock()
+	s.jobManager.UpdateJob(jobID, progress, status, "")
 	_ = s.store.UpdateRunProgress(context.Background(), jobID, status, progress)
 }
 
 func (s *Service) execute(jobID string, req Request) {
-	if req.IsPortainerManaged && s.portainer != nil {
-		s.executePortainer(jobID, req)
-		return
-	}
-	s.executeLocal(jobID, req)
-}
+	s.jobManager.RegisterJob(&jobs.Job{
+		ID:         jobID,
+		Type:       jobs.JobTypeUpdate,
+		Target:     req.ContainerID,
+		TargetName: req.ContainerName,
+		Status:     "queued",
+		Message:    "Waiting for concurrency slot",
+		StartedAt:  time.Now().UTC().Unix(),
+	})
+	defer s.jobManager.FinishJob(jobID)
 
-func (s *Service) executeLocal(jobID string, req Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// Acquire slot with container lock
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
+	if err := s.jobManager.AcquireSlot(ctx, jobID, req.ContainerID); err != nil {
+		s.finish(jobID, "failed", err)
+		return
+	}
+	defer s.jobManager.ReleaseSlot(jobID, req.ContainerID)
+
+	if req.IsPortainerManaged && s.portainer != nil {
+		s.executePortainer(ctx, jobID, req)
+		return
+	}
+	s.executeLocal(ctx, jobID, req)
+}
+
+func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 	s.setRunProgress(jobID, "running", 5)
 	failed := s.runStep(ctx, jobID, "preflight", func(ctx context.Context) error { return s.executor.Preflight(ctx, req) })
 	if failed != nil {
@@ -195,7 +196,7 @@ func (s *Service) executeLocal(jobID string, req Request) {
 		return
 	}
 
-	// AI analysis step... (existing code)
+	// AI analysis step...
 	if s.ai != nil && s.ai.HasProvider() {
 		s.setRunProgress(jobID, "running", 10)
 		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
@@ -291,10 +292,7 @@ func (s *Service) executeLocal(jobID string, req Request) {
 	s.finish(jobID, "completed", nil)
 }
 
-func (s *Service) executePortainer(jobID string, req Request) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
-
+func (s *Service) executePortainer(ctx context.Context, jobID string, req Request) {
 	s.setRunProgress(jobID, "running", 5)
 	if err := s.runStep(ctx, jobID, "preflight", func(ctx context.Context) error {
 		if req.PortainerStackID == 0 {
@@ -402,8 +400,10 @@ func (s *Service) rollback(jobID string, req Request, cause error) {
 }
 
 func (s *Service) runStep(ctx context.Context, jobID, step string, fn func(context.Context) error) error {
+	msg := "step: " + step
 	start := gen.UpdateStepEvent{JobID: jobID, Step: step, Status: "running", Message: "step started", Timestamp: time.Now().UTC().Unix()}
 	s.emit(jobID, start)
+	s.jobManager.UpdateJob(jobID, -1, "running", msg)
 	if err := fn(ctx); err != nil {
 		s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: step, Status: "failed", Message: err.Error(), Timestamp: time.Now().UTC().Unix()})
 		return err
@@ -429,6 +429,7 @@ func (s *Service) finish(jobID, status string, err error) {
 			})
 		}
 	}
+	s.jobManager.UpdateJob(jobID, 100, status, msg)
 	_ = s.store.UpdateRunStatus(context.Background(), jobID, status, msg, time.Now().UTC().Unix())
 }
 

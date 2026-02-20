@@ -111,7 +111,7 @@ func collectDiagnosticsSnapshot(ctx context.Context, deps diagnosticsDeps, opts 
 		status := deps.diagService.GetSystemStatus()
 		snapshot.SystemStatus = &status
 
-		logs, err := deps.diagService.ListLogs(ctx, opts.LogLimit)
+		logs, err := deps.diagService.ListLogs(ctx, opts.LogLimit, 0, "", "", "", 0)
 		if err != nil {
 			snapshot.Errors = append(snapshot.Errors, fmt.Sprintf("diag logs: %v", err))
 		} else {

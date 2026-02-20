@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 )
 
 type DiagService interface {
@@ -24,28 +25,22 @@ type Service struct {
 	malwareScanner MalwareScanner
 	store          *Store
 	diag           DiagService
+	jobManager     *jobs.Manager
 
 	mu         sync.RWMutex
 	jobs       map[string]gen.ScanJobStatus
 	jobCancels map[string]context.CancelFunc
-
-	// Concurrency guards to avoid spawning too many heavy scanners at once.
-	trivySem  chan struct{}
-	clamavSem chan struct{}
 }
 
-func NewService(scanner Scanner, malwareScanner MalwareScanner, store *Store, diag DiagService) *Service {
-	trivyConcurrency := envInt("HW_TRIVY_MAX_CONCURRENCY", 2, 1, 16)
-	clamavConcurrency := envInt("HW_CLAMAV_MAX_CONCURRENCY", 1, 1, 8)
+func NewService(scanner Scanner, malwareScanner MalwareScanner, store *Store, diag DiagService, jm *jobs.Manager) *Service {
 	return &Service{
 		scanner:        scanner,
 		malwareScanner: malwareScanner,
 		store:          store,
 		diag:           diag,
+		jobManager:     jm,
 		jobs:           map[string]gen.ScanJobStatus{},
 		jobCancels:     map[string]context.CancelFunc{},
-		trivySem:       make(chan struct{}, trivyConcurrency),
-		clamavSem:      make(chan struct{}, clamavConcurrency),
 	}
 }
 
@@ -94,12 +89,12 @@ func (s *Service) ClamAVSignatureStatus(ctx context.Context) (ClamAVSignatureSta
 }
 
 func (s *Service) UpdateClamAVSignatures(ctx context.Context) (string, error) {
-	select {
-	case s.clamavSem <- struct{}{}:
-	case <-ctx.Done():
-		return "", ctx.Err()
+	jobID := "clamav-sigs-" + strconv.FormatInt(time.Now().Unix(), 10)
+	lockID := "clamav-signatures"
+	if err := s.jobManager.AcquireSlot(ctx, jobID, lockID); err != nil {
+		return "", err
 	}
-	defer func() { <-s.clamavSem }()
+	defer s.jobManager.ReleaseSlot(jobID, lockID)
 
 	updateCtx, cancel := context.WithTimeout(ctx, envDuration("HW_CLAMAV_UPDATE_TIMEOUT", 10*time.Minute))
 	defer cancel()
@@ -163,12 +158,25 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 }
 
 func (s *Service) run(jobID, target string, runCtx context.Context) {
+	s.jobManager.RegisterJob(&jobs.Job{
+		ID:         jobID,
+		Type:       jobs.JobTypeScan,
+		Subtype:    "trivy",
+		Target:     target,
+		TargetName: target,
+		Status:     "queued",
+		Message:    "Waiting for concurrency slot",
+		StartedAt:  time.Now().UTC().Unix(),
+	})
+
 	s.setJobProgressWithMessage(jobID, 0, "Waiting for concurrency slot")
-	if !acquireScanSlot(runCtx, s.trivySem) {
-		s.setJobCancelled(jobID, "scan cancelled before execution")
+	if err := s.jobManager.AcquireSlot(runCtx, jobID, "image:"+target); err != nil {
+		s.setJobCancelled(jobID, "scan cancelled: "+err.Error())
+		s.jobManager.FinishJob(jobID)
 		return
 	}
-	defer func() { <-s.trivySem }()
+	defer s.jobManager.ReleaseSlot(jobID, "image:"+target)
+	defer s.jobManager.FinishJob(jobID)
 
 	ctx, cancel := context.WithTimeout(runCtx, envDuration("HW_TRIVY_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
@@ -216,12 +224,35 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 		defer func() { _ = os.RemoveAll(cleanupPath) }()
 	}
 
+	containerID := ""
+	if strings.HasPrefix(targetLabel, "container:") {
+		containerID = strings.TrimPrefix(targetLabel, "container:")
+	}
+
+	s.jobManager.RegisterJob(&jobs.Job{
+		ID:         jobID,
+		Type:       jobs.JobTypeScan,
+		Subtype:    "clamav",
+		Target:     targetLabel,
+		TargetName: targetLabel,
+		Status:     "queued",
+		Message:    "Waiting for concurrency slot",
+		StartedAt:  time.Now().UTC().Unix(),
+	})
+
 	s.setJobProgressWithMessage(jobID, 0, "Waiting for concurrency slot")
-	if !acquireScanSlot(runCtx, s.clamavSem) {
-		s.setJobCancelled(jobID, "scan cancelled before execution")
+	lockID := "malware:" + targetLabel
+	if containerID != "" {
+		lockID = containerID
+	}
+
+	if err := s.jobManager.AcquireSlot(runCtx, jobID, lockID); err != nil {
+		s.setJobCancelled(jobID, "scan cancelled: "+err.Error())
+		s.jobManager.FinishJob(jobID)
 		return
 	}
-	defer func() { <-s.clamavSem }()
+	defer s.jobManager.ReleaseSlot(jobID, lockID)
+	defer s.jobManager.FinishJob(jobID)
 
 	ctx, cancel := context.WithTimeout(runCtx, envDuration("HW_CLAMAV_SCAN_TIMEOUT", 15*time.Minute))
 	defer cancel()
@@ -296,6 +327,7 @@ func (s *Service) setJobProgressWithMessage(jobID string, progress int, message 
 	}
 	s.jobs[jobID] = job
 	s.mu.Unlock()
+	s.jobManager.UpdateJob(jobID, progress, job.Status, message)
 	_ = s.store.UpdateJobProgress(context.Background(), jobID, job.Status, progress)
 }
 
@@ -367,34 +399,7 @@ func (s *Service) Job(ctx context.Context, jobID string) (gen.ScanJobStatus, err
 }
 
 func (s *Service) ActiveJobs() []gen.JobProgress {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]gen.JobProgress, 0, len(s.jobs))
-	for _, job := range s.jobs {
-		if job.Status == "running" || job.Status == "queued" {
-			msg := "Processing..."
-			if job.Status == "queued" {
-				msg = "Waiting for slot..."
-			} else if job.Progress >= 80 {
-				msg = "Finalizing results..."
-			} else if job.Source == "trivy" {
-				msg = "Scanning vulnerabilities..."
-			} else if job.Source == "clamav" {
-				msg = "Scanning malware..."
-			}
-
-			out = append(out, gen.JobProgress{
-				ID:        job.JobID,
-				Type:      "scan:" + job.Source,
-				Target:    job.Target,
-				Status:    job.Status,
-				Message:   msg,
-				Progress:  job.Progress,
-				StartedAt: job.StartedAt,
-			})
-		}
-	}
-	return out
+	return s.jobManager.ActiveJobs()
 }
 
 func (s *Service) ListJobs(ctx context.Context, scanType, targetPrefix string, limit int) ([]gen.ScanJobStatus, error) {

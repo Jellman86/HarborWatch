@@ -33,7 +33,7 @@
 
     type FleetFilter = "all" | "updates" | "intel" | "high-risk" | "ignored";
     let activeFilter = $state<FleetFilter>("all");
-    let ignoredTokens = $state<string[]>(["harborwatch"]);
+    let ignoredTokens = $state<string[]>(["harborwatch", "portainer", "portainer-ce", "ix-portainer"]);
     let loadingIgnoreTokens = $state(false);
     let loadingIntelReadiness = $state(false);
 
@@ -184,7 +184,7 @@
         if (!normalized) return false;
 
         const id = String(summary.id || "").trim().toLowerCase();
-        if (id && (id === normalized || id.startsWith(normalized))) return true;
+        if (id && id.includes(normalized)) return true;
 
         const image = String(summary.image || "").trim().toLowerCase();
         if (image && (image === normalized || image.includes(normalized))) return true;
@@ -285,15 +285,18 @@
         try {
             const res = await fetch("/api/settings");
             if (!res.ok) {
-                ignoredTokens = ["harborwatch"];
+                ignoredTokens = ["harborwatch", "portainer", "portainer-ce", "ix-portainer"];
                 return;
             }
             const payload = await res.json();
             const merged = splitDelimitedTokens(String(payload?.automationIgnoredContainers || ""));
-            if (!merged.includes("harborwatch")) merged.push("harborwatch");
+            const defaults = ["harborwatch", "portainer", "portainer-ce", "ix-portainer"];
+            for (const d of defaults) {
+                if (!merged.includes(d)) merged.push(d);
+            }
             ignoredTokens = Array.from(new Set(merged));
         } catch {
-            ignoredTokens = ["harborwatch"];
+            ignoredTokens = ["harborwatch", "portainer", "portainer-ce", "ix-portainer"];
         } finally {
             loadingIgnoreTokens = false;
         }
@@ -445,18 +448,18 @@
                 style="animation-delay: {0.08 + (i * 0.03)}s"
             >
                 <div class="p-5 flex-1 space-y-4">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
+                    <div class="flex flex-wrap items-start justify-between gap-3 min-w-0">
+                        <div class="min-w-0 flex-1">
                             <button
                                 onclick={() => onNavigate("container-detail", { id: c.id })}
-                                class="font-black text-slate-900 dark:text-white truncate text-lg tracking-tight hover:text-brand-600 transition-colors text-left"
+                                class="font-black text-slate-900 dark:text-white truncate text-lg tracking-tight hover:text-brand-600 transition-colors text-left w-full"
                                 title="Open container details"
                             >
                                 {c.names?.[0]?.replace(/^\//, "") ?? "unnamed"}
                             </button>
                             <p class="text-[10px] font-mono text-slate-400 mt-1 uppercase tracking-widest">{formatId(c.id)}</p>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
                             {#if c.updateAvailable}
                                 <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-lg text-[9px] font-black uppercase tracking-widest">
                                     Update

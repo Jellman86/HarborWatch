@@ -27,8 +27,18 @@ CREATE TABLE IF NOT EXISTS ai_usage_events (
 	output_tokens INTEGER NOT NULL DEFAULT 0,
 	total_tokens INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS ai_conversations (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	ts INTEGER NOT NULL,
+	provider TEXT NOT NULL,
+	model TEXT NOT NULL,
+	feature TEXT NOT NULL,
+	prompt TEXT NOT NULL,
+	response TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_ts ON ai_usage_events(ts);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_provider_model ON ai_usage_events(provider, model);
+CREATE INDEX IF NOT EXISTS idx_ai_conv_ts ON ai_conversations(ts);
 `)
 	return err
 }
@@ -46,6 +56,44 @@ INSERT INTO ai_usage_events(ts, provider, model, feature, input_tokens, output_t
 VALUES(?, ?, ?, ?, ?, ?, ?)
 `, ts, rec.Provider, rec.Model, rec.Feature, rec.InputTokens, rec.OutputTokens, rec.TotalTokens)
 	return err
+}
+
+func (s *UsageSQLiteStore) RecordConversation(ctx context.Context, rec ConversationRecord) error {
+	ts := rec.Timestamp
+	if ts <= 0 {
+		ts = time.Now().UTC().Unix()
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO ai_conversations(ts, provider, model, feature, prompt, response)
+VALUES(?, ?, ?, ?, ?, ?)
+`, ts, rec.Provider, rec.Model, rec.Feature, rec.Prompt, rec.Response)
+	return err
+}
+
+func (s *UsageSQLiteStore) ListConversations(ctx context.Context, limit, offset int) ([]ConversationRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT ts, provider, model, feature, prompt, response
+FROM ai_conversations
+ORDER BY ts DESC, id DESC
+LIMIT ? OFFSET ?
+`, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ConversationRecord
+	for rows.Next() {
+		var rec ConversationRecord
+		if err := rows.Scan(&rec.Timestamp, &rec.Provider, &rec.Model, &rec.Feature, &rec.Prompt, &rec.Response); err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, nil
 }
 
 func (s *UsageSQLiteStore) SummaryUsage(ctx context.Context, from, to int64) (UsageSummary, error) {

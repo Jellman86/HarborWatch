@@ -22,6 +22,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
@@ -72,11 +73,12 @@ type AIService interface {
 	AnalyzeReleaseNotes(ctx context.Context, notes string) (ai.AnalysisResult, error)
 	AuditCompose(ctx context.Context, yaml string) (string, error)
 	AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error)
+	ListConversations(ctx context.Context, limit, offset int) ([]ai.ConversationRecord, error)
 }
 
 type DiagService interface {
 	Log(level, source, message string)
-	ListLogs(ctx context.Context, limit int) ([]diag.LogEntry, error)
+	ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]diag.LogEntry, error)
 	GetSystemStatus() diag.SystemStatus
 	PruneLogs(ctx context.Context, olderThan int64) (int64, error)
 }
@@ -207,6 +209,16 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	}
 
 	// 3. Initialize Domain Services
+	// Global Job Manager
+	maxConcurrency := 1
+	st, err := settingsStore.Get(context.Background())
+	if err == nil {
+		if st.AutoUpgradeMaxConcurrency > 0 {
+			maxConcurrency = st.AutoUpgradeMaxConcurrency
+		}
+	}
+	jobManager := jobs.NewManager(maxConcurrency)
+
 	// Use shared store for scanning
 	scanStore := scanning.NewStore(db)
 	if err := scanStore.Init(context.Background()); err != nil {
@@ -219,7 +231,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	} else if diagService != nil {
 		diagService.Log("ERROR", "Scanner", fmt.Sprintf("Failed to reconcile stale scan jobs on startup: %v", err))
 	}
-	scanService := scanning.NewService(scanning.NewTrivyScanner(), scanning.NewClamAVScanner(), scanStore, diagService)
+	scanService := scanning.NewService(scanning.NewTrivyScanner(), scanning.NewClamAVScanner(), scanStore, diagService, jobManager)
 
 	releaseService := releases.NewService()
 	aiService := ai.NewService(nil)
@@ -235,7 +247,6 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	notificationService := notifications.NewService()
 
 	var portainerService *portainer.Client
-	st, err := settingsStore.Get(context.Background())
 	if err != nil {
 		if diagService != nil {
 			diagService.Log("ERROR", "Settings", fmt.Sprintf("Failed to load settings on startup: %v", err))
@@ -263,7 +274,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		}
 	}
 
-	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService, portainerService)
+	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService, portainerService, jobManager)
 
 	auditService := audit.NewService(db)
 
@@ -350,7 +361,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			return false
 		}
 		st := loadRuntimeSettings(ctx)
-		tokens := append(splitDelimitedTokens(st.AutomationIgnoredContainers), "harborwatch", "portainer")
+		tokens := append(splitDelimitedTokens(st.AutomationIgnoredContainers), "harborwatch", "portainer", "portainer-ce", "ix-portainer")
 		seen := map[string]struct{}{}
 		unique := make([]string, 0, len(tokens))
 		for _, token := range tokens {
@@ -752,6 +763,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		rulesStore,
 		intelStore,
 		composeAuditStore,
+		jobManager,
 	), schedSvc, nil
 }
 
@@ -777,11 +789,11 @@ type PortainerClient interface {
 	ListStacks(ctx context.Context) ([]portainer.Stack, error)
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService) http.Handler {
-	return newMuxWithDepsAndComposeAuditStore(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsService, portainerService, rulesService, intelService, nil)
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, jobManager *jobs.Manager) http.Handler {
+	return newMuxWithDepsAndComposeAuditStore(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsService, portainerService, rulesService, intelService, nil, jobManager)
 }
 
-func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore) http.Handler {
+func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore, jobManager *jobs.Manager) http.Handler {
 	r := chi.NewRouter()
 	currentPortainerService := portainerService
 
@@ -1766,6 +1778,39 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				})
 			})
 
+			r.Get("/conversations", func(w http.ResponseWriter, r *http.Request) {
+				if aiService == nil {
+					writeJSON(w, http.StatusOK, []ai.ConversationRecord{})
+					return
+				}
+				limit := 50
+				if raw := r.URL.Query().Get("limit"); raw != "" {
+					if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+						limit = n
+					}
+				}
+				if limit > 200 {
+					limit = 200
+				}
+				offset := 0
+				if raw := r.URL.Query().Get("offset"); raw != "" {
+					if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+						offset = n
+					}
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+				defer cancel()
+				convs, err := aiService.ListConversations(ctx, limit, offset)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "ai_conv_fetch_failed", err.Error())
+					return
+				}
+				if convs == nil {
+					convs = []ai.ConversationRecord{}
+				}
+				writeJSON(w, http.StatusOK, convs)
+			})
+
 			r.Post("/audit-compose", func(w http.ResponseWriter, r *http.Request) {
 				if aiService == nil || !aiService.HasProvider() {
 					writeError(w, http.StatusServiceUnavailable, "ai_unavailable", "AI provider not configured")
@@ -2121,7 +2166,13 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					writeError(w, http.StatusServiceUnavailable, "diag_unavailable", "Diagnostic service not initialized")
 					return
 				}
-				writeJSON(w, http.StatusOK, diagService.GetSystemStatus())
+				status := diagService.GetSystemStatus()
+				if jobManager != nil {
+					status.ActiveJobs = jobManager.ActiveJobs()
+				} else {
+					status.ActiveJobs = []gen.JobProgress{}
+				}
+				writeJSON(w, http.StatusOK, status)
 			})
 
 			r.Get("/logs", func(w http.ResponseWriter, r *http.Request) {
@@ -2130,10 +2181,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					return
 				}
 				limit := parseIntQuery(r.URL.Query().Get("limit"), 100, 1, 2000)
-				fetchLimit := limit
-				if fetchLimit < 500 {
-					fetchLimit = 500
-				}
+				offset := parseIntQuery(r.URL.Query().Get("offset"), 0, 0, 1000000)
 				level := strings.TrimSpace(strings.ToUpper(r.URL.Query().Get("level")))
 				source := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("source")))
 				search := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("search")))
@@ -2151,36 +2199,17 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					since = parsed
 				}
 
-				logs, err := diagService.ListLogs(r.Context(), fetchLimit)
+				logs, err := diagService.ListLogs(r.Context(), limit, offset, level, source, search, since)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, "diag_log_failed", err.Error())
 					return
 				}
 
-				filtered := make([]diag.LogEntry, 0, min(limit, len(logs)))
-				for _, entry := range logs {
-					if level != "" && !strings.EqualFold(entry.Level, level) {
-						continue
-					}
-					if source != "" && !strings.Contains(strings.ToLower(entry.Source), source) {
-						continue
-					}
-					if since > 0 && entry.Timestamp < since {
-						continue
-					}
-					if search != "" {
-						haystack := strings.ToLower(entry.Level + " " + entry.Source + " " + entry.Message)
-						if !strings.Contains(haystack, search) {
-							continue
-						}
-					}
-					filtered = append(filtered, entry)
-					if len(filtered) >= limit {
-						break
-					}
+				if logs == nil {
+					logs = []diag.LogEntry{}
 				}
 
-				writeJSON(w, http.StatusOK, filtered)
+				writeJSON(w, http.StatusOK, logs)
 			})
 		})
 
@@ -2346,21 +2375,12 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					return
 				}
 
-				ctx := r.Context()
-				// 1. Get current stack file
-				yaml, err := currentPortainerService.GetStackFile(ctx, id)
+				// Find stack metadata first to get name and endpoint
+				stacks, err := currentPortainerService.ListStacks(r.Context())
 				if err != nil {
-					writeError(w, http.StatusBadGateway, "portainer_error", "Failed to retrieve stack file: "+err.Error())
+					writeError(w, http.StatusBadGateway, "portainer_error", "Failed to list stacks: "+err.Error())
 					return
 				}
-
-				// 2. Find endpoint ID from stack list
-				stacks, err := currentPortainerService.ListStacks(ctx)
-				if err != nil {
-					writeError(w, http.StatusBadGateway, "portainer_error", "Failed to list stacks to find endpoint ID: "+err.Error())
-					return
-				}
-
 				var targetStack *portainer.Stack
 				for _, s := range stacks {
 					if s.ID == id {
@@ -2368,20 +2388,63 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 						break
 					}
 				}
-
 				if targetStack == nil {
 					writeError(w, http.StatusNotFound, "stack_not_found", "Stack not found in Portainer")
 					return
 				}
 
-				// 3. Trigger update with PullImage=true
-				err = currentPortainerService.UpdateStack(ctx, id, targetStack.EndpointID, yaml, nil, true, true)
-				if err != nil {
-					writeError(w, http.StatusBadGateway, "portainer_error", "Redeploy failed: "+err.Error())
-					return
-				}
+				jobID := "redeploy-" + idStr + "-" + strconv.FormatInt(time.Now().Unix(), 10)
+				lockID := "portainer-stack-" + idStr
 
-				writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Stack redeploy triggered with image pull"})
+				// Run in background with JobManager coordination
+				go func() {
+					job := &jobs.Job{
+						ID:         jobID,
+						Type:       jobs.JobTypeRedeploy,
+						Target:     lockID,
+						TargetName: "Stack: " + targetStack.Name,
+						Status:     "queued",
+						Message:    "Waiting for concurrency slot",
+						StartedAt:  time.Now().UTC().Unix(),
+					}
+					jobManager.RegisterJob(job)
+					defer jobManager.FinishJob(jobID)
+
+					// 20 minute timeout for large stack redeploys
+					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+					defer cancel()
+
+					if err := jobManager.AcquireSlot(ctx, jobID, lockID); err != nil {
+						if diagService != nil {
+							diagService.Log("ERROR", "Portainer", fmt.Sprintf("Stack %d redeploy failed to acquire slot: %v", id, err))
+						}
+						return
+					}
+					defer jobManager.ReleaseSlot(jobID, lockID)
+
+					jobManager.UpdateJob(jobID, 10, "running", "Fetching stack file")
+					yaml, err := currentPortainerService.GetStackFile(ctx, id)
+					if err != nil {
+						jobManager.UpdateJob(jobID, 100, "failed", "Fetch failed: "+err.Error())
+						return
+					}
+
+					jobManager.UpdateJob(jobID, 30, "running", "Triggering Portainer update (with pull)")
+					// Trigger update with PullImage=true
+					err = currentPortainerService.UpdateStack(ctx, id, targetStack.EndpointID, yaml, targetStack.Env, true, true)
+					if err != nil {
+						jobManager.UpdateJob(jobID, 100, "failed", "Redeploy failed: "+err.Error())
+						return
+					}
+
+					jobManager.UpdateJob(jobID, 100, "completed", "Redeploy triggered successfully")
+				}()
+
+				writeJSON(w, http.StatusAccepted, map[string]string{
+					"status": "accepted", 
+					"message": "Stack redeploy queued",
+					"jobId": jobID,
+				})
 			})
 		})
 	})
@@ -2468,7 +2531,7 @@ func containerMatchesToken(summary gen.ContainerSummary, token string) bool {
 	}
 
 	id := strings.ToLower(strings.TrimSpace(summary.ID))
-	if id != "" && (id == token || strings.HasPrefix(id, token)) {
+	if id != "" && strings.Contains(id, token) {
 		return true
 	}
 

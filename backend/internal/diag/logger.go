@@ -9,15 +9,17 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	_ "modernc.org/sqlite"
 )
 
 type SystemStatus struct {
-	Uptime      int64  `json:"uptime"`
-	Version     string `json:"version"`
-	MemoryAlloc uint64 `json:"memoryAlloc"`
-	NumGoroutine int    `json:"numGoroutine"`
-	DBSize      int64  `json:"dbSize"`
+	Uptime       int64             `json:"uptime"`
+	Version      string            `json:"version"`
+	MemoryAlloc  uint64            `json:"memoryAlloc"`
+	NumGoroutine int               `json:"numGoroutine"`
+	DBSize       int64             `json:"dbSize"`
+	ActiveJobs   []gen.JobProgress `json:"activeJobs"`
 }
 
 type LogEntry struct {
@@ -81,8 +83,32 @@ func (s *Service) Log(level, source, message string) {
 	}
 }
 
-func (s *Service) ListLogs(ctx context.Context, limit int) ([]LogEntry, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, timestamp, level, message, source FROM internal_logs ORDER BY timestamp DESC, id DESC LIMIT ?", limit)
+func (s *Service) ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]LogEntry, error) {
+	query := "SELECT id, timestamp, level, message, source FROM internal_logs WHERE 1=1"
+	var args []any
+
+	if level != "" {
+		query += " AND level = ?"
+		args = append(args, level)
+	}
+	if source != "" {
+		query += " AND source LIKE ?"
+		args = append(args, "%"+source+"%")
+	}
+	if since > 0 {
+		query += " AND timestamp >= ?"
+		args = append(args, since)
+	}
+	if search != "" {
+		query += " AND (message LIKE ? OR source LIKE ? OR level LIKE ?)"
+		pattern := "%" + search + "%"
+		args = append(args, pattern, pattern, pattern)
+	}
+
+	query += " ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
