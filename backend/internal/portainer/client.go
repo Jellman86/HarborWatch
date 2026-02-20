@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -11,13 +12,22 @@ import (
 
 // Stack represents a Portainer stack.
 type Stack struct {
-	ID          int    `json:"Id"`
-	Name        string `json:"Name"`
-	Type        int    `json:"Type"`
-	EndpointID  int    `json:"EndpointId"`
-	SwarmID     string `json:"SwarmId"`
-	EntryPoint  string `json:"EntryPoint"`
-	Status      int    `json:"Status"`
+	ID         int    `json:"Id"`
+	Name       string `json:"Name"`
+	Type       int    `json:"Type"`
+	EndpointID int    `json:"EndpointId"`
+	SwarmID    string `json:"SwarmId"`
+	EntryPoint string `json:"EntryPoint"`
+	Status     int    `json:"Status"`
+}
+
+// Endpoint represents a Portainer endpoint (Environment).
+type Endpoint struct {
+	ID      int    `json:"Id"`
+	Name    string `json:"Name"`
+	Type    int    `json:"Type"`
+	URL     string `json:"URL"`
+	Status  int    `json:"Status"`
 }
 
 // Client is a Portainer API client.
@@ -33,6 +43,32 @@ func NewClient(baseURL, apiKey string) *Client {
 		apiKey:  apiKey,
 		http:    &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+func (c *Client) ListEndpoints(ctx context.Context) ([]Endpoint, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/endpoints", c.baseURL), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("portainer api error: status %d", resp.StatusCode)
+	}
+
+	var endpoints []Endpoint
+	if err := json.NewDecoder(resp.Body).Decode(&endpoints); err != nil {
+		return nil, err
+	}
+
+	return endpoints, nil
 }
 
 func (c *Client) ListStacks(ctx context.Context) ([]Stack, error) {
@@ -122,4 +158,68 @@ func (c *Client) UpdateStack(ctx context.Context, stackID int, endpointID int, y
 	}
 
 	return nil
+}
+
+func (c *Client) GetStack(ctx context.Context, stackID int) (*Stack, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/stacks/%d", c.baseURL, stackID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("portainer api error: status %d", resp.StatusCode)
+	}
+
+	var stack Stack
+	if err := json.NewDecoder(resp.Body).Decode(&stack); err != nil {
+		return nil, err
+	}
+
+	return &stack, nil
+}
+
+func (c *Client) GetEndpoint(ctx context.Context, endpointID int) (*Endpoint, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/endpoints/%d", c.baseURL, endpointID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("portainer api error: status %d", resp.StatusCode)
+	}
+
+	var endpoint Endpoint
+	if err := json.NewDecoder(resp.Body).Decode(&endpoint); err != nil {
+		return nil, err
+	}
+
+	return &endpoint, nil
+}
+
+// DockerProxy executes a raw request against the underlying Docker engine via Portainer's proxy.
+func (c *Client) DockerProxy(ctx context.Context, endpointID int, method, path string, body io.Reader) (*http.Response, error) {
+	url := fmt.Sprintf("%s/api/endpoints/%d/docker%s", c.baseURL, endpointID, path)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-API-Key", c.apiKey)
+	return c.http.Do(req)
 }
