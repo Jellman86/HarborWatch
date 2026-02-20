@@ -28,39 +28,52 @@
 
 <aside class="fixed left-0 top-0 h-full bg-white dark:bg-[#020617] shadow-2xl border-r border-slate-200 dark:border-cyan-500/10 transition-all duration-300 flex flex-col z-50 {collapsed ? 'w-20' : 'w-64'} {layoutStore.mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 pointer-events-none md:pointer-events-auto'}">
     <div class="flex-1 flex flex-col min-h-0 pointer-events-auto">
-        <!-- Logo -->        <div class="flex items-center justify-between p-6 h-auto border-b border-slate-100 dark:border-cyan-500/5">
-            <div class="flex flex-col items-center w-full gap-4 text-center">
-                <div class="relative">
-                    <img 
-                        src="/logo-64.png" 
-                        alt="HarborWatch" 
-                        class="h-20 w-20 flex-shrink-0 transition-all duration-500 {hasActiveJobs ? 'ring-4 ring-cyan-500/30 animate-pulse rounded-full' : ''}" 
-                    />
-                    {#if hasActiveJobs}
-                        <span class="absolute -top-1 -right-1 flex h-3 w-3">
-                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                        </span>
-                    {/if}
-                </div>
-                {#if !collapsed}
-                    <div class="flex flex-col overflow-hidden items-center">
-                        <h1 class="text-xl font-black text-slate-900 dark:text-white leading-tight truncate uppercase tracking-[0.2em]">HarborWatch</h1>
-                        <span class="text-[9px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest leading-relaxed mt-1 opacity-80 px-2">Simple Container Maintenance & Management</span>
-                    </div>
+        <!-- Logo -->        <!-- Logo and Brand -->
+        <div class="relative flex flex-col items-center w-full p-6 h-auto border-b border-slate-100 dark:border-cyan-500/5 text-center gap-4">
+            <!-- Collapse Toggle (Desktop) -->
+            <button
+                class="hidden md:flex absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-all duration-300 hover:bg-slate-50 dark:hover:bg-cyan-500/5 z-10"
+                onclick={() => layoutStore.toggleSidebar()}
+                aria-label={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+                title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-500 {collapsed ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+            </button>
+
+            <!-- Mobile Close -->
+            <button 
+                onclick={() => layoutStore.closeMobileSidebar()}
+                class="md:hidden absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                aria-label="Close Navigation"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <div class="relative">
+                <img 
+                    src="/logo-64.png" 
+                    alt="HarborWatch" 
+                    class="h-20 w-20 flex-shrink-0 transition-all duration-500 {hasActiveJobs ? 'ring-4 ring-cyan-500/30 animate-pulse rounded-full' : ''}" 
+                />
+                {#if hasActiveJobs}
+                    <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                    </span>
                 {/if}
             </div>
-                
-                <button 
-                    onclick={() => layoutStore.closeMobileSidebar()}
-                    class="md:hidden absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                    aria-label="Close Navigation"
-                >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-        </button>
-    </div>
+            
+            {#if !collapsed}
+                <div class="flex flex-col overflow-hidden items-center">
+                    <h1 class="text-xl font-black text-slate-900 dark:text-white leading-tight truncate uppercase tracking-[0.2em]">HarborWatch</h1>
+                    <span class="text-[9px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-widest leading-relaxed mt-1 opacity-80 px-2">Simple Container Maintenance & Management</span>
+                </div>
+            {/if}
+        </div>
 
     <!-- Nav Items -->
     <nav class="flex-1 overflow-y-auto p-4 space-y-1.5">
@@ -70,7 +83,7 @@
                 onclick={() => handleNavClick(item.path)}
                 title={collapsed ? item.label : ''}
             >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 flex-shrink-0 transition-all duration-300 group-hover:scale-110 {currentRoute === item.path ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 group-hover:text-cyan-500'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 transition-all duration-300 group-hover:scale-110 {currentRoute === item.path ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 group-hover:text-cyan-500'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
                 </svg>
                 {#if !collapsed}
@@ -87,13 +100,13 @@
             onclick={() => themeStore.toggle()}
             title={collapsed ? 'Toggle Theme' : ''}
         >
-            <div class="h-6 w-6 flex items-center justify-center transition-transform group-hover:rotate-12">
+            <div class="h-5 w-5 flex items-center justify-center transition-transform group-hover:rotate-12">
                 {#if themeStore.isDark}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                 {:else}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                     </svg>
                 {/if}
