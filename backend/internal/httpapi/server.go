@@ -281,7 +281,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			if err := metricStore.Init(context.Background()); err != nil {
 				return nil, nil, fmt.Errorf("init metrics store: %w", err)
 			}
-			metricService = metrics.NewService(metricStore, rawDocker)
+			metricService = metrics.NewService(metricStore, rawDocker, settingsStore)
 		}
 	}
 
@@ -771,6 +771,7 @@ func newDegradedMux(initErr error) http.Handler {
 }
 
 type PortainerClient interface {
+	GetStack(ctx context.Context, stackID int) (*portainer.Stack, error)
 	GetStackFile(ctx context.Context, stackID int) (string, error)
 	UpdateStack(ctx context.Context, stackID int, endpointID int, yaml string, env []map[string]string, prune bool, pullImage bool) error
 	ListStacks(ctx context.Context) ([]portainer.Stack, error)

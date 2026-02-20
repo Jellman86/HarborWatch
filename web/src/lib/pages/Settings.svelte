@@ -119,6 +119,7 @@
         retentionUpdateRunsDays: 90,
         retentionComposeAuditDays: 90,
         retentionAIUsageDays: 180,
+        metricsNormalized: true,
         environmentOverrides: {}
     };
 
@@ -1655,6 +1656,22 @@
                         <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.uiAnimationsEnabled ? 'right-1' : 'left-1'}"></div>
                     </button>
                 </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">Normalized CPU Metrics</p>
+                        <p class="text-[11px] text-slate-500 mt-1">Scale CPU usage to 100% of total system capacity. Disable to see raw per-core values (e.g. 400% for 4 cores).</p>
+                    </div>
+                    <button
+                        onclick={() => settings.metricsNormalized = !settings.metricsNormalized}
+                        disabled={isLocked("metricsNormalized")}
+                        class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.metricsNormalized ? 'bg-brand-600' : 'bg-slate-300'}"
+                        aria-label="Toggle CPU normalization"
+                    >
+                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.metricsNormalized ? 'right-1' : 'left-1'}"></div>
+                    </button>
+                </div>
+
                 <p class="text-[11px] text-slate-500">Theme changes are applied globally across dashboards, tables, and settings views.</p>
                 <ThemeSwitcher />
             </div>

@@ -12,13 +12,14 @@ import (
 
 // Stack represents a Portainer stack.
 type Stack struct {
-	ID         int    `json:"Id"`
-	Name       string `json:"Name"`
-	Type       int    `json:"Type"`
-	EndpointID int    `json:"EndpointId"`
-	SwarmID    string `json:"SwarmId"`
-	EntryPoint string `json:"EntryPoint"`
-	Status     int    `json:"Status"`
+	ID         int                 `json:"Id"`
+	Name       string              `json:"Name"`
+	Type       int                 `json:"Type"`
+	EndpointID int                 `json:"EndpointId"`
+	SwarmID    string              `json:"SwarmId"`
+	EntryPoint string              `json:"EntryPoint"`
+	Status     int                 `json:"Status"`
+	Env        []map[string]string `json:"Env"`
 }
 
 // Endpoint represents a Portainer endpoint (Environment).

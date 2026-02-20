@@ -46,6 +46,7 @@ type Settings struct {
 	RetentionUpdateRunsDays     int    `json:"retentionUpdateRunsDays"`
 	RetentionComposeAuditDays   int    `json:"retentionComposeAuditDays"`
 	RetentionAIUsageDays        int    `json:"retentionAIUsageDays"`
+	MetricsNormalized           bool   `json:"metricsNormalized"`
 
 	// Metadata (read-only info for UI)
 	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
@@ -91,6 +92,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		RetentionUpdateRunsDays:     90,
 		RetentionComposeAuditDays:   90,
 		RetentionAIUsageDays:        180,
+		MetricsNormalized:           true,
 		EnvironmentOverrides:        make(map[string]bool),
 	}
 
@@ -167,6 +169,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.RetentionComposeAuditDays = parseStoredInt(value, st.RetentionComposeAuditDays, 1, 3650)
 		case "retention_ai_usage_days":
 			st.RetentionAIUsageDays = parseStoredInt(value, st.RetentionAIUsageDays, 1, 3650)
+		case "metrics_normalized":
+			st.MetricsNormalized = parseStoredBool(value, st.MetricsNormalized)
 		}
 	}
 
@@ -213,6 +217,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		"discordEnabled":      {&st.DiscordEnabled, "HW_DISCORD_ENABLED"},
 		"portainerEnabled":    {&st.PortainerEnabled, "HW_PORTAINER_ENABLED"},
 		"uiAnimationsEnabled": {&st.UIAnimationsEnabled, "HW_UI_ANIMATIONS_ENABLED"},
+		"metricsNormalized":   {&st.MetricsNormalized, "HW_METRICS_NORMALIZED"},
 	}
 	for jsonKey, mapping := range boolEnvMap {
 		if val := strings.TrimSpace(os.Getenv(mapping.envKey)); val != "" {
@@ -321,6 +326,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"retention_update_runs_days":     intString(st.RetentionUpdateRunsDays),
 		"retention_compose_audit_days":   intString(st.RetentionComposeAuditDays),
 		"retention_ai_usage_days":        intString(st.RetentionAIUsageDays),
+		"metrics_normalized":             boolString(st.MetricsNormalized),
 	}
 
 	jsonToDbKey := map[string]string{
@@ -354,6 +360,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"retentionUpdateRunsDays":     "retention_update_runs_days",
 		"retentionComposeAuditDays":   "retention_compose_audit_days",
 		"retentionAIUsageDays":        "retention_ai_usage_days",
+		"metricsNormalized":           "metrics_normalized",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {

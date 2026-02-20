@@ -184,6 +184,9 @@ type fakePortainerClient struct {
 func (f fakePortainerClient) GetStackFile(ctx context.Context, id int) (string, error) {
 	return f.yaml, f.err
 }
+func (f fakePortainerClient) GetStack(ctx context.Context, id int) (*portainer.Stack, error) {
+	return &portainer.Stack{}, f.err
+}
 func (f fakePortainerClient) UpdateStack(ctx context.Context, id, eid int, yaml string, env []map[string]string, prune, pull bool) error {
 	return f.err
 }

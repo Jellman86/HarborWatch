@@ -42,6 +42,7 @@ type Request struct {
 }
 
 type PortainerClient interface {
+	GetStack(ctx context.Context, stackID int) (*portainer.Stack, error)
 	GetStackFile(ctx context.Context, stackID int) (string, error)
 	UpdateStack(ctx context.Context, stackID int, endpointID int, yaml string, env []map[string]string, prune bool, pullImage bool) error
 	ListStacks(ctx context.Context) ([]portainer.Stack, error)
@@ -341,12 +342,19 @@ func (s *Service) executePortainer(jobID string, req Request) {
 
 	s.setRunProgress(jobID, "running", 20)
 	var stackYAML string
+	var existingEnv []map[string]string
 	if err := s.runStep(ctx, jobID, "fetch_config", func(ctx context.Context) error {
+		// Fetch both the file and the stack metadata to preserve Envs
 		yaml, err := s.portainer.GetStackFile(ctx, req.PortainerStackID)
 		if err != nil {
 			return err
 		}
 		stackYAML = yaml
+
+		stack, err := s.portainer.GetStack(ctx, req.PortainerStackID)
+		if err == nil && stack != nil {
+			existingEnv = stack.Env
+		}
 		return nil
 	}); err != nil {
 		s.finish(jobID, "failed", err)
@@ -356,7 +364,8 @@ func (s *Service) executePortainer(jobID string, req Request) {
 	s.setRunProgress(jobID, "running", 30)
 	if err := s.runStep(ctx, jobID, "portainer_redeploy", func(ctx context.Context) error {
 		// Portainer redeploy with PullImage=true handles pull and recreate
-		return s.portainer.UpdateStack(ctx, req.PortainerStackID, req.PortainerEndpointID, stackYAML, nil, true, true)
+		// We pass the existingEnv to ensure manually configured Portainer variables are not lost.
+		return s.portainer.UpdateStack(ctx, req.PortainerStackID, req.PortainerEndpointID, stackYAML, existingEnv, true, true)
 	}); err != nil {
 		s.finish(jobID, "failed", err)
 		return

@@ -41,6 +41,9 @@
   let reconnectDelayMs = 2000;
   const maxReconnectDelayMs = 30000;
 
+  let idlePollCycles = 0;
+  let currentPollInterval = 5000;
+
   async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, init);
     if (!response.ok) throw new Error(`${url} failed (${response.status})`);
@@ -54,9 +57,28 @@
       if (!res.ok) return;
       const data = await res.json();
       activeJobs = data.activeJobs || [];
+
+      // Smart Polling Logic: Backoff if idle
+      if (activeJobs.length === 0) {
+        idlePollCycles++;
+        if (idlePollCycles >= 3 && currentPollInterval === 5000) {
+          updatePollInterval(30000);
+        }
+      } else {
+        idlePollCycles = 0;
+        if (currentPollInterval !== 5000) {
+          updatePollInterval(5000);
+        }
+      }
     } catch (e) {
       // Silent error for background poll
     }
+  }
+
+  function updatePollInterval(ms: number) {
+    if (pollTimer) clearInterval(pollTimer);
+    currentPollInterval = ms;
+    pollTimer = setInterval(loadActiveJobs, ms);
   }
 
   function connectEvents() {

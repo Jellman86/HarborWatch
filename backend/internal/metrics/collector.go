@@ -17,10 +17,11 @@ import (
 type Collector struct {
 	docker *client.Client
 	store  *Store
+	settings settingsStore
 }
 
-func NewCollector(docker *client.Client, store *Store) *Collector {
-	return &Collector{docker: docker, store: store}
+func NewCollector(docker *client.Client, store *Store, settings settingsStore) *Collector {
+	return &Collector{docker: docker, store: store, settings: settings}
 }
 
 func (c *Collector) Name() string { return "metrics_collector" }
@@ -73,38 +74,51 @@ func (c *Collector) collectOne(ctx context.Context, id string) error {
 		Pids:        int(stats.PidsStats.Current),
 	}
 
-	m.CPUPercent = computeCPUPercent(stats)
+	normalized := true
+	if c.settings != nil {
+		if st, err := c.settings.Get(ctx); err == nil {
+			normalized = st.MetricsNormalized
+		}
+	}
+
+	m.CPUPercent = computeCPUPercent(stats, normalized)
 
 	return c.store.SaveMetric(ctx, m)
 }
 
-func computeCPUPercent(stats container.StatsResponse) float64 {
+func computeCPUPercent(stats container.StatsResponse, normalized bool) float64 {
+	multiplier := 1.0
+	if !normalized {
+		multiplier = cpuCoreCount(stats)
+		if multiplier <= 0 {
+			multiplier = 1.0
+		}
+	}
+
 	// Primary path: delta-based CPU% (matches Docker CLI behavior).
-	// We do NOT multiply by cpuCount here because we want "Total System Capacity" percentage
-	// to align with host-level monitors (e.g. TrueNAS Scale).
 	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage) - float64(stats.PreCPUStats.CPUUsage.TotalUsage)
 	systemDelta := float64(stats.CPUStats.SystemUsage) - float64(stats.PreCPUStats.SystemUsage)
 	if systemDelta > 0 && cpuDelta >= 0 {
-		return normalizeCPUPercent((cpuDelta / systemDelta) * 100)
+		return NormalizeCPUPercent((cpuDelta / systemDelta) * multiplier * 100)
 	}
 
 	// Fallback for engines that do not provide valid pre-CPU snapshots.
 	if stats.CPUStats.SystemUsage > 0 && stats.CPUStats.CPUUsage.TotalUsage > 0 {
-		return normalizeCPUPercent((float64(stats.CPUStats.CPUUsage.TotalUsage) / float64(stats.CPUStats.SystemUsage)) * 100)
+		return NormalizeCPUPercent((float64(stats.CPUStats.CPUUsage.TotalUsage) / float64(stats.CPUStats.SystemUsage)) * multiplier * 100)
 	}
 
 	return 0
 }
 
-func normalizeCPUPercent(value float64) float64 {
+func NormalizeCPUPercent(value float64) float64 {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return 0
 	}
 	if value < 0 {
 		return 0
 	}
-	if value > 100 {
-		return 100
+	if value > 10000 { // Support up to 100 cores raw
+		return 10000
 	}
 	return value
 }
