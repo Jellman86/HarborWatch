@@ -185,10 +185,10 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 	s.setJobProgressWithMessage(jobID, 0, "Waiting for concurrency slot")
 	if err := s.jobManager.AcquireSlot(runCtx, jobID, "image:"+target); err != nil {
 		s.setJobCancelled(jobID, "scan cancelled: "+err.Error())
-		s.jobManager.FinishJob(jobID)
 		return
 	}
 	defer s.jobManager.ReleaseSlot(jobID, "image:"+target)
+	// FinishJob is called at the very end of the function to ensure all final logs/persistence are captured in UI.
 	defer s.jobManager.FinishJob(jobID)
 
 	ctx, cancel := context.WithTimeout(runCtx, envDuration("HW_TRIVY_SCAN_TIMEOUT", 15*time.Minute))
@@ -272,7 +272,6 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 
 	if err := s.jobManager.AcquireSlot(runCtx, jobID, lockID); err != nil {
 		s.setJobCancelled(jobID, "scan cancelled: "+err.Error())
-		s.jobManager.FinishJob(jobID)
 		return
 	}
 	defer s.jobManager.ReleaseSlot(jobID, lockID)
