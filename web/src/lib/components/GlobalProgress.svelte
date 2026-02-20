@@ -138,7 +138,7 @@
                 <!-- Detailed View (Expanded on Hover or if multiple) -->
                 {#if (showDetails && jobs.length > 1) || (showDetails && jobs[0]?.message)}
                     <div class="pt-2 border-t border-slate-100 dark:border-slate-800/50 mt-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2" in:slide>
-                        {#each jobs as job (job.id + job.type)}
+                        {#each jobs as job, i (i)}
                             <div class="flex items-center justify-between gap-3 text-[9px] min-w-0">
                                 <span class="text-slate-500 font-bold uppercase truncate flex-1">
                                     {formatTarget(job.target)}
