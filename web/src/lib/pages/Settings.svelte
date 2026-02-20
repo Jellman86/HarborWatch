@@ -21,7 +21,7 @@
         monthDays: number[];
     }
 
-    type AutomationDomain = "upgrades" | "maintenance" | "security";
+    type AutomationDomain = "general" | "upgrades" | "maintenance" | "security";
     type AIProvider = "openai" | "anthropic" | "gemini";
 
     interface ModelOption {
@@ -137,7 +137,7 @@
     let scheduleDrafts = $state<Record<string, ScheduleDraft>>({});
     let discoveredContainers = $state<ContainerSummary[]>([]);
     let activeTab = $state("automations");
-    let activeAutomationTab = $state<AutomationDomain>("upgrades");
+    let activeAutomationTab = $state<AutomationDomain>("general");
 
     let loading = $state(false);
     let saving = $state(false);
@@ -181,6 +181,13 @@
         tasks: string[];
         flow: string[];
     }> = {
+        general: {
+            title: "General Settings",
+            subtitle: "Global controls that apply to all automation pipelines",
+            accent: "#6366f1",
+            tasks: [],
+            flow: ["Configure Capacity", "Manage Exclusions", "Global Safety"]
+        },
         upgrades: {
             title: "Upgrade Automation",
             subtitle: "Detect updates, assess risk, and prepare safe rollouts",
@@ -931,6 +938,7 @@
             <div class="p-6 md:p-8 space-y-6">
                 <div class="flex flex-wrap gap-2 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 w-fit">
                     {#each [
+                        { id: "general", label: "General" },
                         { id: "upgrades", label: "Upgrades" },
                         { id: "maintenance", label: "Maintenance" },
                         { id: "security", label: "Security" }
@@ -948,25 +956,31 @@
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">{automationConfig[activeAutomationTab].title}</p>
                         <p class="text-[11px] text-slate-500 mt-1">
-                            Domain status: <span class="font-bold">{domainEnabled(activeAutomationTab) ? "Enabled" : "Disabled"}</span>
+                            {#if activeAutomationTab === "general"}
+                                {automationConfig[activeAutomationTab].subtitle}
+                            {:else}
+                                Domain status: <span class="font-bold">{domainEnabled(activeAutomationTab) ? "Enabled" : "Disabled"}</span>
+                            {/if}
                         </p>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button
-                            onclick={() => setDomainEnabled(activeAutomationTab, true)}
-                            disabled={domainToggleBusy === activeAutomationTab}
-                            class="px-3 py-2 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-900/40 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
-                        >
-                            {domainToggleBusy === activeAutomationTab ? "Applying..." : "Enable Domain"}
-                        </button>
-                        <button
-                            onclick={() => setDomainEnabled(activeAutomationTab, false)}
-                            disabled={domainToggleBusy === activeAutomationTab}
-                            class="px-3 py-2 rounded-xl border border-rose-200 text-rose-700 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-900/40 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
-                        >
-                            {domainToggleBusy === activeAutomationTab ? "Applying..." : "Disable Domain"}
-                        </button>
-                    </div>
+                    {#if activeAutomationTab !== "general"}
+                        <div class="flex items-center gap-2">
+                            <button
+                                onclick={() => setDomainEnabled(activeAutomationTab, true)}
+                                disabled={domainToggleBusy === activeAutomationTab}
+                                class="px-3 py-2 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-900/40 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
+                            >
+                                {domainToggleBusy === activeAutomationTab ? "Applying..." : "Enable Domain"}
+                            </button>
+                            <button
+                                onclick={() => setDomainEnabled(activeAutomationTab, false)}
+                                disabled={domainToggleBusy === activeAutomationTab}
+                                class="px-3 py-2 rounded-xl border border-rose-200 text-rose-700 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-900/40 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
+                            >
+                                {domainToggleBusy === activeAutomationTab ? "Applying..." : "Disable Domain"}
+                            </button>
+                        </div>
+                    {/if}
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-6">
@@ -992,11 +1006,17 @@
 
                     <div class="space-y-4">
                         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Task Controls</p>
-                            <p class="text-[11px] text-slate-500 mt-1">Use toggles to enable schedules, set cadence/time, and run on-demand checks for validation.</p>
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">
+                                {activeAutomationTab === "general" ? "Global Pipeline Configuration" : "Automation Task Controls"}
+                            </p>
+                            <p class="text-[11px] text-slate-500 mt-1">
+                                {activeAutomationTab === "general" 
+                                    ? "Manage system-wide throughput and safety rules that affect all background flows." 
+                                    : "Use toggles to enable schedules, set cadence/time, and run on-demand checks for validation."}
+                            </p>
                         </div>
 
-                        {#if activeAutomationTab === "upgrades"}
+                        {#if activeAutomationTab === "general"}
                             <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                 <div>
                                     <p class="text-xs font-black uppercase tracking-wider text-slate-500">Global Task Concurrency</p>
@@ -1004,9 +1024,9 @@
                                 </div>
                                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                     <div class="space-y-2">
-                                        <label for="auto-upgrade-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Concurrent Tasks</label>
+                                        <label for="global-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Concurrent Tasks</label>
                                         <input
-                                            id="auto-upgrade-max-concurrency"
+                                            id="global-max-concurrency"
                                             type="number"
                                             min="1"
                                             max="10"
@@ -1016,25 +1036,75 @@
                                         />
                                         <p class="text-[11px] text-slate-500">Global limit for all heavy background jobs across the appliance.</p>
                                     </div>
+                                </div>
+                            </div>
+
+                            <div class="rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Safety Section</span>
+                                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Safety Exclusions</p>
+                                </div>
+                                <p class="text-[11px] text-slate-500 mt-2">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
+                                <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
                                     <div class="space-y-2">
-                                        <label for="auto-upgrade-min-retry" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retry Cooldown (minutes)</label>
-                                        <input
-                                            id="auto-upgrade-min-retry"
-                                            type="number"
-                                            min="1"
-                                            max="1440"
-                                            bind:value={settings.autoUpgradeMinRetryMinutes}
-                                            disabled={isLocked("autoUpgradeMinRetryMinutes")}
-                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                        />
-                                        <p class="text-[11px] text-slate-500">Minimum wait before a previously failed upgrade can be retried automatically.</p>
+                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
+                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto">
+                                            {#if discoveredContainers.length === 0}
+                                                <p class="px-3 py-3 text-[11px] text-slate-500 italic">No containers discovered. Start Docker to use auto-toggle exclusions.</p>
+                                            {:else}
+                                                {#each discoveredContainers as container, i (i)}
+                                                    {@const ignored = isContainerIgnored(container)}
+                                                    {@const protectedContainer = isHarborWatchContainer(container)}
+                                                    <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 last:border-b-0 flex items-center justify-between gap-3">
+                                                        <div class="min-w-0">
+                                                            <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
+                                                            <p class="text-[10px] text-slate-500 truncate">{container.image}</p>
+                                                        </div>
+                                                        <button
+                                                            onclick={() => setContainerIgnored(container, !ignored)}
+                                                            disabled={isLocked("automationIgnoredContainers") || protectedContainer}
+                                                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-60 {ignored ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                            aria-label="Toggle ignored container"
+                                                            title={protectedContainer ? "HarborWatch is always excluded for self-protection" : (ignored ? "Excluded" : "Included")}
+                                                        >
+                                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {ignored ? 'right-1' : 'left-1'}"></div>
+                                                        </button>
+                                                    </div>
+                                                {/each}
+                                            {/if}
+                                        </div>
+                                        <details class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-2">
+                                            <summary class="cursor-pointer text-[11px] font-bold text-slate-600 dark:text-slate-300">Advanced token editor</summary>
+                                            <textarea
+                                                id="automation-ignore-containers"
+                                                rows="3"
+                                                bind:value={settings.automationIgnoredContainers}
+                                                disabled={isLocked("automationIgnoredContainers")}
+                                                placeholder="harborwatch, plex, qbittorrent"
+                                                class="mt-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                            ></textarea>
+                                            <p class="mt-1 text-[11px] text-slate-500">Supports container name, image text, or ID prefix tokens (comma/newline separated).</p>
+                                        </details>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label for="malware-ignore-mounts" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
+                                        <textarea
+                                            id="malware-ignore-mounts"
+                                            rows="3"
+                                            bind:value={settings.malwareIgnoredMounts}
+                                            disabled={isLocked("malwareIgnoredMounts")}
+                                            placeholder="/mnt/media, /srv/plex-library"
+                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                        ></textarea>
+                                        <p class="text-[11px] text-slate-500">These path patterns are skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
                                     </div>
                                 </div>
                             </div>
                         {/if}
 
-                        <div class="space-y-3">
-                            {#each schedulesForDomain(activeAutomationTab) as task}
+                        {#if activeAutomationTab === "upgrades"}
+                            <div class="space-y-3">
+                                {#each schedulesForDomain(activeAutomationTab) as task}
                                 {@const draft = draftForTask(task)}
                                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">
                                     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -1136,70 +1206,6 @@
                     </div>
                 </div>
 
-                <div class="pt-1 border-t border-dashed border-slate-200 dark:border-slate-700">
-                    <div class="rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Safety Section</span>
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Safety Exclusions</p>
-                        </div>
-                        <p class="text-[11px] text-slate-500 mt-2">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
-                        <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
-                            <div class="space-y-2">
-                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
-                                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto">
-                                    {#if discoveredContainers.length === 0}
-                                        <p class="px-3 py-3 text-[11px] text-slate-500 italic">No containers discovered. Start Docker to use auto-toggle exclusions.</p>
-                                    {:else}
-                                        {#each discoveredContainers as container}
-                                            {@const ignored = isContainerIgnored(container)}
-                                            {@const protectedContainer = isHarborWatchContainer(container)}
-                                            <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 last:border-b-0 flex items-center justify-between gap-3">
-                                                <div class="min-w-0">
-                                                    <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
-                                                    <p class="text-[10px] text-slate-500 truncate">{container.image}</p>
-                                                </div>
-                                                <button
-                                                    onclick={() => setContainerIgnored(container, !ignored)}
-                                                    disabled={isLocked("automationIgnoredContainers") || protectedContainer}
-                                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-60 {ignored ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                    aria-label="Toggle ignored container"
-                                                    title={protectedContainer ? "HarborWatch is always excluded for self-protection" : (ignored ? "Excluded" : "Included")}
-                                                >
-                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {ignored ? 'right-1' : 'left-1'}"></div>
-                                                </button>
-                                            </div>
-                                        {/each}
-                                    {/if}
-                                </div>
-                                <details class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-2">
-                                    <summary class="cursor-pointer text-[11px] font-bold text-slate-600 dark:text-slate-300">Advanced token editor</summary>
-                                    <textarea
-                                        id="automation-ignore-containers"
-                                        rows="3"
-                                        bind:value={settings.automationIgnoredContainers}
-                                        disabled={isLocked("automationIgnoredContainers")}
-                                        placeholder="harborwatch, plex, qbittorrent"
-                                        class="mt-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                    ></textarea>
-                                    <p class="mt-1 text-[11px] text-slate-500">Supports container name, image text, or ID prefix tokens (comma/newline separated).</p>
-                                </details>
-                            </div>
-                            {#if activeAutomationTab === "security"}
-                                <div class="space-y-2">
-                                    <label for="malware-ignore-mounts" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
-                                    <textarea
-                                        id="malware-ignore-mounts"
-                                        rows="3"
-                                        bind:value={settings.malwareIgnoredMounts}
-                                        disabled={isLocked("malwareIgnoredMounts")}
-                                        placeholder="/mnt/media, /srv/plex-library"
-                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                    ></textarea>
-                                    <p class="text-[11px] text-slate-500">These path patterns are skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
-                                </div>
-                            {/if}
-                        </div>
-                    </div>
                 </div>
 
             </div>
