@@ -999,22 +999,22 @@
                         {#if activeAutomationTab === "upgrades"}
                             <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                 <div>
-                                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Upgrade Runtime Controls</p>
-                                    <p class="text-[11px] text-slate-500 mt-1">Tune how aggressively auto-apply runs and how long failed containers wait before retry.</p>
+                                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Global Task Concurrency</p>
+                                    <p class="text-[11px] text-slate-500 mt-1">Control how many heavy background operations (updates, scans, redeployments) can run simultaneously.</p>
                                 </div>
                                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                     <div class="space-y-2">
-                                        <label for="auto-upgrade-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Auto-Apply Max Starts Per Run</label>
+                                        <label for="auto-upgrade-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Concurrent Tasks</label>
                                         <input
                                             id="auto-upgrade-max-concurrency"
                                             type="number"
                                             min="1"
-                                            max="20"
+                                            max="10"
                                             bind:value={settings.autoUpgradeMaxConcurrency}
                                             disabled={isLocked("autoUpgradeMaxConcurrency")}
                                             class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                         />
-                                        <p class="text-[11px] text-slate-500">Limits how many containers can start upgrade apply in one scheduler execution.</p>
+                                        <p class="text-[11px] text-slate-500">Global limit for all heavy background jobs across the appliance.</p>
                                     </div>
                                     <div class="space-y-2">
                                         <label for="auto-upgrade-min-retry" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retry Cooldown (minutes)</label>

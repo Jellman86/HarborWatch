@@ -7,12 +7,12 @@
     }>();
 
     // Calculate aggregated progress (average of all active jobs)
-    // Handle indeterminate states (progress < 0) by treating them as 0 for averaging but showing pulse
+    // Show progress of the ENTIRE set (queued jobs count as 0%)
     let aggregateProgress = $derived.by(() => {
         if (jobs.length === 0) return 0;
-        const known = jobs.filter(j => j.progress >= 0);
-        if (known.length === 0) return 0;
-        return Math.round(known.reduce((acc, job) => acc + job.progress, 0) / known.length);
+        // Map indeterminate (-1) or queued to 0 for the purpose of the bar
+        const total = jobs.reduce((acc, j) => acc + Math.max(0, j.progress), 0);
+        return Math.round(total / jobs.length);
     });
 
     const formatTarget = (t: string) => t.replace(/^\//, '').replace(/^container:/, '').replace(/^image:/, '');
