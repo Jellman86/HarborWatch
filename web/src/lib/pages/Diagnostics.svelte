@@ -317,7 +317,7 @@
         </div>
 
         <div class="md:hidden space-y-2">
-            {#each visibleLogs as log}
+            {#each visibleLogs as log, i (i)}
                 <article class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-1.5">
                     <div class="flex items-center justify-between gap-2">
                         <p class="text-[10px] font-mono text-slate-500">{new Date(log.timestamp * 1000).toISOString().replace('T', ' ').split('.')[0]}</p>
@@ -349,7 +349,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200 dark:divide-slate-800/50 font-mono text-[11px]">
-                        {#each visibleLogs as log}
+                        {#each visibleLogs as log, i (i)}
                             <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                                 <td class="px-6 py-2 text-slate-500">
                                     {new Date(log.timestamp * 1000).toISOString().replace('T', ' ').split('.')[0]}
