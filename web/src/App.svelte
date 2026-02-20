@@ -151,13 +151,16 @@
     ></button>
   {/if}
 
-  <GlobalProgress jobs={activeJobs} />
   <Sidebar {currentRoute} onNavigate={navigate} />
 
   <main
     class="app-main min-h-screen transition-[padding-left] duration-300"
     style={`--sidebar-offset:${layoutStore.sidebarCollapsed ? '5rem' : '16rem'}`}
   >
+    <div class="sticky top-0 z-30">
+      <GlobalProgress jobs={activeJobs} />
+    </div>
+
     <div class="content-shell mx-auto w-full px-4 py-4 md:px-8 md:py-8">
       {#if error}
         <div class="mb-6 p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-sm font-bold flex items-center gap-3 animate-pulse">
