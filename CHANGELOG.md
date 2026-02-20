@@ -2,6 +2,39 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.8.0] - 2026-02-20
+
+### Added
+- **Global Progress Notification System:**
+  - Implemented a sleek, sticky progress header that aggregates all active background jobs (scans, updates).
+  - Added detailed job status messages (e.g., "Scanning vulnerabilities...", "Backing up...") and per-job progress tracking (0-100%).
+  - Unified active job discovery via `/api/diagnostics/snapshot`.
+- **Visual Health Indicators:**
+  - Added real-time health status pulse dots and badges to Fleet Inventory and Container Detail views.
+  - Supports `healthy`, `unhealthy`, and `starting` states derived directly from Docker Engine health checks.
+- **Enhanced Portainer Integration:**
+  - Expanded Portainer API client with support for Environments (Endpoints), Stacks, and Docker Proxy.
+  - Implemented **Stack Redeploy with PullImage** support directly from the Stacks view.
+  - Added "Manage" deep-links from Stacks to filtered Fleet views.
+- **Robustness & Recovery:**
+  - Added startup reconciliation for update jobs; stale `running` jobs are now automatically failed on restart to prevent "stuck" UI states.
+  - Fixed semaphore deadlock in ClamAV signature updates by making slot acquisition context-aware.
+
+### Changed
+- **CPU Metrics Normalization:**
+  - Changed CPU usage calculation to be system-wide normalized instead of per-core.
+  - Percentages now reflect total system capacity, aligning with host-level monitors like TrueNAS Scale.
+- **Images UI Overhaul:**
+  - Modernized the Image Repository with a high-density card grid, global stats bar, and live search/sorting.
+  - Improved visibility for digest-only artifacts and security posture.
+- **Automation Safety:**
+  - Added "portainer" to the default automatic ignore list.
+  - Fixed a bug where manual lifecycle settings would revert to automatic on save.
+
+### Tests
+- `go test ./...` (backend)
+- `npm run build` (web)
+
 ## [0.7.21] - 2026-02-19
 
 ### Added
