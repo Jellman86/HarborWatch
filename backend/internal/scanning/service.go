@@ -175,6 +175,7 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan started job=%s target=%s", jobID, target))
 	}
 
+	s.setJobProgress(jobID, 10)
 	result, err := s.scanner.Scan(ctx, target)
 	if err != nil {
 		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
@@ -189,6 +190,7 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 		return
 	}
 
+	s.setJobProgress(jobID, 80)
 	if err := s.store.SaveResult(ctx, result); err != nil {
 		s.setJobFailed(jobID, err)
 		return
@@ -220,11 +222,12 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 		s.setJobCancelled(jobID, "scan cancelled before execution")
 		return
 	}
-	s.setJobRunning(jobID)
+	s.setJobProgress(jobID, 5)
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan started job=%s target=%s path=%s", jobID, targetLabel, scanPath))
 	}
 
+	s.setJobProgress(jobID, 20)
 	result, err := s.malwareScanner.ScanPath(ctx, scanPath)
 	if err != nil {
 		if errors.Is(err, context.Canceled) && runCtx.Err() == context.Canceled {
@@ -240,6 +243,7 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 	}
 	result.Target = targetLabel
 
+	s.setJobProgress(jobID, 85)
 	if err := s.store.SaveMalwareResult(ctx, result); err != nil {
 		s.setJobFailed(jobID, err)
 		return
@@ -251,6 +255,22 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan completed job=%s target=%s infected=%t threats=%d", jobID, targetLabel, result.Infected, len(result.FoundThreats)))
 	}
+}
+
+func (s *Service) setJobProgress(jobID string, progress int) {
+	s.mu.Lock()
+	job, ok := s.jobs[jobID]
+	if !ok || (job.Status != "running" && job.Status != "queued") {
+		s.mu.Unlock()
+		return
+	}
+	job.Progress = progress
+	if job.Status == "queued" && progress > 0 {
+		job.Status = "running"
+	}
+	s.jobs[jobID] = job
+	s.mu.Unlock()
+	_ = s.store.UpdateJobProgress(context.Background(), jobID, job.Status, progress)
 }
 
 func (s *Service) setJobFailed(jobID string, err error) {
@@ -291,25 +311,15 @@ func (s *Service) finishActiveJob(jobID, status, errMsg string) bool {
 	job.Status = status
 	job.Error = strings.TrimSpace(errMsg)
 	job.CompletedAt = now
+	if status == "completed" {
+		job.Progress = 100
+	}
 	s.jobs[jobID] = job
 	delete(s.jobCancels, jobID)
 	s.mu.Unlock()
 
 	_ = s.store.UpdateJob(context.Background(), jobID, status, strings.TrimSpace(errMsg), now)
 	return true
-}
-
-func (s *Service) setJobRunning(jobID string) {
-	s.mu.Lock()
-	job, ok := s.jobs[jobID]
-	if !ok || job.Status != "queued" {
-		s.mu.Unlock()
-		return
-	}
-	job.Status = "running"
-	s.jobs[jobID] = job
-	s.mu.Unlock()
-	_ = s.store.UpdateJob(context.Background(), jobID, "running", "", 0)
 }
 
 func (s *Service) Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error) {
@@ -328,6 +338,25 @@ func (s *Service) Job(ctx context.Context, jobID string) (gen.ScanJobStatus, err
 		return gen.ScanJobStatus{}, errors.New("job not found")
 	}
 	return *dbJob, nil
+}
+
+func (s *Service) ActiveJobs() []gen.JobProgress {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]gen.JobProgress, 0, len(s.jobs))
+	for _, job := range s.jobs {
+		if job.Status == "running" || job.Status == "queued" {
+			out = append(out, gen.JobProgress{
+				ID:        job.JobID,
+				Type:      "scan:" + job.Source,
+				Target:    job.Target,
+				Status:    job.Status,
+				Progress:  job.Progress,
+				StartedAt: job.StartedAt,
+			})
+		}
+	}
+	return out
 }
 
 func (s *Service) ListJobs(ctx context.Context, scanType, targetPrefix string, limit int) ([]gen.ScanJobStatus, error) {

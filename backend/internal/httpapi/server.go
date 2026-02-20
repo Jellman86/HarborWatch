@@ -53,6 +53,7 @@ type ScanService interface {
 	UpdateClamAVSignatures(ctx context.Context) (string, error)
 	Job(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
 	ListJobs(ctx context.Context, scanType, targetPrefix string, limit int) ([]gen.ScanJobStatus, error)
+	ActiveJobs() []gen.JobProgress
 	LatestSummary(ctx context.Context) (*gen.ScanSummary, error)
 	LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error)
 	LatestDetailsForTarget(ctx context.Context, target string) (*gen.TrivyScanDetails, error)
@@ -121,6 +122,7 @@ type UpdateService interface {
 	StartUpdate(req updates.Request) (gen.UpdateStartResponse, error)
 	GetJob(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error)
 	ListContainerJobs(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error)
+	ActiveJobs() []gen.JobProgress
 	Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func())
 }
 
@@ -181,6 +183,13 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	updatesStore := updates.NewStore(db)
 	if err := updatesStore.Init(context.Background()); err != nil {
 		return nil, nil, fmt.Errorf("init updates store: %w", err)
+	}
+	if recovered, err := updatesStore.MarkRunningRunsFailed(context.Background(), "update interrupted by HarborWatch restart"); err == nil {
+		if recovered > 0 && diagService != nil {
+			diagService.Log("WARN", "UpdateEngine", fmt.Sprintf("Recovered %d stale running update jobs after restart", recovered))
+		}
+	} else if diagService != nil {
+		diagService.Log("ERROR", "UpdateEngine", fmt.Sprintf("Failed to reconcile stale update jobs on startup: %v", err))
 	}
 
 	settingsStore := settings.NewStore(db)
@@ -2191,11 +2200,12 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				snapshot, err := collectDiagnosticsSnapshot(
 					r.Context(),
 					diagnosticsDeps{
-						dockerClient: dockerClient,
-						scanService:  scanService,
-						auditService: auditService,
-						schedSvc:     schedSvc,
-						diagService:  diagService,
+						dockerClient:  dockerClient,
+						scanService:   scanService,
+						updateService: updateService,
+						auditService:  auditService,
+						schedSvc:      schedSvc,
+						diagService:   diagService,
 					},
 					diagnosticsSnapshotOptions{
 						LogLimit:         parseIntQuery(r.URL.Query().Get("logLimit"), 300, 10, 2000),

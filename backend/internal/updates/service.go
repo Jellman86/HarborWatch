@@ -112,6 +112,27 @@ func (s *Service) ListContainerJobs(ctx context.Context, containerID string, lim
 	return s.store.ListRunsForContainer(ctx, containerID, limit)
 }
 
+func (s *Service) ActiveJobs() []gen.JobProgress {
+	// We don't have a local cache of runs, so we query the store.
+	// This is slightly less efficient but keeps the service stateless regarding active runs.
+	runs, err := s.store.ListActiveRuns(context.Background())
+	if err != nil {
+		return nil
+	}
+	out := make([]gen.JobProgress, 0, len(runs))
+	for _, run := range runs {
+		out = append(out, gen.JobProgress{
+			ID:        run.JobID,
+			Type:      "update",
+			Target:    run.ContainerID,
+			Status:    run.Status,
+			Progress:  run.Progress,
+			StartedAt: run.CreatedAt,
+		})
+	}
+	return out
+}
+
 func (s *Service) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 	ch := make(chan gen.UpdateStepEvent, 8)
 	s.mu.Lock()
@@ -132,10 +153,18 @@ func (s *Service) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 	}
 }
 
+func (s *Service) setRunProgress(jobID string, status string, progress int) {
+	s.mu.Lock()
+	// We don't have a local cache of runs, so we just update the store.
+	s.mu.Unlock()
+	_ = s.store.UpdateRunProgress(context.Background(), jobID, status, progress)
+}
+
 func (s *Service) execute(jobID string, req Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	s.setRunProgress(jobID, "running", 5)
 	failed := s.runStep(ctx, jobID, "preflight", func(ctx context.Context) error { return s.executor.Preflight(ctx, req) })
 	if failed != nil {
 		s.finish(jobID, "failed", failed)
@@ -144,6 +173,7 @@ func (s *Service) execute(jobID string, req Request) {
 
 	// NEW: AI Release Analysis Step
 	if s.ai != nil && s.ai.HasProvider() {
+		s.setRunProgress(jobID, "running", 10)
 		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
 			notes := buildAIReleaseContext(req)
 			analysis, err := s.ai.AnalyzeReleaseNotes(ctx, notes)
@@ -188,23 +218,28 @@ func (s *Service) execute(jobID string, req Request) {
 		})
 	}
 
+	s.setRunProgress(jobID, "running", 25)
 	if err := s.runStep(ctx, jobID, "backup", func(ctx context.Context) error { return s.executor.Backup(ctx, req) }); err != nil {
 		s.rollback(jobID, req, err)
 		return
 	}
+	s.setRunProgress(jobID, "running", 35)
 	if err := s.runStep(ctx, jobID, "pull", func(ctx context.Context) error { return s.executor.Pull(ctx, req) }); err != nil {
 		s.rollback(jobID, req, err)
 		return
 	}
+	s.setRunProgress(jobID, "running", 60)
 	if err := s.runStep(ctx, jobID, "recreate", func(ctx context.Context) error { return s.executor.Recreate(ctx, req) }); err != nil {
 		s.rollback(jobID, req, err)
 		return
 	}
+	s.setRunProgress(jobID, "running", 80)
 	if err := s.runStep(ctx, jobID, "validate", func(ctx context.Context) error { return s.executor.Validate(ctx, req) }); err != nil {
 		s.rollback(jobID, req, err)
 		return
 	}
 	// On success, cleanup backups
+	s.setRunProgress(jobID, "running", 95)
 	_ = s.runStep(ctx, jobID, "cleanup", func(ctx context.Context) error { return s.executor.Cleanup(ctx, req) })
 	if req.AIValidateLogs && s.ai != nil && s.ai.HasProvider() {
 		if err := s.runStep(ctx, jobID, "ai_health_assessment", func(ctx context.Context) error {
@@ -227,6 +262,7 @@ func (s *Service) execute(jobID string, req Request) {
 		}
 	}
 
+	s.setRunProgress(jobID, "completed", 100)
 	s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "success", Status: "completed", Message: "Update pipeline completed", Timestamp: time.Now().UTC().Unix()})
 	s.finish(jobID, "completed", nil)
 }

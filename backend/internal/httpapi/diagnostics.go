@@ -16,11 +16,12 @@ import (
 )
 
 type diagnosticsDeps struct {
-	dockerClient DockerClient
-	scanService  ScanService
-	auditService AuditService
-	schedSvc     SchedulerService
-	diagService  DiagService
+	dockerClient  DockerClient
+	scanService   ScanService
+	updateService UpdateService
+	auditService  AuditService
+	schedSvc      SchedulerService
+	diagService   DiagService
 }
 
 type diagnosticsSnapshotOptions struct {
@@ -44,6 +45,7 @@ type diagnosticsSnapshot struct {
 	Errors             []string                    `json:"errors,omitempty"`
 	SystemStatus       *diag.SystemStatus          `json:"systemStatus,omitempty"`
 	InternalLogs       []diag.LogEntry             `json:"internalLogs,omitempty"`
+	ActiveJobs         []gen.JobProgress           `json:"activeJobs,omitempty"`
 	RecentAuditJobs    []gen.AuditJobSummary       `json:"recentAuditJobs,omitempty"`
 	FailedAuditJobs    []gen.AuditJobSummary       `json:"failedAuditJobs,omitempty"`
 	Schedules          []scheduler.ScheduleEntry   `json:"schedules,omitempty"`
@@ -116,6 +118,15 @@ func collectDiagnosticsSnapshot(ctx context.Context, deps diagnosticsDeps, opts 
 			snapshot.InternalLogs = logs
 		}
 	}
+
+	activeJobs := []gen.JobProgress{}
+	if deps.scanService != nil {
+		activeJobs = append(activeJobs, deps.scanService.ActiveJobs()...)
+	}
+	if deps.updateService != nil {
+		activeJobs = append(activeJobs, deps.updateService.ActiveJobs()...)
+	}
+	snapshot.ActiveJobs = activeJobs
 
 	if deps.auditService != nil {
 		jobs, err := deps.auditService.ListAuditJobs(ctx)

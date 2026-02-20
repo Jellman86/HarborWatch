@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import Sidebar from "./lib/components/Sidebar.svelte";
   import ToastContainer from "./lib/components/ToastContainer.svelte";
+  import GlobalProgress from "./lib/components/GlobalProgress.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
   import { themeStore } from "./lib/stores/theme.svelte";
   
@@ -31,10 +32,12 @@
   let containers = $state<ContainerSummary[]>([]);
   let images = $state<ImageSummary[]>([]);
   let events = $state<DockerEvent[]>([]);
+  let activeJobs = $state<any[]>([]);
   let error = $state("");
 
   let eventSource: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
   let reconnectDelayMs = 2000;
   const maxReconnectDelayMs = 30000;
 
@@ -42,6 +45,18 @@
     const response = await fetch(url, init);
     if (!response.ok) throw new Error(`${url} failed (${response.status})`);
     return (await response.json()) as T;
+  }
+
+  async function loadActiveJobs() {
+    try {
+      // Use diagnostics snapshot to get active jobs efficiently
+      const res = await fetch("/api/diagnostics/snapshot?includeFleet=false&logLimit=0&auditLimit=0");
+      if (!res.ok) return;
+      const data = await res.json();
+      activeJobs = data.activeJobs || [];
+    } catch (e) {
+      // Silent error for background poll
+    }
   }
 
   function connectEvents() {
@@ -93,10 +108,13 @@
 
   onMount(() => {
     loadGlobalData();
+    loadActiveJobs();
+    pollTimer = setInterval(loadActiveJobs, 5000);
   });
 
   onDestroy(() => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (pollTimer) clearInterval(pollTimer);
     eventSource?.close();
   });
 </script>
@@ -133,6 +151,7 @@
     ></button>
   {/if}
 
+  <GlobalProgress jobs={activeJobs} />
   <Sidebar {currentRoute} onNavigate={navigate} />
 
   <main

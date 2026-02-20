@@ -80,6 +80,10 @@ func (s *recordingUpdateService) ListContainerJobs(ctx context.Context, containe
 	return s.listByID[containerID], nil
 }
 
+func (s *recordingUpdateService) ActiveJobs() []gen.JobProgress {
+	return nil
+}
+
 func (s *recordingUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 	ch := make(chan gen.UpdateStepEvent)
 	close(ch)

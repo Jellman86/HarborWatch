@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	_ "modernc.org/sqlite"
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS update_runs (
   target_image TEXT NOT NULL,
   validate_url TEXT NOT NULL,
   status TEXT NOT NULL,
+  progress INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   error TEXT NOT NULL DEFAULT ''
@@ -43,6 +45,9 @@ CREATE TABLE IF NOT EXISTS update_steps (
 	if err != nil {
 		return fmt.Errorf("init update tables: %w", err)
 	}
+
+	// Migrate v0.6.0 -> v0.7.0 (add progress if missing)
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE update_runs ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
 
 	// 2. Migration: Add container_id if it doesn't exist (v0.5.0)
 	var hasContainerID bool
@@ -63,9 +68,9 @@ CREATE TABLE IF NOT EXISTS update_steps (
 
 func (s *Store) CreateRun(ctx context.Context, run gen.UpdateJobStatus) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO update_runs(id, container_id, target_image, validate_url, status, created_at, updated_at, error)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-`, run.JobID, run.ContainerID, run.TargetImage, run.ValidateURL, run.Status, run.CreatedAt, run.UpdatedAt, run.Error)
+INSERT INTO update_runs(id, container_id, target_image, validate_url, status, progress, created_at, updated_at, error)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, run.JobID, run.ContainerID, run.TargetImage, run.ValidateURL, run.Status, run.Progress, run.CreatedAt, run.UpdatedAt, run.Error)
 	if err != nil {
 		return fmt.Errorf("create update run: %w", err)
 	}
@@ -73,11 +78,25 @@ VALUES(?, ?, ?, ?, ?, ?, ?, ?)
 }
 
 func (s *Store) UpdateRunStatus(ctx context.Context, jobID, status, errMsg string, updatedAt int64) error {
+	progress := 0
+	if status == "completed" {
+		progress = 100
+	}
 	_, err := s.db.ExecContext(ctx, `
-UPDATE update_runs SET status=?, updated_at=?, error=? WHERE id=?
-`, status, updatedAt, errMsg, jobID)
+UPDATE update_runs SET status=?, updated_at=?, error=?, progress=MAX(progress, ?) WHERE id=?
+`, status, updatedAt, errMsg, progress, jobID)
 	if err != nil {
 		return fmt.Errorf("update run status: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) UpdateRunProgress(ctx context.Context, jobID, status string, progress int) error {
+	_, err := s.db.ExecContext(ctx, `
+UPDATE update_runs SET status=?, progress=? WHERE id=?
+`, status, progress, jobID)
+	if err != nil {
+		return fmt.Errorf("update run progress: %w", err)
 	}
 	return nil
 }
@@ -101,13 +120,13 @@ VALUES(?, ?, ?, ?, ?)
 
 func (s *Store) GetRun(ctx context.Context, jobID string) (*gen.UpdateJobStatus, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, container_id, target_image, validate_url, status, created_at, updated_at, error, ai_analysis
+SELECT id, container_id, target_image, validate_url, status, progress, created_at, updated_at, error, ai_analysis
 FROM update_runs WHERE id=?
 `, jobID)
 
 	var run gen.UpdateJobStatus
 	var aiRaw string
-	if err := row.Scan(&run.JobID, &run.ContainerID, &run.TargetImage, &run.ValidateURL, &run.Status, &run.CreatedAt, &run.UpdatedAt, &run.Error, &aiRaw); err != nil {
+	if err := row.Scan(&run.JobID, &run.ContainerID, &run.TargetImage, &run.ValidateURL, &run.Status, &run.Progress, &run.CreatedAt, &run.UpdatedAt, &run.Error, &aiRaw); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -154,7 +173,7 @@ func (s *Store) ListRunsForContainer(ctx context.Context, containerID string, li
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, container_id, target_image, validate_url, status, created_at, updated_at, error, ai_analysis
+SELECT id, container_id, target_image, validate_url, status, progress, created_at, updated_at, error, ai_analysis
 FROM update_runs
 WHERE container_id = ?
 ORDER BY updated_at DESC
@@ -169,8 +188,39 @@ LIMIT ?
 	for rows.Next() {
 		var item gen.UpdateJobStatus
 		var aiRaw string
-		if err := rows.Scan(&item.JobID, &item.ContainerID, &item.TargetImage, &item.ValidateURL, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.Error, &aiRaw); err != nil {
+		if err := rows.Scan(&item.JobID, &item.ContainerID, &item.TargetImage, &item.ValidateURL, &item.Status, &item.Progress, &item.CreatedAt, &item.UpdatedAt, &item.Error, &aiRaw); err != nil {
 			return nil, fmt.Errorf("scan update run: %w", err)
+		}
+		if aiRaw != "" {
+			var summary gen.AIAnalysisSummary
+			if err := json.Unmarshal([]byte(aiRaw), &summary); err == nil {
+				item.AIAnalysis = &summary
+			}
+		}
+		item.Steps = []gen.UpdateStepEvent{}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListActiveRuns(ctx context.Context) ([]gen.UpdateJobStatus, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, container_id, target_image, validate_url, status, progress, created_at, updated_at, error, ai_analysis
+FROM update_runs
+WHERE status = 'running' OR status = 'queued'
+ORDER BY created_at DESC
+`)
+	if err != nil {
+		return nil, fmt.Errorf("list active update runs: %w", err)
+	}
+	defer rows.Close()
+
+	out := []gen.UpdateJobStatus{}
+	for rows.Next() {
+		var item gen.UpdateJobStatus
+		var aiRaw string
+		if err := rows.Scan(&item.JobID, &item.ContainerID, &item.TargetImage, &item.ValidateURL, &item.Status, &item.Progress, &item.CreatedAt, &item.UpdatedAt, &item.Error, &aiRaw); err != nil {
+			return nil, fmt.Errorf("scan update run row: %w", err)
 		}
 		if aiRaw != "" {
 			var summary gen.AIAnalysisSummary
@@ -217,4 +267,24 @@ WHERE run_id IN (SELECT id FROM update_runs WHERE updated_at < ?)
 		return 0, 0, fmt.Errorf("commit prune update runs tx: %w", err)
 	}
 	return runRows, stepRows, nil
+}
+
+func (s *Store) MarkRunningRunsFailed(ctx context.Context, reason string) (int64, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "process interrupted by system restart"
+	}
+	res, err := s.db.ExecContext(ctx, `
+UPDATE update_runs
+SET status = 'failed', error = ?, updated_at = ?
+WHERE status = 'running'
+`, reason, time.Now().UTC().Unix())
+	if err != nil {
+		return 0, fmt.Errorf("mark running update runs failed: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("rows affected running update runs: %w", err)
+	}
+	return n, nil
 }

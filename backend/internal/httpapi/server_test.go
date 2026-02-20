@@ -136,6 +136,9 @@ func (f fakeScanService) MalwareDetails(ctx context.Context, target, prefix stri
 func (f fakeScanService) MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error) {
 	return nil, nil
 }
+func (f fakeScanService) ActiveJobs() []gen.JobProgress {
+	return nil
+}
 
 type fakeReleaseService struct{ summary gen.ReleaseRiskSummary }
 
@@ -349,6 +352,9 @@ func (f fakeUpdateService) GetJob(ctx context.Context, jobID string) (*gen.Updat
 func (f fakeUpdateService) ListContainerJobs(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error) {
 	return []gen.UpdateJobStatus{}, nil
 }
+func (f fakeUpdateService) ActiveJobs() []gen.JobProgress {
+	return nil
+}
 func (f fakeUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 	ch := make(chan gen.UpdateStepEvent, 1)
 	ch <- gen.UpdateStepEvent{JobID: jobID, Step: "preflight", Status: "completed", Message: "ok", Timestamp: 1}
@@ -366,6 +372,9 @@ func (panicUpdateService) GetJob(ctx context.Context, jobID string) (*gen.Update
 }
 func (panicUpdateService) ListContainerJobs(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error) {
 	return []gen.UpdateJobStatus{}, nil
+}
+func (panicUpdateService) ActiveJobs() []gen.JobProgress {
+	return nil
 }
 func (panicUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 	ch := make(chan gen.UpdateStepEvent)

@@ -19,10 +19,10 @@ func NewService(db *sql.DB) *Service {
 
 func (s *Service) ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error) {
 	query := `
-SELECT id, 'Update' as type, target_image as target, status, error, created_at as started_at, updated_at as completed_at
+SELECT id, 'Update' as type, target_image as target, status, progress, error, created_at as started_at, updated_at as completed_at
 FROM update_runs
 UNION ALL
-SELECT job_id as id, type, target, status, error, started_at, completed_at
+SELECT job_id as id, type, target, status, progress, error, started_at, completed_at
 FROM scan_jobs
 ORDER BY started_at DESC
 LIMIT 100
@@ -37,7 +37,7 @@ LIMIT 100
 	for rows.Next() {
 		var j gen.AuditJobSummary
 		var compAt sql.NullInt64
-		if err := rows.Scan(&j.ID, &j.Type, &j.Target, &j.Status, &j.Error, &j.StartedAt, &compAt); err != nil {
+		if err := rows.Scan(&j.ID, &j.Type, &j.Target, &j.Status, &j.Progress, &j.Error, &j.StartedAt, &compAt); err != nil {
 			return nil, fmt.Errorf("scan audit job: %w", err)
 		}
 		if compAt.Valid {
@@ -50,11 +50,11 @@ LIMIT 100
 
 func (s *Service) ListAuditJobsForContainer(ctx context.Context, containerID string) ([]gen.AuditJobSummary, error) {
 	query := `
-SELECT id, 'Update' as type, target_image as target, container_id, status, error, created_at as started_at, updated_at as completed_at
+SELECT id, 'Update' as type, target_image as target, container_id, status, progress, error, created_at as started_at, updated_at as completed_at
 FROM update_runs
 WHERE container_id = ?
 UNION ALL
-SELECT job_id as id, type, target, '' as container_id, status, error, started_at, completed_at
+SELECT job_id as id, type, target, '' as container_id, status, progress, error, started_at, completed_at
 FROM scan_jobs
 WHERE target = ? OR target = (
 	SELECT target_image FROM update_runs WHERE container_id = ? ORDER BY created_at DESC LIMIT 1
@@ -72,7 +72,7 @@ LIMIT 50
 	for rows.Next() {
 		var j gen.AuditJobSummary
 		var compAt sql.NullInt64
-		if err := rows.Scan(&j.ID, &j.Type, &j.Target, &j.ContainerID, &j.Status, &j.Error, &j.StartedAt, &compAt); err != nil {
+		if err := rows.Scan(&j.ID, &j.Type, &j.Target, &j.ContainerID, &j.Status, &j.Progress, &j.Error, &j.StartedAt, &compAt); err != nil {
 			return nil, fmt.Errorf("scan audit job: %w", err)
 		}
 		if compAt.Valid {

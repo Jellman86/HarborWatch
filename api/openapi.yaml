@@ -750,6 +750,7 @@ components:
         target: { type: string }
         containerId: { type: string }
         status: { type: string }
+        progress: { type: integer, minimum: 0, maximum: 100 }
         error: { type: string }
         startedAt: { type: integer, format: int64 }
         completedAt: { type: integer, format: int64 }
@@ -805,6 +806,16 @@ components:
         lineCount: { type: integer }
         truncated: { type: boolean }
         capturedAt: { type: integer, format: int64 }
+    JobProgress:
+      type: object
+      required: [id, type, target, status, progress, startedAt]
+      properties:
+        id: { type: string }
+        type: { type: string }
+        target: { type: string }
+        status: { type: string }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        startedAt: { type: integer, format: int64 }
     DiagnosticsSnapshot:
       type: object
       required: [generatedAt, components]
@@ -821,6 +832,9 @@ components:
         internalLogs:
           type: array
           items: { $ref: '#/components/schemas/DiagLogEntry' }
+        activeJobs:
+          type: array
+          items: { $ref: '#/components/schemas/JobProgress' }
         recentAuditJobs:
           type: array
           items: { $ref: '#/components/schemas/AuditJobSummary' }
@@ -875,6 +889,7 @@ components:
         target: { type: string }
         status: { type: string }
         source: { type: string }
+        progress: { type: integer, minimum: 0, maximum: 100 }
         error: { type: string }
         startedAt: { type: integer, format: int64 }
         completedAt: { type: integer, format: int64 }
@@ -987,6 +1002,7 @@ components:
         targetImage: { type: string }
         validateUrl: { type: string }
         status: { type: string }
+        progress: { type: integer, minimum: 0, maximum: 100 }
         createdAt: { type: integer, format: int64 }
         updatedAt: { type: integer, format: int64 }
         error: { type: string }

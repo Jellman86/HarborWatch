@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
   type TEXT NOT NULL,
   status TEXT NOT NULL,
   source TEXT NOT NULL,
+  progress INTEGER NOT NULL DEFAULT 0,
   error TEXT NOT NULL DEFAULT '',
   started_at INTEGER NOT NULL,
   completed_at INTEGER NOT NULL DEFAULT 0
@@ -74,6 +75,9 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
 	if err != nil {
 		return fmt.Errorf("create scan_jobs table: %w", err)
 	}
+
+	// Migrate v0.5.0 -> v0.6.0 (add progress if missing)
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE scan_jobs ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
 
 	return nil
 }
@@ -244,23 +248,37 @@ VALUES(?, ?, ?, ?, ?, ?)
 }
 
 func (s *Store) UpdateJob(ctx context.Context, jobID, status, errMsg string, completedAt int64) error {
+	progress := 0
+	if status == "completed" {
+		progress = 100
+	}
 	_, err := s.db.ExecContext(ctx, `
-UPDATE scan_jobs SET status=?, error=?, completed_at=? WHERE job_id=?
-`, status, errMsg, completedAt, jobID)
+UPDATE scan_jobs SET status=?, error=?, completed_at=?, progress=MAX(progress, ?) WHERE job_id=?
+`, status, errMsg, completedAt, progress, jobID)
 	if err != nil {
 		return fmt.Errorf("update scan job: %w", err)
 	}
 	return nil
 }
 
+func (s *Store) UpdateJobProgress(ctx context.Context, jobID, status string, progress int) error {
+	_, err := s.db.ExecContext(ctx, `
+UPDATE scan_jobs SET status=?, progress=? WHERE job_id=?
+`, status, progress, jobID)
+	if err != nil {
+		return fmt.Errorf("update scan job progress: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) GetJob(ctx context.Context, jobID string) (*gen.ScanJobStatus, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT job_id, target, status, source, error, started_at, completed_at
+SELECT job_id, target, status, source, progress, error, started_at, completed_at
 FROM scan_jobs WHERE job_id=?
 `, jobID)
 
 	var job gen.ScanJobStatus
-	if err := row.Scan(&job.JobID, &job.Target, &job.Status, &job.Source, &job.Error, &job.StartedAt, &job.CompletedAt); err != nil {
+	if err := row.Scan(&job.JobID, &job.Target, &job.Status, &job.Source, &job.Progress, &job.Error, &job.StartedAt, &job.CompletedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -278,7 +296,7 @@ func (s *Store) ListJobs(ctx context.Context, scanType, targetPrefix string, lim
 	}
 
 	query := `
-SELECT job_id, target, status, source, error, started_at, completed_at
+SELECT job_id, target, status, source, progress, error, started_at, completed_at
 FROM scan_jobs
 `
 	var (
@@ -308,7 +326,7 @@ FROM scan_jobs
 	out := make([]gen.ScanJobStatus, 0, limit)
 	for rows.Next() {
 		var job gen.ScanJobStatus
-		if err := rows.Scan(&job.JobID, &job.Target, &job.Status, &job.Source, &job.Error, &job.StartedAt, &job.CompletedAt); err != nil {
+		if err := rows.Scan(&job.JobID, &job.Target, &job.Status, &job.Source, &job.Progress, &job.Error, &job.StartedAt, &job.CompletedAt); err != nil {
 			return nil, fmt.Errorf("scan scan job row: %w", err)
 		}
 		out = append(out, job)
