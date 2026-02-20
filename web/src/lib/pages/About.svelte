@@ -72,11 +72,4 @@
             </div>
         </div>
     </section>
-
-    <section class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/30 p-4">
-        <p class="text-[10px] uppercase tracking-wider font-black text-slate-500">Icon Attribution</p>
-        <p class="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
-            <a href="https://www.flaticon.com/free-icons/harbour" title="harbour icons" target="_blank" rel="noreferrer noopener" class="underline decoration-brand-400/60 underline-offset-2 hover:text-brand-700 dark:hover:text-brand-300">Harbour icons created by Freepik - Flaticon</a>
-        </p>
-    </section>
 </div>

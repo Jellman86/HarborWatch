@@ -5,99 +5,130 @@
 :root {
   --font-body: 'Manrope', 'IBM Plex Sans', 'Segoe UI', sans-serif;
   --font-display: 'Sora', 'Manrope', 'Segoe UI', sans-serif;
-  --radius-sm: 4px;
-  --radius-md: 7px;
-  --radius-lg: 10px;
-  --radius-xl: 12px;
-  --radius-2xl: 14px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
   --border-width: 1px;
-  --glass-opacity: 0.94;
-  --glass-blur: 10px;
+  --glass-opacity: 0.96;
+  --glass-blur: 12px;
 
-  /* Signpost icon palette */
-  --color-brand-50: 243 247 255;
-  --color-brand-100: 226 234 255;
-  --color-brand-200: 198 216 251;
-  --color-brand-300: 159 190 244;
-  --color-brand-400: 112 168 231;
-  --color-brand-500: 88 140 215;
-  --color-brand-600: 72 102 181;
-  --color-brand-700: 60 70 128;
-  --color-brand-800: 47 54 102;
-  --color-brand-900: 35 42 83;
-  --color-brand-950: 20 24 56;
+  /* Stellar Compass palette - Nautical Cyberpunk */
+  --color-brand-50: 236 254 255;
+  --color-brand-100: 207 250 254;
+  --color-brand-200: 165 243 252;
+  --color-brand-300: 103 232 249;
+  --color-brand-400: 34 211 238;
+  --color-brand-500: 6 182 212;
+  --color-brand-600: 8 145 178;
+  --color-brand-700: 14 116 144;
+  --color-brand-800: 21 94 117;
+  --color-brand-900: 22 78 99;
+  --color-brand-950: 8 51 68;
+
+  /* Accent: Data Emerald */
+  --color-accent-emerald: 16 185 129;
 }
 
 /* =========================================
-   THEME: HARBOR SIGNPOST (Modern / Minimal)
+   THEME: STELLAR COMPASS (Nautical Cyberpunk)
    ========================================= */
 [data-brand="signpost"] {
   --font-body: 'Manrope', 'IBM Plex Sans', 'Segoe UI', sans-serif;
   --font-display: 'Sora', 'Manrope', 'Segoe UI', sans-serif;
-  --radius-sm: 4px;
-  --radius-md: 7px;
-  --radius-lg: 10px;
-  --radius-xl: 12px;
-  --radius-2xl: 14px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
   --border-width: 1px;
-  --glass-opacity: 0.94;
-  --glass-blur: 10px;
+  --glass-opacity: 0.96;
+  --glass-blur: 12px;
 
-  --color-brand-50: 243 247 255;
-  --color-brand-100: 226 234 255;
-  --color-brand-200: 198 216 251;
-  --color-brand-300: 159 190 244;
-  --color-brand-400: 112 168 231;
-  --color-brand-500: 88 140 215;
-  --color-brand-600: 72 102 181;
-  --color-brand-700: 60 70 128;
-  --color-brand-800: 47 54 102;
-  --color-brand-900: 35 42 83;
-  --color-brand-950: 20 24 56;
+  --color-brand-50: 236 254 255;
+  --color-brand-100: 207 250 254;
+  --color-brand-200: 165 243 252;
+  --color-brand-300: 103 232 249;
+  --color-brand-400: 34 211 238;
+  --color-brand-500: 6 182 212;
+  --color-brand-600: 8 145 178;
+  --color-brand-700: 14 116 144;
+  --color-brand-800: 21 94 117;
+  --color-brand-900: 22 78 99;
+  --color-brand-950: 8 51 68;
 }
 
 [data-brand="signpost"] body {
-  background-color: #eef2fa;
+  background-color: #f8fafc;
   background-image:
-    radial-gradient(760px 320px at 100% -20%, rgba(112, 168, 231, 0.16), transparent),
-    radial-gradient(820px 400px at -12% 120%, rgba(60, 70, 128, 0.1), transparent),
-    linear-gradient(to right, rgba(72, 102, 181, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(72, 102, 181, 0.04) 1px, transparent 1px);
-  background-size: auto, auto, 36px 36px, 36px 36px;
+    radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.05), transparent 40%),
+    linear-gradient(to right, rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+  background-size: auto, 40px 40px, 40px 40px;
 }
 
 .dark[data-brand="signpost"] body {
-  background-color: #0e1326;
+  background-color: #020617;
   background-image:
-    radial-gradient(980px 440px at 100% -20%, rgba(112, 168, 231, 0.17), transparent),
-    radial-gradient(980px 460px at -10% 120%, rgba(60, 70, 128, 0.36), transparent),
-    linear-gradient(to right, rgba(112, 168, 231, 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(112, 168, 231, 0.04) 1px, transparent 1px);
-  background-size: auto, auto, 36px 36px, 36px 36px;
+    radial-gradient(800px 600px at 50% -100px, rgba(6, 182, 212, 0.12), transparent),
+    radial-gradient(600px 400px at 100% 100%, rgba(16, 185, 129, 0.05), transparent),
+    linear-gradient(to right, rgba(6, 182, 212, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(6, 182, 212, 0.04) 1px, transparent 1px);
+  background-size: auto, auto, 40px 40px, 40px 40px;
 }
 
 [data-brand="signpost"] .glass-card {
-  border-color: rgba(72, 102, 181, 0.28);
-  box-shadow: 0 14px 28px -22px rgba(60, 70, 128, 0.3);
+  border-color: rgba(6, 182, 212, 0.15);
+  box-shadow: 0 10px 30px -15px rgba(2, 6, 23, 0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark[data-brand="signpost"] .glass-card:hover {
+  border-color: rgba(6, 182, 212, 0.3);
+  box-shadow: 0 0 20px -10px rgba(6, 182, 212, 0.2);
 }
 
 [data-brand="signpost"] aside {
-  border-right-color: rgba(72, 102, 181, 0.2);
-  box-shadow: 8px 0 24px -20px rgba(60, 70, 128, 0.34);
+  border-right-color: rgba(6, 182, 212, 0.1);
+  background-color: #020617;
+}
+
+[data-brand="signpost"] .nav-item-active {
+  background-color: rgba(6, 182, 212, 0.1);
+  color: #22d3ee;
+  box-shadow: inset 0 0 12px -4px rgba(6, 182, 212, 0.3);
+}
+
+[data-brand="signpost"] .nav-item-hover:hover {
+  background-color: rgba(6, 182, 212, 0.05);
+  color: #67e8f9;
 }
 
 [data-brand="signpost"] h1,
 [data-brand="signpost"] h2,
 [data-brand="signpost"] h3 {
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
+  font-weight: 900;
 }
 
 [data-brand="signpost"] .shadow-xl {
-  box-shadow: 0 12px 26px -24px rgba(47, 54, 102, 0.42) !important;
+  box-shadow: 0 10px 25px -10px rgba(6, 182, 212, 0.15) !important;
 }
 
 [data-brand="signpost"] .shadow-2xl {
-  box-shadow: 0 18px 34px -26px rgba(47, 54, 102, 0.45) !important;
+  box-shadow: 0 20px 40px -15px rgba(6, 182, 212, 0.2) !important;
+}
+
+/* Badge Glows */
+.badge-cyan-glow {
+  box-shadow: 0 0 10px -2px rgba(6, 182, 212, 0.4);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.badge-emerald-glow {
+  box-shadow: 0 0 10px -2px rgba(16, 185, 129, 0.4);
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 /* =========================================

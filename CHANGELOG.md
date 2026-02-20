@@ -15,18 +15,31 @@ All notable changes to HarborWatch are documented in this file.
 - **Enhanced Portainer Integration:**
   - Expanded Portainer API client with support for Environments (Endpoints), Stacks, and Docker Proxy.
   - Implemented **Stack Redeploy with PullImage** support directly from the Stacks view.
+  - Added **Robust Path Detection**: Fallback to `/data/compose/` patterns for stack identification when standard labels are missing.
+  - Added **Environment Variable Preservation**: Stack redeploys now fetch existing metadata to ensure manually configured Portainer variables are not lost.
   - Added "Manage" deep-links from Stacks to filtered Fleet views.
+- **Safety & Guidance:**
+  - Implemented **Safety Gates**: Backend and UI now actively block "Local" update attempts on Portainer-managed containers if the API is not configured, preventing configuration divergence.
+  - Added interactive **Amber Warning Badges** and guidance alerts for containers requiring Portainer API setup.
+- **Performance & Efficiency:**
+  - **Smart Polling**: Frontend background task polling now implements an intelligent backoff (slowing from 5s to 30s when idle) to reduce server load.
 - **Robustness & Recovery:**
   - Added startup reconciliation for update jobs; stale `running` jobs are now automatically failed on restart to prevent "stuck" UI states.
   - Fixed semaphore deadlock in ClamAV signature updates by making slot acquisition context-aware.
 
 ### Changed
 - **CPU Metrics Normalization:**
-  - Changed CPU usage calculation to be system-wide normalized instead of per-core.
-  - Percentages now reflect total system capacity, aligning with host-level monitors like TrueNAS Scale.
+  - Implemented configurable CPU reporting: Added a toggle in **Settings > Appearance** to switch between **Normalized (System Total)** and **Raw (Per-Core)** views.
+  - Default calculation aligns with host-level monitors like TrueNAS Scale (Total System Capacity).
 - **Images UI Overhaul:**
   - Modernized the Image Repository with a high-density card grid, global stats bar, and live search/sorting.
   - Improved visibility for digest-only artifacts and security posture.
+- **Stellar Compass Aesthetic Overhaul:**
+  - Replaced the "Signpost" theme with the new **Stellar Compass** identity, featuring a "Void Navy", "Cyber Cyan", and "Data Emerald" palette.
+  - Implemented technical grid backgrounds, sharper geometric precision (reduced radii), and "Outline + Glow" UI components.
+  - Scaled and integrated the new high-detail nautical logo across all views.
+- **UI Refinements:**
+  - Integrated dedicated **Portainer Logo** indicators into Fleet and Detail views for clearer orchestration context.
 - **Automation Safety:**
   - Added "portainer" to the default automatic ignore list.
   - Fixed a bug where manual lifecycle settings would revert to automatic on save.

@@ -464,12 +464,12 @@
                             {/if}
                             {#if lookupIntel(c)?.portainerManaged}
                                 {#if lookupIntel(c)?.portainerConfigured}
-                                    <span class="px-2 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1" title="Managed by Portainer">
+                                    <span class="px-2 py-1 bg-cyan-500/10 text-cyan-500 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1 badge-cyan-glow" title="Managed by Portainer">
                                         <PortainerLogo size={10} />
                                         Portainer
                                     </span>
                                 {:else}
-                                    <span class="px-2 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1" title="Portainer integration required for safe updates">
+                                    <span class="px-2 py-1 bg-amber-500 text-white rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1" title="Portainer integration required for safe updates">
                                         <PortainerLogo size={10} />
                                         Portainer
                                     </span>

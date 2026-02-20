@@ -155,8 +155,8 @@
         </svg>
       </button>
       <div class="flex items-center gap-2">
-        <img src="/logo-64.png" alt="HarborWatch" class="h-7 w-7" />
-        <h1 class="text-sm font-bold uppercase tracking-wider truncate max-w-[150px]">HarborWatch</h1>
+        <img src="/logo-64.png" alt="HarborWatch" class="h-8 w-8" />
+        <h1 class="text-sm font-black uppercase tracking-wider truncate max-w-[150px]">HarborWatch</h1>
       </div>
     </div>
     <div class="flex items-center gap-2">

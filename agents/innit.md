@@ -1,52 +1,30 @@
 MASTER PROMPT — HarborWatch (v2)
 
 --------------------------------------------------
-IMPLEMENTATION STATUS (2026-02-15)
+IMPLEMENTATION STATUS (2026-02-20)
 --------------------------------------------------
 
 Completed milestones:
-- Milestone 0 (Bootstrap): complete
-  - Go server with `/health`
-  - Svelte 5 app served via Go static files
-  - OpenAPI + generated Go/TypeScript types
-  - `scripts/dev.sh`, `scripts/lint.sh`, `scripts/test.sh`
-  - Branch workflow initialized with `main` and `dev`
-- Milestone 1 (Docker Inventory): complete
-  - Docker container/image listing API
-  - Docker events SSE stream
-  - UI inventory + live event panels
-- Milestone 2 (Vulnerability Scanning): complete
-  - Scanner interface + Trivy adapter
-  - SQLite persistence for scan results
-  - API + UI risk summary and async job status
-- Milestone 3 (Release Note Intelligence): complete
-  - GitHub Releases API ingestion
-  - Heuristic risk scoring with highlighted excerpts
-  - API + UI integration
-- Milestone 4 (Safe Update Pipeline): complete
-  - Async state machine:
-    `preflight -> backup -> pull -> recreate -> validate -> success/rollback`
-  - Robust container replacement (stop-rename-start) and rollback logic implemented
-  - SQLite persistence for update runs and step logs
-  - API endpoints for run/status/events and live UI progress
-
-Current focus for next iteration:
-- Milestone 5 (optional) — ClamAV filesystem scans: complete
-  - MalwareScanner interface and ClamAV adapter implemented
-  - Persistent job tracking and summary store for malware scans
-  - API endpoints for triggering and viewing malware scan results
+- Milestone 0-5: complete (Foundation, Security, Updates)
+- Milestone 6 (AI Intelligence Core): complete
+- Milestone 7 (Automation & Scheduler): complete
+- Milestone 8 (Ecosystem Integrations): complete
+- Milestone 9 (Portainer & Orchestration): complete
+  - Deep Portainer API integration for stack management.
+  - Robust stack detection via labels and path patterns (`/data/compose/`).
+  - Environment variable preservation during redeploy.
+  - Safety gates preventing configuration divergence.
 
 --------------------------------------------------
 IMPLEMENTATION STATUS (COMPLETED)
 --------------------------------------------------
-HarborWatch v0.5.0 is complete. All milestones implemented and hardened.
+HarborWatch v0.8.0 is complete. Autonomous appliance goals achieved.
 
-NEXT PHASE: HarborWatch v2 (The Autonomous Appliance)
-Refer to `docs/ROADMAP_v2.md` for the detailed specification of:
-- Milestone 6: AI Intelligence Core
-- Milestone 7: Automation & Scheduler
-- Milestone 8: Ecosystem Integrations
-- Milestone 9: Performance Profiler & AI Diagnostics
+NEXT PHASE: Enterprise Hardening & Global Governance
+- Global Rules: Policy application at stack/group level.
+- Maintenance Windows: Scheduled quiet hours for automations.
+- Enhanced Metrics: Trend analysis and anomaly detection.
+- Distributed Diagnostics: Fleet-wide health snapshots.
 
 You are a senior staff software engineer and security-focused SRE. Your task is to build HarborWatch: a local-first container maintenance and security platform for self-hosted Docker environments.
 

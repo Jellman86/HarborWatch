@@ -29,11 +29,11 @@
     <!-- Logo -->
     <div class="flex items-center justify-between p-4 h-16 border-b border-slate-100 dark:border-slate-800">
         <div class="flex items-center gap-3">
-            <img src="/logo-64.png" alt="HarborWatch" class="h-9 w-9 flex-shrink-0" />
+            <img src="/logo-64.png" alt="HarborWatch" class="h-10 w-10 flex-shrink-0" />
             {#if !collapsed}
                 <div class="flex flex-col overflow-hidden">
-                    <h1 class="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate uppercase tracking-wider">HarborWatch</h1>
-                    <span class="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-tighter">Container Sentry</span>
+                    <h1 class="text-sm font-black text-slate-900 dark:text-white leading-tight truncate uppercase tracking-wider">HarborWatch</h1>
+                    <span class="text-[10px] font-black text-brand-500 dark:text-brand-400 uppercase tracking-tighter">Stellar Compass</span>
                 </div>
             {/if}
         </div>
@@ -53,7 +53,7 @@
     <nav class="flex-1 overflow-y-auto p-3 space-y-1">
         {#each navItems as item}
             <button
-                class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group {currentRoute === item.path ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'}"
+                class="w-full flex items-center gap-3 p-3 rounded-lg transition-all duration-200 group nav-item-hover {currentRoute === item.path ? 'nav-item-active' : 'text-slate-500 dark:text-slate-400'}"
                 onclick={() => handleNavClick(item.path)}
                 title={collapsed ? item.label : ''}
             >

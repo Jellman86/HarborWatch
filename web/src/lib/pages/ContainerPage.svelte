@@ -703,7 +703,7 @@
                             </span>
                         {/if}
                         {#if intel?.portainerManaged}
-                            <span class="px-2 py-1 {intel?.portainerConfigured ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-amber-500 text-white'} rounded text-[9px] font-black uppercase whitespace-nowrap flex items-center gap-1.5">
+                            <span class="px-2 py-1 {intel?.portainerConfigured ? 'bg-cyan-500/10 text-cyan-500 badge-cyan-glow' : 'bg-amber-500 text-white'} rounded-md text-[9px] font-black uppercase whitespace-nowrap flex items-center gap-1.5">
                                 <PortainerLogo size={12} />
                                 Portainer Managed
                             </span>
