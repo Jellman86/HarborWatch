@@ -159,7 +159,22 @@ func buildUpdateRequestForContainer(
 	stackID := 0
 	endpointID := 0
 	if out.Summary.Labels != nil {
-		if sid, ok := out.Summary.Labels["io.portainer.stack_id"]; ok {
+		sid, hasSID := out.Summary.Labels["io.portainer.stack_id"]
+		if !hasSID {
+			// Fallback: Check for Portainer-specific path patterns in compose labels
+			cfg := out.Summary.Labels["com.docker.compose.project.config_files"]
+			wd := out.Summary.Labels["com.docker.compose.project.working_dir"]
+			path := firstNonEmpty(cfg, wd)
+			if strings.HasPrefix(path, "/data/compose/") {
+				parts := strings.Split(strings.TrimPrefix(path, "/data/compose/"), "/")
+				if len(parts) > 0 {
+					sid = parts[0]
+					hasSID = true
+				}
+			}
+		}
+
+		if hasSID {
 			if portainerService == nil {
 				return out, fmt.Errorf("%w: container %s is managed by a Portainer stack", ErrPortainerIntegrationRequired, containerID)
 			}

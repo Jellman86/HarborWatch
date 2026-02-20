@@ -71,6 +71,11 @@ func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Ove
 	if summary.Labels != nil {
 		if _, ok := summary.Labels["io.portainer.stack_id"]; ok {
 			portainerManaged = true
+		} else if cfg, ok := summary.Labels["com.docker.compose.project.config_files"]; ok && strings.HasPrefix(cfg, "/data/compose/") {
+			// Portainer standard path pattern
+			portainerManaged = true
+		} else if wd, ok := summary.Labels["com.docker.compose.project.working_dir"]; ok && strings.HasPrefix(wd, "/data/compose/") {
+			portainerManaged = true
 		}
 	}
 	portainerConfigured := portainerService != nil
