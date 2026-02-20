@@ -263,7 +263,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		}
 	}
 
-	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService)
+	updateService := updates.NewService(updatesStore, updates.NewCommandExecutor(), aiService, notificationService, diagService, portainerService)
 
 	auditService := audit.NewService(db)
 
@@ -489,6 +489,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			schedSvc.RegisterTask("container_update_apply", func() scheduler.Task {
 				return newAutomatedUpdateApplyTask(
 					dockerClient,
+					portainerService,
 					updateService,
 					rulesStore,
 					settingsStore,
@@ -503,6 +504,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			})
 			if err := schedSvc.AddTask("0 10 * * * *", newAutomatedUpdateApplyTask(
 				dockerClient,
+				portainerService,
 				updateService,
 				rulesStore,
 				settingsStore,
@@ -768,11 +770,17 @@ func newDegradedMux(initErr error) http.Handler {
 	return r
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService, intelService ContainerIntelService) http.Handler {
+type PortainerClient interface {
+	GetStackFile(ctx context.Context, stackID int) (string, error)
+	UpdateStack(ctx context.Context, stackID int, endpointID int, yaml string, env []map[string]string, prune bool, pullImage bool) error
+	ListStacks(ctx context.Context) ([]portainer.Stack, error)
+}
+
+func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService) http.Handler {
 	return newMuxWithDepsAndComposeAuditStore(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsService, portainerService, rulesService, intelService, nil)
 }
 
-func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService *portainer.Client, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore) http.Handler {
+func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore) http.Handler {
 	r := chi.NewRouter()
 	currentPortainerService := portainerService
 
@@ -1518,6 +1526,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					req.ValidateTimeoutSec,
 					req.ValidateIntervalSec,
 					dockerClient,
+					currentPortainerService,
 					rulesService,
 					settingsService,
 					intelService,
@@ -1858,7 +1867,14 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 				defer cancel()
 
-				config, err := dockerClient.GetContainerComposeConfig(ctx, id, currentPortainerService)
+				var pc *portainer.Client
+				if currentPortainerService != nil {
+					if c, ok := currentPortainerService.(*portainer.Client); ok {
+						pc = c
+					}
+				}
+
+				config, err := dockerClient.GetContainerComposeConfig(ctx, id, pc)
 				if err != nil {
 					writeError(w, http.StatusNotFound, "config_not_found", err.Error())
 					return

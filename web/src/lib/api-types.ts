@@ -7,6 +7,7 @@ export type ContainerSummary = { id: string; names: string[]; image: string; sta
 export type ContainerDetail = { summary: ContainerSummary; diskUsage?: ContainerDiskUsage; vulnerabilitySummary?: ScanSummary; malwareSummary?: MalwareScanSummary[]; recentMetrics?: Metric[]; actionHistory?: AuditJobSummary[]; rules?: ContainerRules };
 export type ContainerDiskUsage = { writableBytes?: number; rootFsBytes?: number; mountCount?: number; hostTotalBytes?: number; hostAvailableBytes?: number; hostUsedBytes?: number };
 export type ContainerRules = { containerId: string; updatePolicy: 'auto' | 'manual' | 'locked'; validateUrl?: string; validateMode?: 'http' | 'docker' | 'both'; validateTimeoutSec?: number; validateIntervalSec?: number; aiValidateLogs?: boolean; autoRollback: boolean; inheritAutomation?: boolean; upgradesAutomation?: boolean; maintenanceAutomation?: boolean; securityAutomation?: boolean };
+export type Stack = { Id: number; Name: string; Type: number; EndpointId: number; SwarmId?: string; EntryPoint?: string; Status: number };
 export type ImageSummary = { id: string; repoTags: string[]; size: number };
 export type DockerEvent = { type: string; action: string; id: string; from: string; attributes?: Record<string, string>; time: number };
 export type ScanRunRequest = { target: string };

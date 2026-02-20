@@ -16,6 +16,7 @@ import (
 
 type automatedUpdateApplyTask struct {
 	dockerClient          DockerClient
+	portainerService      PortainerClient
 	updateService         UpdateService
 	rulesService          RulesService
 	settingsService       SettingsService
@@ -30,6 +31,7 @@ type automatedUpdateApplyTask struct {
 
 func newAutomatedUpdateApplyTask(
 	dockerClient DockerClient,
+	portainerService PortainerClient,
 	updateService UpdateService,
 	rulesService RulesService,
 	settingsService SettingsService,
@@ -41,6 +43,7 @@ func newAutomatedUpdateApplyTask(
 ) scheduler.Task {
 	return &automatedUpdateApplyTask{
 		dockerClient:          dockerClient,
+		portainerService:      portainerService,
 		updateService:         updateService,
 		rulesService:          rulesService,
 		settingsService:       settingsService,
@@ -107,6 +110,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 			0,
 			0,
 			t.dockerClient,
+			t.portainerService,
 			t.rulesService,
 			t.settingsService,
 			t.intelService,

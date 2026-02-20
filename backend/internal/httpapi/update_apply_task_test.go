@@ -120,6 +120,7 @@ func TestAutomatedUpdateApplyTask_StartsAutoContainersWithUpdates(t *testing.T) 
 	updateSvc := &recordingUpdateService{}
 	task := newAutomatedUpdateApplyTask(
 		dockerClient,
+		fakePortainerClient{},
 		updateSvc,
 		testRulesService{rule: rules.ContainerRules{
 			UpdatePolicy: "auto",
@@ -171,6 +172,7 @@ func TestAutomatedUpdateApplyTask_SkipsWhenJobAlreadyRunning(t *testing.T) {
 	}
 	task := newAutomatedUpdateApplyTask(
 		dockerClient,
+		fakePortainerClient{},
 		updateSvc,
 		testRulesService{rule: rules.ContainerRules{
 			UpdatePolicy: "auto",
@@ -219,6 +221,7 @@ func TestAutomatedUpdateApplyTask_RefreshesUpdateStatusBeforeApply(t *testing.T)
 	refreshed := false
 	task := newAutomatedUpdateApplyTask(
 		dockerClient,
+		fakePortainerClient{},
 		updateSvc,
 		testRulesService{rule: rules.ContainerRules{
 			UpdatePolicy: "auto",

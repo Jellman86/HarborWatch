@@ -95,7 +95,7 @@ func newTestService(t *testing.T, failStep string) *Service {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return NewService(store, fakeExecutor{failStep: failStep}, nil, nil, nil)
+	return NewService(store, fakeExecutor{failStep: failStep}, nil, nil, nil, nil)
 }
 
 func TestUpdatePipelineSuccess(t *testing.T) {
@@ -199,7 +199,7 @@ func TestUpdatePipelineFailsOnHighAIRisk(t *testing.T) {
 			Summary:   "breaking schema migration",
 		},
 	})
-	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil)
+	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil, nil)
 
 	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
 	if err != nil {
@@ -253,7 +253,7 @@ func TestUpdatePipelineFailsOnAIBreakingChanges(t *testing.T) {
 			BreakingChanges: []string{"config format changed"},
 		},
 	})
-	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil)
+	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil, nil)
 
 	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
 	if err != nil {
@@ -300,7 +300,7 @@ func TestUpdatePipelineFailsOnAIActionRequired(t *testing.T) {
 			ActionRequired: true,
 		},
 	})
-	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil)
+	svc := NewService(store, fakeExecutor{}, aiSvc, nil, nil, nil)
 
 	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
 	if err != nil {

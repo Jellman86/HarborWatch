@@ -16,6 +16,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
+	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 )
 
 type Request struct {
@@ -33,6 +34,17 @@ type Request struct {
 	ValidateIntervalSec  int
 	AIValidateLogs       bool
 	AIBlockRiskThreshold int
+
+	// Portainer support
+	IsPortainerManaged  bool
+	PortainerStackID    int
+	PortainerEndpointID int
+}
+
+type PortainerClient interface {
+	GetStackFile(ctx context.Context, stackID int) (string, error)
+	UpdateStack(ctx context.Context, stackID int, endpointID int, yaml string, env []map[string]string, prune bool, pullImage bool) error
+	ListStacks(ctx context.Context) ([]portainer.Stack, error)
 }
 
 type DiagService interface {
@@ -40,23 +52,25 @@ type DiagService interface {
 }
 
 type Service struct {
-	store    *Store
-	executor Executor
-	ai       *ai.Service
-	notif    *notifications.Service
-	diag     DiagService
+	store     *Store
+	executor  Executor
+	ai        *ai.Service
+	notif     *notifications.Service
+	diag      DiagService
+	portainer PortainerClient
 
 	mu          sync.RWMutex
 	subscribers map[string][]chan gen.UpdateStepEvent
 }
 
-func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notifications.Service, diag DiagService) *Service {
+func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notifications.Service, diag DiagService, portainer PortainerClient) *Service {
 	return &Service{
 		store:       store,
 		executor:    executor,
 		ai:          aiSvc,
 		notif:       notif,
 		diag:        diag,
+		portainer:   portainer,
 		subscribers: map[string][]chan gen.UpdateStepEvent{},
 	}
 }
@@ -162,6 +176,14 @@ func (s *Service) setRunProgress(jobID string, status string, progress int) {
 }
 
 func (s *Service) execute(jobID string, req Request) {
+	if req.IsPortainerManaged && s.portainer != nil {
+		s.executePortainer(jobID, req)
+		return
+	}
+	s.executeLocal(jobID, req)
+}
+
+func (s *Service) executeLocal(jobID string, req Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -172,7 +194,7 @@ func (s *Service) execute(jobID string, req Request) {
 		return
 	}
 
-	// NEW: AI Release Analysis Step
+	// AI analysis step... (existing code)
 	if s.ai != nil && s.ai.HasProvider() {
 		s.setRunProgress(jobID, "running", 10)
 		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
@@ -265,6 +287,103 @@ func (s *Service) execute(jobID string, req Request) {
 
 	s.setRunProgress(jobID, "completed", 100)
 	s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "success", Status: "completed", Message: "Update pipeline completed", Timestamp: time.Now().UTC().Unix()})
+	s.finish(jobID, "completed", nil)
+}
+
+func (s *Service) executePortainer(jobID string, req Request) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	s.setRunProgress(jobID, "running", 5)
+	if err := s.runStep(ctx, jobID, "preflight", func(ctx context.Context) error {
+		if req.PortainerStackID == 0 {
+			return errors.New("portainer stack id is required")
+		}
+		if s.portainer == nil {
+			return errors.New("portainer client not initialized")
+		}
+		return nil
+	}); err != nil {
+		s.finish(jobID, "failed", err)
+		return
+	}
+
+	// AI analysis step...
+	if s.ai != nil && s.ai.HasProvider() {
+		s.setRunProgress(jobID, "running", 10)
+		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
+			notes := buildAIReleaseContext(req)
+			analysis, err := s.ai.AnalyzeReleaseNotes(ctx, notes)
+			if err != nil {
+				return err
+			}
+			summary := &gen.AIAnalysisSummary{
+				RiskScore:       analysis.RiskScore,
+				RiskLevel:       string(analysis.RiskLevel),
+				Summary:         analysis.Summary,
+				BreakingChanges: analysis.BreakingChanges,
+			}
+			_ = s.store.SaveAIAnalysis(ctx, jobID, summary)
+
+			threshold := req.AIBlockRiskThreshold
+			if threshold < 0 || threshold > 100 {
+				threshold = envInt("HW_AI_BLOCK_RISK_THRESHOLD", 80, 0, 100)
+			}
+			if blocked, reason := shouldBlockForAI(analysis, threshold); blocked {
+				return fmt.Errorf("AI blocked update: %s", reason)
+			}
+			return nil
+		}); err != nil {
+			s.finish(jobID, "failed", err)
+			return
+		}
+	}
+
+	s.setRunProgress(jobID, "running", 20)
+	var stackYAML string
+	if err := s.runStep(ctx, jobID, "fetch_config", func(ctx context.Context) error {
+		yaml, err := s.portainer.GetStackFile(ctx, req.PortainerStackID)
+		if err != nil {
+			return err
+		}
+		stackYAML = yaml
+		return nil
+	}); err != nil {
+		s.finish(jobID, "failed", err)
+		return
+	}
+
+	s.setRunProgress(jobID, "running", 30)
+	if err := s.runStep(ctx, jobID, "portainer_redeploy", func(ctx context.Context) error {
+		// Portainer redeploy with PullImage=true handles pull and recreate
+		return s.portainer.UpdateStack(ctx, req.PortainerStackID, req.PortainerEndpointID, stackYAML, nil, true, true)
+	}); err != nil {
+		s.finish(jobID, "failed", err)
+		return
+	}
+
+	s.setRunProgress(jobID, "running", 80)
+	if err := s.runStep(ctx, jobID, "validate", func(ctx context.Context) error {
+		// Portainer stacks might take a while to come back up, so we wait and validate
+		return s.executor.Validate(ctx, req)
+	}); err != nil {
+		s.finish(jobID, "failed", err) // Rollback for Portainer is manual or via manual stack revert for now
+		return
+	}
+
+	if req.AIValidateLogs && s.ai != nil && s.ai.HasProvider() {
+		s.setRunProgress(jobID, "running", 90)
+		_ = s.runStep(ctx, jobID, "ai_health_assessment", func(ctx context.Context) error {
+			logs, _ := collectContainerLogsForAI(ctx, req.ContainerID, 300)
+			assessment, err := s.ai.AnalyzeHealthLogs(ctx, req.ContainerID, logs)
+			if err == nil && !assessment.Healthy {
+				return fmt.Errorf("AI marked unhealthy: %s", assessment.Summary)
+			}
+			return nil
+		})
+	}
+
+	s.setRunProgress(jobID, "completed", 100)
 	s.finish(jobID, "completed", nil)
 }
 

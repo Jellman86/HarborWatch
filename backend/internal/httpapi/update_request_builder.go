@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ func buildUpdateRequestForContainer(
 	validateTimeoutSec int,
 	validateIntervalSec int,
 	dockerClient DockerClient,
+	portainerService PortainerClient,
 	rulesService RulesService,
 	settingsService SettingsService,
 	intelService ContainerIntelService,
@@ -152,6 +154,38 @@ func buildUpdateRequestForContainer(
 		cancel()
 	}
 
+	isPortainer := false
+	stackID := 0
+	endpointID := 0
+	if portainerService != nil && out.Summary.Labels != nil {
+		if sid, ok := out.Summary.Labels["io.portainer.stack_id"]; ok {
+			if parsed, err := strconv.Atoi(sid); err == nil {
+				isPortainer = true
+				stackID = parsed
+				// Try to find the endpoint ID. It might be in labels or we query Portainer.
+				// io.portainer.endpoint_id is often present.
+				if eid, ok := out.Summary.Labels["io.portainer.endpoint_id"]; ok {
+					if parsedE, err := strconv.Atoi(eid); err == nil {
+						endpointID = parsedE
+					}
+				}
+				if endpointID == 0 {
+					// Fallback: Query stacks list to find this stack's endpoint
+					pCtx, pCancel := context.WithTimeout(ctx, 5*time.Second)
+					if stacks, err := portainerService.ListStacks(pCtx); err == nil {
+						for _, s := range stacks {
+							if s.ID == stackID {
+								endpointID = s.EndpointID
+								break
+							}
+						}
+					}
+					pCancel()
+				}
+			}
+		}
+	}
+
 	out.Request = updates.Request{
 		ContainerID:          containerID,
 		TargetImage:          targetImage,
@@ -167,6 +201,9 @@ func buildUpdateRequestForContainer(
 		ValidateIntervalSec:  effectiveRules.ValidateIntervalSec,
 		AIValidateLogs:       effectiveRules.AIValidateLogs,
 		AIBlockRiskThreshold: aiBlockRiskThreshold,
+		IsPortainerManaged:   isPortainer,
+		PortainerStackID:     stackID,
+		PortainerEndpointID:  endpointID,
 	}
 	return out, nil
 }
