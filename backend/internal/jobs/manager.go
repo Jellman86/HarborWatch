@@ -125,6 +125,29 @@ func (m *Manager) FinishJob(id string) {
 	delete(m.jobs, id)
 }
 
+func (m *Manager) CancelAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for id, j := range m.jobs {
+		if j.Cancel != nil {
+			j.Cancel()
+		}
+		delete(m.jobs, id)
+	}
+	// Also clear container locks
+	m.containerLocks = make(map[string]string)
+	
+	// Drain semaphore
+	for {
+		select {
+		case <-m.activeSlots:
+		default:
+			return
+		}
+	}
+}
+
 func (m *Manager) ActiveJobs() []gen.JobProgress {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

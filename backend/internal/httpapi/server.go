@@ -2175,6 +2175,18 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				writeJSON(w, http.StatusOK, status)
 			})
 
+			r.Post("/jobs/cancel-all", func(w http.ResponseWriter, r *http.Request) {
+				if jobManager == nil {
+					writeError(w, http.StatusServiceUnavailable, "job_manager_unavailable", "Job manager not initialized")
+					return
+				}
+				jobManager.CancelAll()
+				if diagService != nil {
+					diagService.Log("WARN", "System", "All background jobs cancelled by user")
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "All jobs cancelled"})
+			})
+
 			r.Get("/logs", func(w http.ResponseWriter, r *http.Request) {
 				if diagService == nil {
 					writeError(w, http.StatusServiceUnavailable, "diag_unavailable", "Diagnostic service not initialized")

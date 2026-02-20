@@ -68,6 +68,18 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 	s.jobCancels[jobID] = runCancel
 	s.mu.Unlock()
 
+	s.jobManager.RegisterJob(&jobs.Job{
+		ID:         jobID,
+		Type:       jobs.JobTypeScan,
+		Subtype:    "trivy",
+		Target:     target,
+		TargetName: target,
+		Status:     "queued",
+		Message:    "Waiting for concurrency slot",
+		StartedAt:  time.Now().UTC().Unix(),
+		Cancel:     runCancel,
+	})
+
 	_ = s.store.CreateJob(context.Background(), job, "vulnerability")
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan queued job=%s target=%s", jobID, target))
@@ -143,6 +155,18 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 	s.jobCancels[jobID] = runCancel
 	s.mu.Unlock()
 
+	s.jobManager.RegisterJob(&jobs.Job{
+		ID:         jobID,
+		Type:       jobs.JobTypeScan,
+		Subtype:    "clamav",
+		Target:     targetLabel,
+		TargetName: targetLabel,
+		Status:     "queued",
+		Message:    "Waiting for concurrency slot",
+		StartedAt:  time.Now().UTC().Unix(),
+		Cancel:     runCancel,
+	})
+
 	_ = s.store.CreateJob(context.Background(), job, "malware")
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan queued job=%s target=%s path=%s", jobID, targetLabel, scanPath))
@@ -158,17 +182,6 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 }
 
 func (s *Service) run(jobID, target string, runCtx context.Context) {
-	s.jobManager.RegisterJob(&jobs.Job{
-		ID:         jobID,
-		Type:       jobs.JobTypeScan,
-		Subtype:    "trivy",
-		Target:     target,
-		TargetName: target,
-		Status:     "queued",
-		Message:    "Waiting for concurrency slot",
-		StartedAt:  time.Now().UTC().Unix(),
-	})
-
 	s.setJobProgressWithMessage(jobID, 0, "Waiting for concurrency slot")
 	if err := s.jobManager.AcquireSlot(runCtx, jobID, "image:"+target); err != nil {
 		s.setJobCancelled(jobID, "scan cancelled: "+err.Error())
@@ -228,17 +241,6 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 	if strings.HasPrefix(targetLabel, "container:") {
 		containerID = strings.TrimPrefix(targetLabel, "container:")
 	}
-
-	s.jobManager.RegisterJob(&jobs.Job{
-		ID:         jobID,
-		Type:       jobs.JobTypeScan,
-		Subtype:    "clamav",
-		Target:     targetLabel,
-		TargetName: targetLabel,
-		Status:     "queued",
-		Message:    "Waiting for concurrency slot",
-		StartedAt:  time.Now().UTC().Unix(),
-	})
 
 	s.setJobProgressWithMessage(jobID, 0, "Waiting for concurrency slot")
 	lockID := "malware:" + targetLabel

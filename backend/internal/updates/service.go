@@ -160,6 +160,10 @@ func (s *Service) setRunProgress(jobID string, status string, progress int) {
 }
 
 func (s *Service) execute(jobID string, req Request) {
+	// Create cancellable context for the whole update pipeline
+	runCtx, runCancel := context.WithCancel(context.Background())
+	defer runCancel()
+
 	s.jobManager.RegisterJob(&jobs.Job{
 		ID:         jobID,
 		Type:       jobs.JobTypeUpdate,
@@ -168,11 +172,12 @@ func (s *Service) execute(jobID string, req Request) {
 		Status:     "queued",
 		Message:    "Waiting for concurrency slot",
 		StartedAt:  time.Now().UTC().Unix(),
+		Cancel:     runCancel,
 	})
 	defer s.jobManager.FinishJob(jobID)
 
 	// Acquire slot with container lock
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	ctx, cancel := context.WithTimeout(runCtx, 20*time.Minute)
 	defer cancel()
 
 	if err := s.jobManager.AcquireSlot(ctx, jobID, req.ContainerID); err != nil {

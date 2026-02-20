@@ -58,14 +58,30 @@
     });
 
     let showDetails = $state(false);
+    let cancellingAll = $state(false);
+
+    async function cancelAllJobs() {
+        if (cancellingAll) return;
+        if (!confirm("Are you sure you want to cancel all active background tasks?")) return;
+        
+        cancellingAll = true;
+        try {
+            const res = await fetch("/api/system/jobs/cancel-all", { method: "POST" });
+            if (res.ok) {
+                // Background polling will clear the UI
+            }
+        } catch (e) {
+            console.error("Failed to cancel jobs", e);
+        } finally {
+            cancellingAll = false;
+        }
+    }
 </script>
 
 {#if jobs.length > 0}
     <div 
         class="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 overflow-hidden relative group"
         transition:slide={{ duration: 300 }}
-        onmouseenter={() => showDetails = true}
-        onmouseleave={() => showDetails = false}
         role="status"
         aria-live="polite"
     >
@@ -75,13 +91,13 @@
         <div class="max-w-[120rem] mx-auto px-4 md:px-8 py-3 relative z-10">
             <div class="flex flex-col gap-2">
                 <div class="flex items-center justify-between gap-4">
-                    <div class="flex items-center gap-3 min-w-0">
+                    <div class="flex items-center gap-3 min-w-0 flex-1" onmouseenter={() => showDetails = true} onmouseleave={() => showDetails = false}>
                         <div class="w-6 h-6 rounded-lg bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 dark:text-brand-400 flex-shrink-0">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                         </div>
-                        <div class="min-w-0 flex flex-col md:flex-row md:items-baseline md:gap-3">
+                        <div class="min-w-0 flex flex-col md:flex-row md:items-baseline md:gap-3 cursor-help">
                             <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">
                                 {summaryLabel}
                             </p>
@@ -93,18 +109,21 @@
                         </div>
                     </div>
                     
-                    <div class="flex items-center gap-2">
-                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
-                            {aggregateProgress}% Total
-                        </p>
-                        <div class="hidden md:flex items-center gap-1">
-                            {#each jobs as job}
-                                <div 
-                                    class="w-1.5 h-1.5 rounded-full bg-brand-500/40" 
-                                    title={`${jobVerb(job.type)} ${formatTarget(job.target)}: ${job.message || job.status} (${job.progress}%)`}
-                                ></div>
-                            {/each}
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                                {aggregateProgress}% Total
+                            </p>
                         </div>
+
+                        <button 
+                            onclick={cancelAllJobs}
+                            disabled={cancellingAll}
+                            class="px-2 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 text-[9px] font-black uppercase tracking-widest rounded transition-all border border-rose-200 dark:border-rose-800 disabled:opacity-50"
+                            title="Cancel all background tasks"
+                        >
+                            {cancellingAll ? '...' : 'Cancel All'}
+                        </button>
                     </div>
                 </div>
 
@@ -117,9 +136,9 @@
                 </div>
 
                 <!-- Detailed View (Expanded on Hover or if multiple) -->
-                {#if showDetails && jobs.length > 1}
+                {#if (showDetails && jobs.length > 1) || (showDetails && jobs[0]?.message)}
                     <div class="pt-2 border-t border-slate-100 dark:border-slate-800/50 mt-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2" in:slide>
-                        {#each jobs as job (job.id)}
+                        {#each jobs as job (job.id + job.type)}
                             <div class="flex items-center justify-between gap-3 text-[9px] min-w-0">
                                 <span class="text-slate-500 font-bold uppercase truncate flex-1">
                                     {formatTarget(job.target)}
@@ -128,7 +147,7 @@
                                     {job.message || job.status}
                                 </span>
                                 <span class="font-black text-brand-600 dark:text-brand-400 w-6 text-right">
-                                    {job.progress}%
+                                    {job.progress >= 0 ? job.progress + '%' : '...'}
                                 </span>
                             </div>
                         {/each}

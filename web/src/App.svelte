@@ -38,6 +38,7 @@
   let eventSource: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let dataPollTimer: ReturnType<typeof setInterval> | null = null;
   let reconnectDelayMs = 2000;
   const maxReconnectDelayMs = 30000;
 
@@ -132,11 +133,13 @@
     loadGlobalData();
     loadActiveJobs();
     pollTimer = setInterval(loadActiveJobs, 5000);
+    dataPollTimer = setInterval(loadGlobalData, 30000);
   });
 
   onDestroy(() => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     if (pollTimer) clearInterval(pollTimer);
+    if (dataPollTimer) clearInterval(dataPollTimer);
     eventSource?.close();
   });
 </script>
@@ -158,7 +161,7 @@
         <img 
           src="/logo-64.png" 
           alt="HarborWatch" 
-          class="h-8 w-8 {activeJobs.length > 0 ? 'ring-2 ring-cyan-500/20 animate-pulse rounded-full' : ''}" 
+          class="h-8 w-8" 
         />
         <h1 class="text-sm font-black uppercase tracking-wider truncate max-w-[150px]">HarborWatch</h1>
       </div>

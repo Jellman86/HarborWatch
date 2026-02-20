@@ -45,14 +45,8 @@
                 <img 
                     src="/logo-64.png" 
                     alt="HarborWatch" 
-                    class="flex-shrink-0 transition-all duration-500 {collapsed ? 'h-10 w-10' : 'h-20 w-20'} {hasActiveJobs ? 'ring-4 ring-cyan-500/30 animate-pulse rounded-full' : ''}" 
+                    class="flex-shrink-0 transition-all duration-500 {collapsed ? 'h-10 w-10' : 'h-20 w-20'}" 
                 />
-                {#if hasActiveJobs}
-                    <span class="absolute -top-1 -right-1 flex h-3 w-3">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                    </span>
-                {/if}
             </div>
             
             {#if !collapsed}
