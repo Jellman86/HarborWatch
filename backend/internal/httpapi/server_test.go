@@ -303,7 +303,7 @@ type fakeDiagService struct {
 }
 
 func (f fakeDiagService) Log(level, source, message string) {}
-func (f fakeDiagService) ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]diag.LogEntry, error) {
+func (f fakeDiagService) ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]diag.LogEntry, int, error) {
 	var filtered []diag.LogEntry
 	for _, entry := range f.logs {
 		if level != "" && !strings.EqualFold(entry.Level, level) {
@@ -324,18 +324,19 @@ func (f fakeDiagService) ListLogs(ctx context.Context, limit, offset int, level,
 		filtered = append(filtered, entry)
 	}
 
-	if len(filtered) == 0 {
-		return nil, nil
+	total := len(filtered)
+	if total == 0 {
+		return nil, 0, nil
 	}
 	start := offset
-	if start >= len(filtered) {
-		return nil, nil
+	if start >= total {
+		return nil, total, nil
 	}
 	end := start + limit
-	if end > len(filtered) {
-		end = len(filtered)
+	if end > total {
+		end = total
 	}
-	return filtered[start:end], nil
+	return filtered[start:end], total, nil
 }
 func (f fakeDiagService) GetSystemStatus() diag.SystemStatus {
 	return diag.SystemStatus{Uptime: 42, NumGoroutine: 9}
@@ -809,15 +810,21 @@ func TestSystemLogsFilters(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	var payload []diag.LogEntry
+	var payload struct {
+		Logs  []diag.LogEntry `json:"logs"`
+		Total int             `json:"total"`
+	}
 	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
 		t.Fatalf("decode failed: %v", err)
 	}
-	if len(payload) != 1 {
-		t.Fatalf("expected 1 filtered log, got %d", len(payload))
+	if len(payload.Logs) != 1 {
+		t.Fatalf("expected 1 filtered log, got %d", len(payload.Logs))
 	}
-	if payload[0].Level != "ERROR" {
-		t.Fatalf("expected ERROR log, got %q", payload[0].Level)
+	if payload.Logs[0].Level != "ERROR" {
+		t.Fatalf("expected ERROR log, got %q", payload.Logs[0].Level)
+	}
+	if payload.Total != 1 {
+		t.Fatalf("expected total 1, got %d", payload.Total)
 	}
 }
 

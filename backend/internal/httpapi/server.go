@@ -78,7 +78,7 @@ type AIService interface {
 
 type DiagService interface {
 	Log(level, source, message string)
-	ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]diag.LogEntry, error)
+	ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]diag.LogEntry, int, error)
 	GetSystemStatus() diag.SystemStatus
 	PruneLogs(ctx context.Context, olderThan int64) (int64, error)
 }
@@ -2211,7 +2211,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					since = parsed
 				}
 
-				logs, err := diagService.ListLogs(r.Context(), limit, offset, level, source, search, since)
+				logs, total, err := diagService.ListLogs(r.Context(), limit, offset, level, source, search, since)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, "diag_log_failed", err.Error())
 					return
@@ -2221,7 +2221,10 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					logs = []diag.LogEntry{}
 				}
 
-				writeJSON(w, http.StatusOK, logs)
+				writeJSON(w, http.StatusOK, map[string]any{
+					"logs":  logs,
+					"total": total,
+				})
 			})
 		})
 

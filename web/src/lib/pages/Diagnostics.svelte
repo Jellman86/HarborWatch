@@ -36,12 +36,14 @@
 
     let status = $state<SystemStatus | null>(null);
     let logs = $state<LogEntry[]>([]);
+    let logTotal = $state(0);
     let loading = $state(true);
     let logSearch = $state("");
     let logLevel = $state("");
     let logSource = $state("");
     let logPage = $state(0);
     let logLimit = 100;
+    let totalPages = $derived(Math.ceil(logTotal / logLimit));
     let selectedPreset = $state<PresetID>("all");
     let hideMetricsCollectorNoise = $state(true);
     let activePresetLabel = $derived(presets.find((p) => p.id === selectedPreset)?.label || "All Logs");
@@ -90,7 +92,11 @@
                 fetch(logsEndpoint())
             ]);
             if (statusRes.ok) status = await statusRes.json();
-            if (logsRes.ok) logs = await logsRes.json();
+            if (logsRes.ok) {
+                const data = await logsRes.json();
+                logs = data.logs || [];
+                logTotal = data.total || 0;
+            }
         } catch (e) {
             console.error("Failed to load diagnostics", e);
         } finally {
@@ -330,25 +336,59 @@
             </button>
         </div>
 
-        <div class="flex items-center justify-between gap-4 py-2 px-1">
-            <div class="flex items-center gap-2">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2 px-1">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <button
+                    onclick={() => logPage = 0}
+                    onclickcapture={() => loading = true}
+                    disabled={logPage === 0 || loading}
+                    class="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-all"
+                >
+                    First
+                </button>
                 <button
                     onclick={() => changePage(-1)}
                     disabled={logPage === 0 || loading}
-                    class="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-all"
+                    class="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-all"
                 >
-                    Previous
+                    Prev
                 </button>
+
+                <!-- Page Numbers -->
+                <div class="flex items-center gap-1 mx-2">
+                    {#each Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        if (totalPages <= 5) return i;
+                        if (logPage < 3) return i;
+                        if (logPage > totalPages - 3) return totalPages - 5 + i;
+                        return logPage - 2 + i;
+                    }) as p}
+                        <button
+                            onclick={() => { logPage = p; loading = true; void loadData(); }}
+                            class="w-8 h-8 flex items-center justify-center rounded-lg text-[10px] font-bold transition-all {logPage === p ? 'bg-brand-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 hover:bg-brand-50 dark:hover:bg-slate-700'}"
+                        >
+                            {p + 1}
+                        </button>
+                    {/each}
+                </div>
+
                 <button
                     onclick={() => changePage(1)}
-                    disabled={logs.length < logLimit || loading}
-                    class="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-all"
+                    disabled={logPage >= totalPages - 1 || loading}
+                    class="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-all"
                 >
                     Next
                 </button>
+                <button
+                    onclick={() => logPage = totalPages - 1}
+                    onclickcapture={() => loading = true}
+                    disabled={logPage >= totalPages - 1 || loading}
+                    class="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-all"
+                >
+                    Last
+                </button>
             </div>
-            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                Page {logPage + 1}
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
+                Page {logPage + 1} of {totalPages} <span class="mx-2">•</span> {logTotal} total entries
             </div>
         </div>
 

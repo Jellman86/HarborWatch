@@ -83,34 +83,43 @@ func (s *Service) Log(level, source, message string) {
 	}
 }
 
-func (s *Service) ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]LogEntry, error) {
-	query := "SELECT id, timestamp, level, message, source FROM internal_logs WHERE 1=1"
+func (s *Service) ListLogs(ctx context.Context, limit, offset int, level, source, search string, since int64) ([]LogEntry, int, error) {
+	where := " WHERE 1=1"
 	var args []any
 
 	if level != "" {
-		query += " AND level = ?"
+		where += " AND level = ?"
 		args = append(args, level)
 	}
 	if source != "" {
-		query += " AND source LIKE ?"
+		where += " AND source LIKE ?"
 		args = append(args, "%"+source+"%")
 	}
 	if since > 0 {
-		query += " AND timestamp >= ?"
+		where += " AND timestamp >= ?"
 		args = append(args, since)
 	}
 	if search != "" {
-		query += " AND (message LIKE ? OR source LIKE ? OR level LIKE ?)"
+		where += " AND (message LIKE ? OR source LIKE ? OR level LIKE ?)"
 		pattern := "%" + search + "%"
 		args = append(args, pattern, pattern, pattern)
 	}
 
-	query += " ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	// 1. Get total count for these filters
+	var total int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM internal_logs"+where, args...).Scan(&total)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	// 2. Get paged entries
+	query := "SELECT id, timestamp, level, message, source FROM internal_logs" + where
+	query += " ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?"
+	pagedArgs := append(args, limit, offset)
+
+	rows, err := s.db.QueryContext(ctx, query, pagedArgs...)
+	if err != nil {
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -118,11 +127,11 @@ func (s *Service) ListLogs(ctx context.Context, limit, offset int, level, source
 	for rows.Next() {
 		var e LogEntry
 		if err := rows.Scan(&e.ID, &e.Timestamp, &e.Level, &e.Message, &e.Source); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		entries = append(entries, e)
 	}
-	return entries, nil
+	return entries, total, nil
 }
 
 func (s *Service) PruneLogs(ctx context.Context, olderThan int64) (int64, error) {
