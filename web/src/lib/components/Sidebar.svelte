@@ -29,25 +29,26 @@
 <aside class="fixed left-0 top-0 h-full bg-white dark:bg-slate-900 shadow-xl border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col z-50 {collapsed ? 'w-20' : 'w-64'} {layoutStore.mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 pointer-events-none md:pointer-events-auto'}">
         <div class="flex-1 flex flex-col min-h-0 pointer-events-auto">
             <!-- Logo -->
-            <div class="flex items-center justify-between p-4 h-16 border-b border-slate-100 dark:border-slate-800">
-                <div class="flex items-center gap-3">
+            <div class="flex items-center justify-between p-4 h-auto border-b border-slate-100 dark:border-slate-800">
+                <div class="flex flex-col items-center w-full gap-4 text-center">
                     <img 
                         src="/logo-64.png" 
                         alt="HarborWatch" 
-                        class="h-10 w-10 flex-shrink-0 transition-all duration-500 {hasActiveJobs ? 'ring-4 ring-cyan-500/20 animate-pulse rounded-full' : ''}" 
+                        class="h-14 w-14 flex-shrink-0 transition-all duration-500 {hasActiveJobs ? 'ring-4 ring-cyan-500/20 animate-pulse rounded-full' : ''}" 
                     />
-                    {#if !collapsed}                <div class="flex flex-col overflow-hidden">
-                    <h1 class="text-sm font-black text-slate-900 dark:text-white leading-tight truncate uppercase tracking-wider">HarborWatch</h1>
-                    <span class="text-[10px] font-black text-brand-500 dark:text-brand-400 uppercase tracking-tighter">Stellar Compass</span>
+                    {#if !collapsed}
+                        <div class="flex flex-col overflow-hidden items-center">
+                            <h1 class="text-lg font-black text-slate-900 dark:text-white leading-tight truncate uppercase tracking-[0.15em]">HarborWatch</h1>
+                            <span class="text-[9px] font-black text-brand-500 dark:text-brand-400 uppercase tracking-widest leading-relaxed mt-1">Simple Container Maintenance & Management</span>
+                        </div>
+                    {/if}
                 </div>
-            {/if}
-        </div>
-        
-        <button 
-            onclick={() => layoutStore.closeMobileSidebar()}
-            class="md:hidden p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-            aria-label="Close Navigation"
-        >
+                
+                <button 
+                    onclick={() => layoutStore.closeMobileSidebar()}
+                    class="md:hidden absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    aria-label="Close Navigation"
+                >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
