@@ -62,6 +62,7 @@ type ScanService interface {
 	MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error)
 	MalwareDetails(ctx context.Context, target, prefix string, limit int) ([]gen.MalwareScanDetail, error)
 	MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error)
+	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 }
 
 type ReleaseService interface {
@@ -231,7 +232,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	} else if diagService != nil {
 		diagService.Log("ERROR", "Scanner", fmt.Sprintf("Failed to reconcile stale scan jobs on startup: %v", err))
 	}
-	scanService := scanning.NewService(scanning.NewTrivyScanner(), scanning.NewClamAVScanner(), scanStore, diagService, jobManager)
+	scanService := scanning.NewService(scanning.NewTrivyScanner(), scanning.NewClamAVScanner(), dockerClient, scanStore, diagService, jobManager)
 
 	releaseService := releases.NewService()
 	aiService := ai.NewService(nil)

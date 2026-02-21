@@ -20,9 +20,14 @@ type DiagService interface {
 	Log(level, source, message string)
 }
 
+type DockerClient interface {
+	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
+}
+
 type Service struct {
 	scanner        Scanner
 	malwareScanner MalwareScanner
+	docker         DockerClient
 	store          *Store
 	diag           DiagService
 	jobManager     *jobs.Manager
@@ -32,10 +37,11 @@ type Service struct {
 	jobCancels map[string]context.CancelFunc
 }
 
-func NewService(scanner Scanner, malwareScanner MalwareScanner, store *Store, diag DiagService, jm *jobs.Manager) *Service {
+func NewService(scanner Scanner, malwareScanner MalwareScanner, docker DockerClient, store *Store, diag DiagService, jm *jobs.Manager) *Service {
 	return &Service{
 		scanner:        scanner,
 		malwareScanner: malwareScanner,
+		docker:         docker,
 		store:          store,
 		diag:           diag,
 		jobManager:     jm,
@@ -541,6 +547,13 @@ func (s *Service) MalwareDetails(ctx context.Context, target, prefix string, lim
 
 func (s *Service) MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error) {
 	return s.store.MalwareDetails(ctx, "", "container:"+containerID, limit)
+}
+
+func (s *Service) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
+	if s.docker == nil {
+		return nil, errors.New("docker client not available in scanning service")
+	}
+	return s.docker.ListImages(ctx)
 }
 
 func newJobID() (string, error) {

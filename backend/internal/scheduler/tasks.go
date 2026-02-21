@@ -18,6 +18,7 @@ type ScannerService interface {
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
 	UpdateClamAVSignatures(ctx context.Context) (string, error)
+	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 }
 
 type ContainerAutomationPolicy func(ctx context.Context, containerID string) bool
@@ -101,34 +102,33 @@ func (t *TrivySweepTask) log(level, message string) {
 
 func (t *TrivySweepTask) Run(ctx context.Context) error {
 	t.log("INFO", "Starting Trivy security sweep task...")
-	containers, err := t.docker.ContainerList(ctx, container.ListOptions{})
+	
+	// Fetch all images to get unique primary references
+	images, err := t.scanner.ListImages(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("list images for sweep: %w", err)
 	}
 
-	seenImages := make(map[string]struct{}, len(containers))
 	queued := 0
-	for _, c := range containers {
-		if t.allow != nil && !t.allow(ctx, c.ID) {
+	for _, img := range images {
+		// Use the first tag or ID as target
+		target := img.ID
+		if len(img.RepoTags) > 0 {
+			target = img.RepoTags[0]
+		}
+		
+		if target == "" || strings.HasPrefix(target, "<none>") {
 			continue
 		}
-		image := strings.TrimSpace(c.Image)
-		if image == "" {
-			continue
-		}
-		if _, ok := seenImages[image]; ok {
-			continue
-		}
-		seenImages[image] = struct{}{}
 
-		t.log("INFO", fmt.Sprintf("Queueing Trivy scan for %s", image))
-		if _, err := t.scanner.StartScan(image); err != nil {
-			t.log("ERROR", fmt.Sprintf("Failed to queue Trivy scan for %s: %v", image, err))
+		t.log("INFO", fmt.Sprintf("Queueing Trivy scan for %s", target))
+		if _, err := t.scanner.StartScan(target); err != nil {
+			t.log("ERROR", fmt.Sprintf("Failed to queue Trivy scan for %s: %v", target, err))
 			continue
 		}
 		queued++
 	}
-	t.log("INFO", fmt.Sprintf("Trivy security sweep queued %d image scans", queued))
+	t.log("INFO", fmt.Sprintf("Trivy security sweep queued %d unique image scans", queued))
 	return nil
 }
 
