@@ -35,18 +35,32 @@ func (d *discordDispatcher) Send(ctx context.Context, msg Message) error {
 		color = 0xe74c3c // Red
 	}
 
-	payload := map[string]interface{}{
-		"embeds": []map[string]interface{}{
-			{
-				"title":       msg.Title,
-				"description": msg.Body,
-				"color":       color,
-				"footer": map[string]string{
-					"text": "HarborWatch - " + msg.Source,
-				},
-				"timestamp": time.Now().Format(time.RFC3339),
-			},
+	embed := map[string]interface{}{
+		"title":       msg.Title,
+		"description": msg.Body,
+		"color":       color,
+		"footer": map[string]string{
+			"text": "HarborWatch - " + msg.Source,
 		},
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+
+	if len(msg.Fields) > 0 {
+		var fields []map[string]interface{}
+		for k, v := range msg.Fields {
+			fields = append(fields, map[string]interface{}{
+				"name":   k,
+				"value":  v,
+				"inline": true,
+			})
+		}
+		embed["fields"] = fields
+	}
+
+	payload := map[string]interface{}{
+		"username":   "HarborWatch",
+		"avatar_url": "https://raw.githubusercontent.com/Jellman86/HarborWatch/main/web/public/logo-64.png",
+		"embeds":     []map[string]interface{}{embed},
 	}
 
 	body, err := json.Marshal(payload)

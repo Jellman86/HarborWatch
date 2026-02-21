@@ -227,10 +227,16 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 			if blocked, reason := shouldBlockForAI(analysis, threshold); blocked {
 				if s.notif != nil {
 					s.notif.Dispatch(ctx, notifications.Message{
-						Title:  "Update Paused: High Risk Detected",
-						Body:   fmt.Sprintf("AI blocked update for %s: %s", req.TargetImage, reason),
-						Level:  notifications.LevelCritical,
+						Title: "Update Blocked: AI High Risk",
+						Body:  fmt.Sprintf("AI analysis detected potential breaking changes for %s and has blocked the automatic rollout.", req.ContainerName),
+						Level: notifications.LevelCritical,
 						Source: "Update Engine",
+						Fields: map[string]string{
+							"Container": req.ContainerName,
+							"New Image": req.TargetImage,
+							"Risk Score": fmt.Sprintf("%d/100", analysis.RiskScore),
+							"Reason":    reason,
+						},
 					})
 				}
 				return fmt.Errorf("AI blocked update: %s", reason)
@@ -310,6 +316,19 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 	}
 
 	s.setRunProgress(jobID, "completed", 100)
+	if s.notif != nil {
+		s.notif.Dispatch(ctx, notifications.Message{
+			Title:  "Update Successful",
+			Body:   fmt.Sprintf("Container %s has been successfully updated to the latest image.", req.ContainerName),
+			Level:  notifications.LevelInfo,
+			Source: "Update Engine",
+			Fields: map[string]string{
+				"Container": req.ContainerName,
+				"New Image": req.TargetImage,
+				"Status":    "Ready",
+			},
+		})
+	}
 	s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "success", Status: "completed", Message: "Update pipeline completed", Timestamp: time.Now().UTC().Unix()})
 	s.finish(jobID, "completed", nil)
 }
@@ -444,10 +463,14 @@ func (s *Service) finish(jobID, status string, err error) {
 		// Send notification for failures
 		if (status == "failed" || status == "rolled_back") && s.notif != nil {
 			s.notif.Dispatch(context.Background(), notifications.Message{
-				Title:  fmt.Sprintf("Update Job %s: %s", status, jobID),
-				Body:   fmt.Sprintf("Error: %s", msg),
+				Title:  fmt.Sprintf("Update Job %s", strings.Title(status)),
+				Body:   fmt.Sprintf("An update task has failed or was rolled back: %s", msg),
 				Level:  notifications.LevelCritical,
 				Source: "Update Engine",
+				Fields: map[string]string{
+					"Job ID": jobID,
+					"Error":  msg,
+				},
 			})
 		}
 	}

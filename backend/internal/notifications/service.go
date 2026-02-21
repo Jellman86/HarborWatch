@@ -17,10 +17,11 @@ const (
 
 // Message is the standard notification payload.
 type Message struct {
-	Title  string `json:"title"`
-	Body   string `json:"body"`
-	Level  Level  `json:"level"`
-	Source string `json:"source"`
+	Title  string            `json:"title"`
+	Body   string            `json:"body"`
+	Level  Level             `json:"level"`
+	Source string            `json:"source"`
+	Fields map[string]string `json:"fields,omitempty"`
 }
 
 // Dispatcher defines the interface for different notification platforms.
