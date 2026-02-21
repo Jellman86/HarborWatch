@@ -735,7 +735,9 @@
                         </h2>
                         {#if detail.summary.health && detail.summary.health !== "none"}
                              <span class="px-2 py-1 bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded text-[9px] font-black uppercase flex items-center gap-1.5">
-                                <span class="w-1.5 h-1.5 rounded-full {healthColor(detail.summary.health)} animate-pulse"></span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 {healthColor(detail.summary.health).replace('bg-', 'text-')} {detail.summary.health === 'starting' ? 'animate-pulse' : ''}" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
+                                </svg>
                                 {detail.summary.health}
                             </span>
                         {/if}

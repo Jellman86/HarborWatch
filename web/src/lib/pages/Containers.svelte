@@ -553,15 +553,18 @@
                             {/if}
                             {#if ignored}
                                 <span class="p-1.5 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200 rounded-lg" title="Ignored from Automation">
+                                    <!-- Ghost icon for ignored/stealth -->
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A8.014 8.014 0 004 10V4.414L2.293 3.707a1 1 0 001.414-1.414zM5 10a5 5 0 015-5h.414l1.414 1.414L10 7.828V10a3 3 0 00-3 3H5v-3z" clip-rule="evenodd" />
-                                        <path d="M10 15a3 3 0 002.828-2l1.414 1.414A5.002 5.002 0 0110 17H5v-2h5z" />
+                                        <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
                                     </svg>
                                 </span>
                             {/if}
                             {#if c.health && c.health !== "none"}
-                                <div class="flex items-center p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700" title={`Health: ${c.health}`}>
-                                    <span class="w-2 h-2 rounded-full {healthColor(c.health)} {c.health === 'starting' ? 'animate-pulse' : ''}"></span>
+                                <div class="flex items-center p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500" title={`Health: ${c.health}`}>
+                                    <!-- Heartbeat/Medicine icon -->
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 {healthColor(c.health).replace('bg-', 'text-')} {c.health === 'starting' ? 'animate-pulse' : ''}" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
+                                    </svg>
                                 </div>
                             {/if}
                             <span class="p-1.5 rounded-lg {stateColor(c.state)}" title={`Status: ${c.state}`}>
