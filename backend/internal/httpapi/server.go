@@ -72,6 +72,7 @@ type ReleaseService interface {
 type AIService interface {
 	HasProvider() bool
 	AnalyzeReleaseNotes(ctx context.Context, notes string) (ai.AnalysisResult, error)
+	AnalyzeFleet(ctx context.Context, inventory string) (string, error)
 	AuditCompose(ctx context.Context, yaml string) (string, error)
 	AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error)
 	ListConversations(ctx context.Context, limit, offset int) ([]ai.ConversationRecord, error)
@@ -1679,8 +1680,53 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					return
 				}
 
-				advice := generateFleetAdvice(containers, aiService != nil && aiService.HasProvider())
+				heuristic := generateFleetAdvice(containers, aiService != nil && aiService.HasProvider())
+				advice := heuristic
+
+				if aiService != nil && aiService.HasProvider() {
+					// Prepare detailed inventory for AI
+					var b strings.Builder
+					b.WriteString(heuristic + "\n\nDetailed Container List:\n")
+					for _, c := range containers {
+						b.WriteString(fmt.Sprintf("- %s (Image: %s, State: %s, Update: %t)\n", trimContainerName(c.Names), c.Image, c.State, c.UpdateAvailable))
+					}
+					
+					ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+					defer cancel()
+					aiAdvice, err := aiService.AnalyzeFleet(ctx, b.String())
+					if err == nil {
+						advice = aiAdvice
+					}
+				}
+
+				// Persist the advice
+				if usageStore != nil {
+					_ = usageStore.SaveFleetAdvice(r.Context(), ai.FleetAdviceRecord{
+						Timestamp: time.Now().UTC().Unix(),
+						Inventory: fmt.Sprintf("%d containers", len(containers)),
+						Advice:    advice,
+					})
+				}
+
 				writeJSON(w, http.StatusOK, map[string]string{"advice": advice})
+			})
+
+			r.Get("/fleet-advice", func(w http.ResponseWriter, r *http.Request) {
+				if aiService == nil {
+					writeJSON(w, http.StatusOK, map[string]string{"advice": ""})
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+				defer cancel()
+				rec, err := aiService.GetLatestFleetAdvice(ctx)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "fetch_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]interface{}{
+					"advice":    rec.Advice,
+					"timestamp": rec.Timestamp,
+				})
 			})
 
 			r.Get("/status", func(w http.ResponseWriter, r *http.Request) {

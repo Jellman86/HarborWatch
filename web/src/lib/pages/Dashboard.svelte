@@ -12,17 +12,24 @@
     }>();
     let scanSummary = $state<ScanSummary | null>(null);
     let fleetAdvice = $state("");
+    let fleetAdviceTs = $state<number | null>(null);
     let analyzingFleet = $state(false);
     let schedules = $state<any[]>([]);
 
     async function loadData() {
         try {
-            const [scanRes, schedRes] = await Promise.all([
+            const [scanRes, schedRes, adviceRes] = await Promise.all([
                 fetch("/api/scans/summary"),
-                fetch("/api/scheduler/schedules")
+                fetch("/api/scheduler/schedules"),
+                fetch("/api/ai/fleet-advice")
             ]);
             if (scanRes.ok) scanSummary = await scanRes.json();
             if (schedRes.ok) schedules = await schedRes.json();
+            if (adviceRes.ok) {
+                const adviceData = await adviceRes.json();
+                fleetAdvice = adviceData.advice;
+                fleetAdviceTs = adviceData.timestamp;
+            }
         } catch (e) {
             console.error("Failed to load dashboard data", e);
         }
@@ -40,6 +47,7 @@
             if (res.ok) {
                 const data = await res.json();
                 fleetAdvice = data.advice;
+                fleetAdviceTs = Math.floor(Date.now() / 1000);
             }
         } catch (e) {
             console.error("Fleet analysis failed", e);
@@ -261,15 +269,23 @@
                     >
                         {analyzingFleet ? 'Processing Fleet Data...' : 'Generate AI Advice'}
                     </button>
-                </div>
-
-                {#if fleetAdvice}
-                    <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-5">
-                        <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
-                            {fleetAdvice}
-                        </div>
-                    </div>
-                {:else}
+                            </div>
+                
+                            {#if fleetAdvice}
+                                <div class="space-y-3">
+                                    {#if fleetAdviceTs}
+                                        <p class="text-[10px] font-black text-brand-500 uppercase tracking-widest ml-1">
+                                            Last generated: {new Date(fleetAdviceTs * 1000).toLocaleString()}
+                                        </p>
+                                    {/if}
+                                    <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-5">
+                                        <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
+                                            {fleetAdvice}
+                                        </div>
+                                    </div>
+                                </div>
+                            {:else}
+                
                     <div class="py-12 text-center">
                         <p class="text-slate-500 text-sm font-medium italic">Request a fresh analysis to see proactive security and maintenance recommendations.</p>
                     </div>

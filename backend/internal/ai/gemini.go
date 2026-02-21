@@ -83,6 +83,21 @@ Release notes:
 	return result, nil
 }
 
+func (p *geminiProvider) AnalyzeFleet(ctx context.Context, inventory string) (string, error) {
+	prompt := `Analyze the following Docker fleet inventory and provide proactive maintenance, security, and optimization advice.
+Identify containers that may need updates, those that are stopped and might be orphaned, and suggest general best practices based on the deployment mix.
+Return a technical, concise report in Markdown.
+
+Fleet inventory:
+` + inventory
+	text, inputTokens, outputTokens, totalTokens, err := p.generate(ctx, prompt)
+	if err != nil {
+		return "", err
+	}
+	p.emitUsage("fleet_advice", inputTokens, outputTokens, totalTokens)
+	return text, nil
+}
+
 func (p *geminiProvider) AuditCompose(ctx context.Context, yaml string) (string, error) {
 	prompt := `Audit this docker-compose.yml for security and reliability.
 Flag privileged mode, host networking, weak volume mounts, missing limits, and poor restart policies.

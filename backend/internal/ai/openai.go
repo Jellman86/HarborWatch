@@ -83,6 +83,28 @@ Release Notes:
 	return result, nil
 }
 
+func (p *openAIProvider) AnalyzeFleet(ctx context.Context, inventory string) (string, error) {
+	prompt := `Analyze the following Docker fleet inventory and provide proactive maintenance, security, and optimization advice. 
+Identify containers that may need updates, those that are stopped and might be orphaned, and suggest general best practices based on the deployment mix.
+Provide a technical, concise summary in Markdown format.
+
+Fleet Inventory:
+` + inventory
+
+	resp, err := p.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: p.model,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleUser, Content: prompt},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("openai completion failed: %w", err)
+	}
+	p.emitUsage("fleet_advice", resp.Usage)
+
+	return resp.Choices[0].Message.Content, nil
+}
+
 func (p *openAIProvider) AuditCompose(ctx context.Context, yaml string) (string, error) {
 	prompt := `Audit the following docker-compose.yml file for security risks, missing resource limits, or insecure practices. 
 Provide a concise, professional summary of findings and recommended fixes in Markdown format.

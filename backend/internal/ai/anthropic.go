@@ -81,6 +81,21 @@ Release notes:
 	return result, nil
 }
 
+func (p *anthropicProvider) AnalyzeFleet(ctx context.Context, inventory string) (string, error) {
+	prompt := `Analyze the following Docker fleet inventory and provide proactive maintenance, security, and optimization advice.
+Identify containers that may need updates, those that are stopped and might be orphaned, and suggest general best practices based on the deployment mix.
+Return a concise, technical report in Markdown.
+
+Fleet inventory:
+` + inventory
+	text, inputTokens, outputTokens, err := p.generate(ctx, prompt)
+	if err != nil {
+		return "", err
+	}
+	p.emitUsage("fleet_advice", inputTokens, outputTokens)
+	return text, nil
+}
+
 func (p *anthropicProvider) AuditCompose(ctx context.Context, yaml string) (string, error) {
 	prompt := `Audit the following docker-compose.yml for security and resilience.
 Focus on privileged mode, unsafe mounts, missing resource limits, network exposure, weak restart policies, and secret handling.

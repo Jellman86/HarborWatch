@@ -97,11 +97,20 @@ type ConversationRecord struct {
 	Response  string `json:"response"`
 }
 
+type FleetAdviceRecord struct {
+	ID        int64  `json:"id"`
+	Timestamp int64  `json:"timestamp"`
+	Inventory string `json:"inventory"`
+	Advice    string `json:"advice"`
+}
+
 type UsageStore interface {
 	RecordUsage(ctx context.Context, rec UsageRecord) error
 	RecordConversation(ctx context.Context, rec ConversationRecord) error
 	SummaryUsage(ctx context.Context, from, to int64) (UsageSummary, error)
 	ListConversations(ctx context.Context, limit, offset int) ([]ConversationRecord, error)
+	SaveFleetAdvice(ctx context.Context, rec FleetAdviceRecord) error
+	GetLatestFleetAdvice(ctx context.Context) (FleetAdviceRecord, error)
 }
 
 type usageRecorderProvider interface {
@@ -112,6 +121,7 @@ type usageRecorderProvider interface {
 type Provider interface {
 	Name() string
 	AnalyzeReleaseNotes(ctx context.Context, notes string) (AnalysisResult, error)
+	AnalyzeFleet(ctx context.Context, inventory string) (string, error)
 	AuditCompose(ctx context.Context, yaml string) (string, error)
 	AnalyzeMetrics(ctx context.Context, containerID string, metrics []any) (string, error)
 	AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (HealthAssessment, error)
@@ -173,6 +183,23 @@ func (s *Service) AnalyzeReleaseNotes(ctx context.Context, notes string) (Analys
 			Feature:  "release_analysis",
 			Prompt:   notes,
 			Response: string(respBytes),
+		})
+	}
+	return res, err
+}
+
+func (s *Service) AnalyzeFleet(ctx context.Context, inventory string) (string, error) {
+	provider := s.currentProvider()
+	if provider == nil {
+		return "", errors.New("no AI provider configured")
+	}
+	res, err := provider.AnalyzeFleet(ctx, inventory)
+	if err == nil {
+		s.recordConversation(ConversationRecord{
+			Provider: provider.Name(),
+			Feature:  "fleet_advice",
+			Prompt:   inventory,
+			Response: res,
 		})
 	}
 	return res, err
@@ -258,6 +285,14 @@ func (s *Service) ListConversations(ctx context.Context, limit, offset int) ([]C
 		return []ConversationRecord{}, nil
 	}
 	return store.ListConversations(ctx, limit, offset)
+}
+
+func (s *Service) GetLatestFleetAdvice(ctx context.Context) (FleetAdviceRecord, error) {
+	store := s.currentUsageStore()
+	if store == nil {
+		return FleetAdviceRecord{}, errors.New("no usage store configured")
+	}
+	return store.GetLatestFleetAdvice(ctx)
 }
 
 func (s *Service) bindUsageRecorderLocked(provider Provider) {

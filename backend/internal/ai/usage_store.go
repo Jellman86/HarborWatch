@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS ai_conversations (
 	prompt TEXT NOT NULL,
 	response TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ai_fleet_advice (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	ts INTEGER NOT NULL,
+	inventory TEXT NOT NULL,
+	advice TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_ts ON ai_usage_events(ts);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_provider_model ON ai_usage_events(provider, model);
 CREATE INDEX IF NOT EXISTS idx_ai_conv_ts ON ai_conversations(ts);
@@ -94,6 +100,35 @@ LIMIT ? OFFSET ?
 		out = append(out, rec)
 	}
 	return out, nil
+}
+
+func (s *UsageSQLiteStore) SaveFleetAdvice(ctx context.Context, rec FleetAdviceRecord) error {
+	ts := rec.Timestamp
+	if ts <= 0 {
+		ts = time.Now().UTC().Unix()
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO ai_fleet_advice(ts, inventory, advice)
+VALUES(?, ?, ?)
+`, ts, rec.Inventory, rec.Advice)
+	return err
+}
+
+func (s *UsageSQLiteStore) GetLatestFleetAdvice(ctx context.Context) (FleetAdviceRecord, error) {
+	var rec FleetAdviceRecord
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, ts, inventory, advice
+FROM ai_fleet_advice
+ORDER BY ts DESC, id DESC
+LIMIT 1
+`).Scan(&rec.ID, &rec.Timestamp, &rec.Inventory, &rec.Advice)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return FleetAdviceRecord{}, nil
+		}
+		return FleetAdviceRecord{}, err
+	}
+	return rec, nil
 }
 
 func (s *UsageSQLiteStore) SummaryUsage(ctx context.Context, from, to int64) (UsageSummary, error) {
