@@ -1700,22 +1700,35 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 						advice = aiAdvice
 					}
 				}
+				adviceMarkdown, adviceHTML, err := ai.NormalizeAndRenderMarkdown(advice)
+				if err != nil {
+					adviceMarkdown = strings.TrimSpace(advice)
+					adviceHTML = ""
+				}
 
 				// Persist the advice
 				if aiService != nil {
 					_ = aiService.SaveFleetAdvice(r.Context(), ai.FleetAdviceRecord{
 						Timestamp: time.Now().UTC().Unix(),
 						Inventory: fmt.Sprintf("%d containers", len(containers)),
-						Advice:    advice,
+						Advice:    adviceMarkdown,
 					})
 				}
 
-				writeJSON(w, http.StatusOK, map[string]string{"advice": advice})
+				writeJSON(w, http.StatusOK, map[string]string{
+					"advice":         adviceMarkdown,
+					"adviceMarkdown": adviceMarkdown,
+					"adviceHtml":     adviceHTML,
+				})
 			})
 
 			r.Get("/fleet-advice", func(w http.ResponseWriter, r *http.Request) {
 				if aiService == nil {
-					writeJSON(w, http.StatusOK, map[string]string{"advice": ""})
+					writeJSON(w, http.StatusOK, map[string]string{
+						"advice":         "",
+						"adviceMarkdown": "",
+						"adviceHtml":     "",
+					})
 					return
 				}
 				ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
@@ -1725,9 +1738,16 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					writeError(w, http.StatusInternalServerError, "fetch_failed", err.Error())
 					return
 				}
+				adviceMarkdown, adviceHTML, renderErr := ai.NormalizeAndRenderMarkdown(rec.Advice)
+				if renderErr != nil {
+					adviceMarkdown = strings.TrimSpace(rec.Advice)
+					adviceHTML = ""
+				}
 				writeJSON(w, http.StatusOK, map[string]interface{}{
-					"advice":    rec.Advice,
-					"timestamp": rec.Timestamp,
+					"advice":         adviceMarkdown,
+					"adviceMarkdown": adviceMarkdown,
+					"adviceHtml":     adviceHTML,
+					"timestamp":      rec.Timestamp,
 				})
 			})
 

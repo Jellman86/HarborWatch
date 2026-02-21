@@ -731,6 +731,34 @@ func TestFleetAdviceEndpoint(t *testing.T) {
 	if strings.TrimSpace(payload["advice"]) == "" {
 		t.Fatalf("expected non-empty advice payload")
 	}
+	if strings.TrimSpace(payload["adviceMarkdown"]) == "" {
+		t.Fatalf("expected non-empty adviceMarkdown payload")
+	}
+	if strings.TrimSpace(payload["adviceHtml"]) == "" {
+		t.Fatalf("expected non-empty adviceHtml payload")
+	}
+}
+
+func TestFleetAdviceGetEndpointIncludesMarkdownFields(t *testing.T) {
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ai/fleet-advice", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if _, ok := payload["advice"]; !ok {
+		t.Fatalf("expected advice key in payload")
+	}
+	if _, ok := payload["adviceMarkdown"]; !ok {
+		t.Fatalf("expected adviceMarkdown key in payload")
+	}
+	if _, ok := payload["adviceHtml"]; !ok {
+		t.Fatalf("expected adviceHtml key in payload")
+	}
 }
 
 func TestAIUsageEndpointGracefulWithoutUsageStore(t *testing.T) {

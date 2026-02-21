@@ -12,6 +12,7 @@
     }>();
     let scanSummary = $state<ScanSummary | null>(null);
     let fleetAdvice = $state("");
+    let fleetAdviceHtml = $state("");
     let fleetAdviceTs = $state<number | null>(null);
     let analyzingFleet = $state(false);
     let schedules = $state<any[]>([]);
@@ -27,7 +28,8 @@
             if (schedRes.ok) schedules = await schedRes.json();
             if (adviceRes.ok) {
                 const adviceData = await adviceRes.json();
-                fleetAdvice = adviceData.advice;
+                fleetAdvice = adviceData.adviceMarkdown || adviceData.advice || "";
+                fleetAdviceHtml = adviceData.adviceHtml || "";
                 fleetAdviceTs = adviceData.timestamp;
             }
         } catch (e) {
@@ -46,7 +48,8 @@
             });
             if (res.ok) {
                 const data = await res.json();
-                fleetAdvice = data.advice;
+                fleetAdvice = data.adviceMarkdown || data.advice || "";
+                fleetAdviceHtml = data.adviceHtml || "";
                 fleetAdviceTs = Math.floor(Date.now() / 1000);
             }
         } catch (e) {
@@ -279,9 +282,15 @@
                                         </p>
                                     {/if}
                                     <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-5">
-                                        <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
-                                            {fleetAdvice}
-                                        </div>
+                                        {#if fleetAdviceHtml}
+                                            <div class="markdown-content prose prose-invert prose-sm max-w-none text-slate-200 leading-relaxed">
+                                                {@html fleetAdviceHtml}
+                                            </div>
+                                        {:else}
+                                            <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
+                                                {fleetAdvice}
+                                            </div>
+                                        {/if}
                                     </div>
                                 </div>
                             {:else}
