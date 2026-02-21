@@ -145,6 +145,7 @@
 
     let loading = $state(false);
     let saving = $state(false);
+    let bulkUpdating = $state(false);
     let domainToggleBusy = $state<AutomationDomain | "">("");
     let savingScheduleId = $state("");
     let testingProvider = $state("");
@@ -597,6 +598,48 @@
             toasts.error(e instanceof Error ? e.message : "Failed to load settings");
         } finally {
             loading = false;
+        }
+    }
+
+    async function bulkSetAutoApply() {
+        if (!discoveredContainers.length) return;
+        if (!confirm(`Are you sure you want to set ALL (${discoveredContainers.length}) containers to "Auto Apply"? This will enable automated upgrades for every container not explicitly ignored.`)) return;
+
+        bulkUpdating = true;
+        let success = 0;
+        let fail = 0;
+
+        try {
+            // We do this in parallel but with a small limit if there are many, 
+            // though for most home labs Discovery list is small enough for Promise.all
+            const results = await Promise.allSettled(discoveredContainers.map(async (c) => {
+                const res = await fetch(`/api/docker/${encodeURIComponent(c.id)}/rules`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        containerId: c.id,
+                        updatePolicy: "auto",
+                        inheritAutomation: true
+                    })
+                });
+                if (!res.ok) throw new Error("fail");
+                return true;
+            }));
+
+            results.forEach(r => {
+                if (r.status === "fulfilled") success++;
+                else fail++;
+            });
+
+            if (fail > 0) {
+                toasts.warning(`Bulk update partial: ${success} set to Auto, ${fail} failed.`);
+            } else {
+                toasts.success(`Successfully set all ${success} containers to Auto Apply.`);
+            }
+        } catch (e) {
+            toasts.error("Bulk update failed to complete.");
+        } finally {
+            bulkUpdating = false;
         }
     }
 
@@ -1113,6 +1156,16 @@
                                                     class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                                 />
                                                 <p class="text-[11px] text-slate-500">Minimum wait before a previously failed upgrade can be retried automatically.</p>
+                                            </div>
+                                            <div class="space-y-2 flex flex-col justify-end">
+                                                <button
+                                                    onclick={bulkSetAutoApply}
+                                                    disabled={bulkUpdating || !discoveredContainers.length}
+                                                    class="w-full px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/20"
+                                                >
+                                                    {bulkUpdating ? "Applying..." : "Bulk Enable Auto-Apply"}
+                                                </button>
+                                                <p class="text-[10px] text-slate-500 italic mt-1 text-center">Set all containers to follow global auto-apply policy.</p>
                                             </div>
                                         </div>
                                     </div>
