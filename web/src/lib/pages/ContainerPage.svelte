@@ -15,6 +15,7 @@
     import TrivyFindingsPanel from "../components/TrivyFindingsPanel.svelte";
     import PortainerLogo from "../components/PortainerLogo.svelte";
     import { toasts } from "../stores/ToastStore";
+    import { configStore } from "../stores/config.svelte";
 
     interface ContainerIntelRecord {
         containerId: string;
@@ -743,7 +744,7 @@
                                 Update Available
                             </span>
                         {/if}
-                        {#if intel?.portainerManaged}
+                        {#if configStore.portainerActive && intel?.portainerManaged}
                             <span class="px-2 py-1 {intel?.portainerConfigured ? 'bg-cyan-500/10 text-cyan-500 badge-cyan-glow' : 'bg-amber-500 text-white'} rounded-md text-[9px] font-black uppercase whitespace-nowrap flex items-center gap-1.5">
                                 <PortainerLogo size={12} />
                                 Portainer Managed
@@ -766,7 +767,7 @@
 
         <!-- Navigation Tabs -->
         <div class="flex flex-wrap gap-1 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl w-full md:w-fit border border-slate-200 dark:border-slate-800">
-            {#each ['insights', 'security', 'lifecycle', 'intelligence', 'configuration'] as tab}
+            {#each ['insights', 'security', 'lifecycle', ...(configStore.aiActive ? ['intelligence'] : []), 'configuration'] as tab}
                 <button 
                     onclick={() => activeTab = tab}
                     class="flex-1 md:flex-none px-3 md:px-6 py-2.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all {activeTab === tab ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
@@ -885,7 +886,7 @@
                 </div>
             {:else if activeTab === 'lifecycle'}
                 <div class="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    {#if intel?.portainerManaged && !intel?.portainerConfigured}
+                    {#if intel?.portainerManaged && !configStore.portainerActive}
                         <div class="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50 p-4 rounded-2xl flex items-start gap-3">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -935,19 +936,21 @@
                                             <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
                                                 Automation is paused. You must explicitly trigger the upgrade flow using the button below.
                                             </p>
-                                            <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
-                                                <div>
-                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Bypass AI Assessment</p>
-                                                    <p class="text-[11px] text-slate-500">Skip AI breaking-change analysis for manual runs.</p>
+                                            {#if configStore.aiActive}
+                                                <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                                    <div>
+                                                        <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Bypass AI Assessment</p>
+                                                        <p class="text-[11px] text-slate-500">Skip AI breaking-change analysis for manual runs.</p>
+                                                    </div>
+                                                    <button
+                                                        onclick={() => bypassAi = !bypassAi}
+                                                        class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                        aria-label="Toggle AI Bypass"
+                                                    >
+                                                        <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onclick={() => bypassAi = !bypassAi}
-                                                    class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                    aria-label="Toggle AI Bypass"
-                                                >
-                                                    <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
-                                                </button>
-                                            </div>
+                                            {/if}
 
                                             <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
                                                 <div>
@@ -1022,25 +1025,27 @@
                             {/if}
                         </div>
 
-                        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Breaking Change Signals</h3>
-                            <p class="text-[11px] text-slate-500 mt-1">Recent AI release assessments that flagged breaking-change risk.</p>
-                            <div class="mt-4 space-y-3 max-h-[280px] overflow-y-auto pr-1">
-                                {#if loadingUpdateHistory}
-                                    <p class="text-[11px] text-slate-500">Loading lifecycle history...</p>
-                                {:else}
-                                    {#each updateHistory.filter((job) => (job.aiAnalysis?.breakingChanges || []).length > 0).slice(0, 6) as job}
-                                        <div class="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-3">
-                                            <p class="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{job.targetImage}</p>
-                                            <p class="text-[10px] text-amber-700/80 dark:text-amber-200/90 mt-1">{new Date(job.updatedAt * 1000).toLocaleString()}</p>
-                                            <p class="text-[11px] text-amber-900 dark:text-amber-100 mt-2">{job.aiAnalysis?.breakingChanges?.[0]}</p>
-                                        </div>
+                        {#if configStore.aiActive}
+                            <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Breaking Change Signals</h3>
+                                <p class="text-[11px] text-slate-500 mt-1">Recent AI release assessments that flagged breaking-change risk.</p>
+                                <div class="mt-4 space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                                    {#if loadingUpdateHistory}
+                                        <p class="text-[11px] text-slate-500">Loading lifecycle history...</p>
                                     {:else}
-                                        <p class="text-[11px] text-slate-500 italic">No recent breaking-change notices for this container.</p>
-                                    {/each}
-                                {/if}
+                                        {#each updateHistory.filter((job) => (job.aiAnalysis?.breakingChanges || []).length > 0).slice(0, 6) as job}
+                                            <div class="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-3">
+                                                <p class="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{job.targetImage}</p>
+                                                <p class="text-[10px] text-amber-700/80 dark:text-amber-200/90 mt-1">{new Date(job.updatedAt * 1000).toLocaleString()}</p>
+                                                <p class="text-[11px] text-amber-900 dark:text-amber-100 mt-2">{job.aiAnalysis?.breakingChanges?.[0]}</p>
+                                            </div>
+                                        {:else}
+                                            <p class="text-[11px] text-slate-500 italic">No recent breaking-change notices for this container.</p>
+                                        {/each}
+                                    {/if}
+                                </div>
                             </div>
-                        </div>
+                        {/if}
                     </div>
 
                     <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
@@ -1189,53 +1194,57 @@
                 </div>
             {:else if activeTab === 'configuration'}
                 <div class="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <div class="flex items-center justify-between gap-3 mb-4">
-                            <h4 class="text-sm font-black uppercase text-slate-400 tracking-widest">Compose Audit History</h4>
-                            <button
-                                onclick={() => loadComposeAuditHistory(false)}
-                                disabled={loadingComposeAuditHistory}
-                                class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
-                            >
-                                {loadingComposeAuditHistory ? "Refreshing..." : "Refresh"}
-                            </button>
-                        </div>
-                        <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                            {#if loadingComposeAuditHistory}
-                                <p class="text-[11px] text-slate-500">Loading compose audit history...</p>
-                            {:else}
-                                {#each composeAuditHistory as record}
-                                    <button
-                                        onclick={() => loadComposeAuditRecord(record.id)}
-                                        class="w-full text-left rounded-xl border px-3 py-2 transition-colors {selectedComposeAuditId === record.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/30'}"
-                                    >
-                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                            {new Date(record.createdAt * 1000).toLocaleString()}
-                                        </p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                                            {record.headline || "Compose audit"}
-                                        </p>
-                                        <p class="mt-1 text-[10px] text-slate-500">{record.provider} / {record.model}</p>
-                                    </button>
+                    {#if configStore.aiActive}
+                        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                            <div class="flex items-center justify-between gap-3 mb-4">
+                                <h4 class="text-sm font-black uppercase text-slate-400 tracking-widest">Compose Audit History</h4>
+                                <button
+                                    onclick={() => loadComposeAuditHistory(false)}
+                                    disabled={loadingComposeAuditHistory}
+                                    class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                                >
+                                    {loadingComposeAuditHistory ? "Refreshing..." : "Refresh"}
+                                </button>
+                            </div>
+                            <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                                {#if loadingComposeAuditHistory}
+                                    <p class="text-[11px] text-slate-500">Loading compose audit history...</p>
                                 {:else}
-                                    <p class="text-[11px] text-slate-500 italic">No compose audits persisted yet. Run an audit to build history.</p>
-                                {/each}
-                            {/if}
+                                    {#each composeAuditHistory as record}
+                                        <button
+                                            onclick={() => loadComposeAuditRecord(record.id)}
+                                            class="w-full text-left rounded-xl border px-3 py-2 transition-colors {selectedComposeAuditId === record.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/30'}"
+                                        >
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                {new Date(record.createdAt * 1000).toLocaleString()}
+                                            </p>
+                                            <p class="mt-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                                {record.headline || "Compose audit"}
+                                            </p>
+                                            <p class="mt-1 text-[10px] text-slate-500">{record.provider} / {record.model}</p>
+                                        </button>
+                                    {:else}
+                                        <p class="text-[11px] text-slate-500 italic">No compose audits persisted yet. Run an audit to build history.</p>
+                                    {/each}
+                                {/if}
+                            </div>
                         </div>
-                    </div>
+                    {/if}
 
                     <div class="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
                         <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
                             <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Effective Compose Config</span>
-                            <button 
-                                onclick={runAudit}
-                                disabled={auditing}
-                                class="px-4 py-1.5 bg-brand-600 text-white rounded-lg font-black uppercase text-[9px] tracking-widest hover:bg-brand-700 transition-all disabled:opacity-50"
-                            >
-                                {auditing ? 'Analyzing...' : 'Audit with AI'}
-                            </button>
+                            {#if configStore.aiActive}
+                                <button 
+                                    onclick={runAudit}
+                                    disabled={auditing}
+                                    class="px-4 py-1.5 bg-brand-600 text-white rounded-lg font-black uppercase text-[9px] tracking-widest hover:bg-brand-700 transition-all disabled:opacity-50"
+                                >
+                                    {auditing ? 'Analyzing...' : 'Audit with AI'}
+                                </button>
+                            {/if}
                         </div>
-                        <pre class="p-8 text-emerald-500 font-mono text-xs overflow-x-auto leading-relaxed"><code>{configYaml || '# Automated discovery pending. Click "Audit with AI" to retrieve, analyze, and persist.'}</code></pre>
+                        <pre class="p-8 text-emerald-500 font-mono text-xs overflow-x-auto leading-relaxed"><code>{configYaml || (configStore.aiActive ? '# Automated discovery pending. Click "Audit with AI" to retrieve, analyze, and persist.' : '# Automated discovery pending.')}</code></pre>
                     </div>
 
                     {#if aiAuditMarkdown}

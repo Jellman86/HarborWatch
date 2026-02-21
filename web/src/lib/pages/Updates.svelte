@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from "svelte";
     import type { UpdateJobStatus, UpdateStepEvent, UpdateStartResponse } from "../api-types";
+    import { configStore } from "../stores/config.svelte";
 
     // Component State
     let { params } = $props<{
@@ -113,15 +114,15 @@
         return persistedStep?.status ?? 'pending';
     };
 
-    const steps = [
+    const steps = $derived([
         { id: 'preflight', label: 'Preflight' },
-        { id: 'release_analysis', label: 'AI Analysis' },
+        ...(configStore.aiActive ? [{ id: 'release_analysis', label: 'AI Analysis' }] : []),
         { id: 'backup', label: 'Backup' },
         { id: 'pull', label: 'Pull Image' },
         { id: 'recreate', label: 'Recreate' },
         { id: 'validate', label: 'Validate' },
         { id: 'cleanup', label: 'Cleanup' },
-    ];
+    ]);
 
     onDestroy(() => {
         updateEventSource?.close();
@@ -199,7 +200,7 @@
             </div>
 
             <!-- AI Analysis Result -->
-            {#if updateJob?.aiAnalysis}
+            {#if configStore.aiActive && updateJob?.aiAnalysis}
                 <div class="mx-6 mb-6 p-5 bg-brand-50 dark:bg-brand-900/10 border border-brand-100 dark:border-brand-900/30 rounded-2xl">
                     <div class="flex items-center justify-between mb-3">
                         <div class="flex items-center gap-2">

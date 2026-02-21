@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import type { ContainerSummary, ScanSummary, ImageSummary, DockerEvent } from "../api-types";
+    import { configStore } from "../stores/config.svelte";
 
     let { containers, images, events, onRefresh } = $props<{ 
         containers: ContainerSummary[], 
@@ -100,40 +101,42 @@
     </div>
 
     <!-- AI Advisor -->
-    <div class="bg-slate-900 rounded-2xl p-6 md:p-7 border border-slate-800 shadow-2xl relative overflow-hidden opacity-0 animate-reveal stagger-2">
-        <div class="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-brand-600/10 to-transparent pointer-events-none"></div>
-        
-        <div class="relative z-10 space-y-6">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-4">
-                    <div class="w-11 h-11 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+    {#if configStore.aiActive}
+        <div class="bg-slate-900 rounded-2xl p-6 md:p-7 border border-slate-800 shadow-2xl relative overflow-hidden opacity-0 animate-reveal stagger-2">
+            <div class="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-brand-600/10 to-transparent pointer-events-none"></div>
+            
+            <div class="relative z-10 space-y-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div class="w-11 h-11 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-black text-white uppercase tracking-tight">Fleet Intelligence Advisor</h3>
+                            <p class="text-xs text-slate-400 font-medium">Heuristic analysis of your current deployment state.</p>
+                        </div>
                     </div>
-                    <div>
-                        <h3 class="text-lg font-black text-white uppercase tracking-tight">Fleet Intelligence Advisor</h3>
-                        <p class="text-xs text-slate-400 font-medium">Heuristic analysis of your current deployment state.</p>
-                    </div>
+                    <button 
+                        onclick={getFleetAdvice}
+                        disabled={analyzingFleet}
+                        class="px-7 py-2.5 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 active:scale-95 shadow-xl"
+                    >
+                        {analyzingFleet ? 'Processing Fleet Data...' : 'Generate AI Advice'}
+                    </button>
                 </div>
-                <button 
-                    onclick={getFleetAdvice}
-                    disabled={analyzingFleet}
-                    class="px-7 py-2.5 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 active:scale-95 shadow-xl"
-                >
-                    {analyzingFleet ? 'Processing Fleet Data...' : 'Generate AI Advice'}
-                </button>
-            </div>
 
-            {#if fleetAdvice}
-                <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-5">
-                    <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
-                        {fleetAdvice}
+                {#if fleetAdvice}
+                    <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-5">
+                        <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
+                            {fleetAdvice}
+                        </div>
                     </div>
-                </div>
-            {:else}
-                <div class="py-12 text-center">
-                    <p class="text-slate-500 text-sm font-medium italic">Request a fresh analysis to see proactive security and maintenance recommendations.</p>
-                </div>
-            {/if}
+                {:else}
+                    <div class="py-12 text-center">
+                        <p class="text-slate-500 text-sm font-medium italic">Request a fresh analysis to see proactive security and maintenance recommendations.</p>
+                    </div>
+                {/if}
+            </div>
         </div>
-    </div>
+    {/if}
 </div>

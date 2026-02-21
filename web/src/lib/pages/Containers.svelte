@@ -4,6 +4,7 @@
     import Sparkline from "../components/Sparkline.svelte";
     import PortainerLogo from "../components/PortainerLogo.svelte";
     import { parseImageRef } from "../utils/image-ref";
+    import { configStore } from "../stores/config.svelte";
 
     let { containers, params, onNavigate } = $props<{
         containers: ContainerSummary[];
@@ -538,7 +539,7 @@
                                     </svg>
                                 </span>
                             {/if}
-                            {#if lookupIntel(c)?.portainerManaged}
+                            {#if configStore.portainerActive && lookupIntel(c)?.portainerManaged}
                                 <span class="p-1.5 {lookupIntel(c)?.portainerConfigured ? 'bg-cyan-500/10 text-cyan-500' : 'bg-amber-500 text-white'} rounded-lg" title={lookupIntel(c)?.portainerConfigured ? "Managed by Portainer" : "Portainer integration required for safe updates"}>
                                     <PortainerLogo size={14} />
                                 </span>

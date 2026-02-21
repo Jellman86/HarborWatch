@@ -5,12 +5,14 @@
   import GlobalProgress from "./lib/components/GlobalProgress.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
   import { themeStore } from "./lib/stores/theme.svelte";
+  import { configStore } from "./lib/stores/config.svelte.ts";
   
   import type {
     ContainerSummary,
     DockerEvent,
     HealthResponse,
-    ImageSummary
+    ImageSummary,
+    Settings
   } from "./lib/api-types";
 
   // Navigation State
@@ -115,14 +117,16 @@
   async function loadGlobalData() {
     error = "";
     try {
-      const [h, c, i] = await Promise.all([
+      const [h, c, i, s] = await Promise.all([
         fetchJSON<HealthResponse>("/health"),
         fetchJSON<ContainerSummary[]>("/api/docker/containers"),
-        fetchJSON<ImageSummary[]>("/api/docker/images")
+        fetchJSON<ImageSummary[]>("/api/docker/images"),
+        fetchJSON<Settings>("/api/settings")
       ]);
       health = h; 
       containers = c || []; 
       images = i || [];
+      configStore.setSettings(s);
       connectEvents();
     } catch (e) { 
       error = e instanceof Error ? e.message : "Connection to backend failed"; 

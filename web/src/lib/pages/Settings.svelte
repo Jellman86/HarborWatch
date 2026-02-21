@@ -4,6 +4,7 @@
     import ThemeSwitcher from "../components/ThemeSwitcher.svelte";
     import type { ContainerSummary, Settings } from "../api-types";
     import { toasts } from "../stores/ToastStore";
+    import { configStore } from "../stores/config.svelte";
 
     let { onNavigate } = $props<{
         onNavigate: (route: string, params?: any) => void;
@@ -954,16 +955,19 @@
     <div class="flex flex-wrap gap-2 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
         {#each [
             { id: "automations", label: "Automations" },
-            { id: "ai", label: "AI" },
-            { id: "integrations", label: "Integrations" },
+            { id: "ai", label: "AI", status: configStore.initialized && !configStore.aiActive ? "Inactive" : "" },
+            { id: "integrations", label: "Integrations", status: configStore.initialized && !configStore.portainerActive && settings.portainerEnabled ? "Portainer Error" : "" },
             { id: "system", label: "System" },
             { id: "appearance", label: "Appearance" }
         ] as tab}
             <button
                 onclick={() => activeTab = tab.id}
-                class="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                class="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
             >
                 {tab.label}
+                {#if tab.status}
+                    <span class="px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 text-[8px] font-black">{tab.status}</span>
+                {/if}
             </button>
         {/each}
     </div>
@@ -1165,20 +1169,22 @@
                                                 </div>
 
                                                 <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-700 space-y-4">
-                                                    <div class="flex items-center justify-between">
-                                                        <div>
-                                                            <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Global AI Bypass</p>
-                                                            <p class="text-[11px] text-slate-500 mt-0.5 italic">Skip AI assessment for all update runs.</p>
+                                                    {#if configStore.aiActive}
+                                                        <div class="flex items-center justify-between">
+                                                            <div>
+                                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Global AI Bypass</p>
+                                                                <p class="text-[11px] text-slate-500 mt-0.5 italic">Skip AI assessment for all update runs.</p>
+                                                            </div>
+                                                            <button
+                                                                onclick={() => settings.globalBypassAi = !settings.globalBypassAi}
+                                                                disabled={isLocked("globalBypassAi")}
+                                                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.globalBypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                                aria-label="Toggle Global AI Bypass"
+                                                            >
+                                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.globalBypassAi ? 'right-1' : 'left-1'}"></div>
+                                                            </button>
                                                         </div>
-                                                        <button
-                                                            onclick={() => settings.globalBypassAi = !settings.globalBypassAi}
-                                                            disabled={isLocked("globalBypassAi")}
-                                                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.globalBypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                            aria-label="Toggle Global AI Bypass"
-                                                        >
-                                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.globalBypassAi ? 'right-1' : 'left-1'}"></div>
-                                                        </button>
-                                                    </div>
+                                                    {/if}
 
                                                     <div class="flex items-center justify-between pt-3 border-t border-slate-200/50 dark:border-slate-700/50">
                                                         <div>
@@ -1321,14 +1327,22 @@
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Features</p>
                         <p class="text-[11px] text-slate-500 mt-1">Disable this to fully turn off AI analysis and provider usage.</p>
                     </div>
-                    <button
-                        onclick={() => settings.aiEnabled = !settings.aiEnabled}
-                        disabled={isLocked("aiEnabled")}
-                        class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.aiEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                        aria-label="Toggle AI features"
-                    >
-                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.aiEnabled ? 'right-1' : 'left-1'}"></div>
-                    </button>
+                    <div class="flex items-center gap-3">
+                        {#if settings.aiEnabled && !settings.aiTestingPassed}
+                            <span class="px-2 py-1 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-[9px] font-black uppercase">Configuration Not Verified</span>
+                        {/if}
+                        {#if configStore.aiActive}
+                            <span class="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-[9px] font-black uppercase">Active & Verified</span>
+                        {/if}
+                        <button
+                            onclick={() => settings.aiEnabled = !settings.aiEnabled}
+                            disabled={isLocked("aiEnabled")}
+                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.aiEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                            aria-label="Toggle AI features"
+                        >
+                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.aiEnabled ? 'right-1' : 'left-1'}"></div>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="flex flex-wrap items-end gap-4">
@@ -1623,14 +1637,19 @@
                             <p class="text-xs font-black uppercase tracking-wider text-slate-500">Portainer Integration</p>
                             <p class="text-[11px] text-slate-500 mt-1">Control whether HarborWatch should query Portainer APIs.</p>
                         </div>
-                        <button
-                            onclick={() => settings.portainerEnabled = !settings.portainerEnabled}
-                            disabled={isLocked("portainerEnabled")}
-                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.portainerEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                            aria-label="Toggle Portainer integration"
-                        >
-                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.portainerEnabled ? 'right-1' : 'left-1'}"></div>
-                        </button>
+                        <div class="flex items-center gap-3">
+                            {#if settings.portainerEnabled && !settings.portainerTestingPassed}
+                                <span class="px-2 py-1 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[9px] font-black uppercase">Connectivity Error</span>
+                            {/if}
+                            <button
+                                onclick={() => settings.portainerEnabled = !settings.portainerEnabled}
+                                disabled={isLocked("portainerEnabled")}
+                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.portainerEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                aria-label="Toggle Portainer integration"
+                            >
+                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.portainerEnabled ? 'right-1' : 'left-1'}"></div>
+                            </button>
+                        </div>
                     </div>
                 </div>
 

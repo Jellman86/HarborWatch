@@ -49,6 +49,8 @@ type Settings struct {
 	MetricsNormalized           bool   `json:"metricsNormalized"`
 	GlobalBypassAI              bool   `json:"globalBypassAi"`
 	GlobalSkipHealthCheck       bool   `json:"globalSkipHealthCheck"`
+	AITestingPassed             bool   `json:"aiTestingPassed"`
+	PortainerTestingPassed      bool   `json:"portainerTestingPassed"`
 
 	// Metadata (read-only info for UI)
 	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
@@ -177,6 +179,10 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.GlobalBypassAI = parseStoredBool(value, st.GlobalBypassAI)
 		case "global_skip_health_check":
 			st.GlobalSkipHealthCheck = parseStoredBool(value, st.GlobalSkipHealthCheck)
+		case "ai_testing_passed":
+			st.AITestingPassed = parseStoredBool(value, st.AITestingPassed)
+		case "portainer_testing_passed":
+			st.PortainerTestingPassed = parseStoredBool(value, st.PortainerTestingPassed)
 		}
 	}
 
@@ -337,6 +343,8 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"metrics_normalized":             boolString(st.MetricsNormalized),
 		"global_bypass_ai":              boolString(st.GlobalBypassAI),
 		"global_skip_health_check":       boolString(st.GlobalSkipHealthCheck),
+		"ai_testing_passed":             boolString(st.AITestingPassed),
+		"portainer_testing_passed":      boolString(st.PortainerTestingPassed),
 	}
 
 	jsonToDbKey := map[string]string{
@@ -373,6 +381,8 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"metricsNormalized":           "metrics_normalized",
 		"globalBypassAi":              "global_bypass_ai",
 		"globalSkipHealthCheck":       "global_skip_health_check",
+		"aiTestingPassed":             "ai_testing_passed",
+		"portainerTestingPassed":      "portainer_testing_passed",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {

@@ -1772,6 +1772,11 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					writeError(w, http.StatusBadGateway, "ai_test_failed", err.Error())
 					return
 				}
+
+				// Update settings to reflect that testing has passed for this config
+				st.AITestingPassed = true
+				_ = settingsService.Save(r.Context(), st)
+
 				writeJSON(w, http.StatusOK, map[string]string{
 					"status":   "ok",
 					"provider": provider,
@@ -2339,9 +2344,26 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 
 				if fresh.PortainerEnabled && strings.TrimSpace(fresh.PortainerURL) != "" {
 					currentPortainerService = portainer.NewClient(fresh.PortainerURL, fresh.PortainerApiKey)
+					// Verify Portainer connectivity
+					testCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+					defer cancel()
+					if _, err := currentPortainerService.ListStacks(testCtx); err == nil {
+						fresh.PortainerTestingPassed = true
+					} else {
+						fresh.PortainerTestingPassed = false
+					}
 				} else {
 					currentPortainerService = nil
+					fresh.PortainerTestingPassed = false
 				}
+
+				// Reset AI testing pass if all keys are gone or AI disabled
+				if !fresh.AIEnabled || (strings.TrimSpace(fresh.OpenAIKey) == "" && strings.TrimSpace(fresh.AnthropicKey) == "" && strings.TrimSpace(fresh.GeminiKey) == "") {
+					fresh.AITestingPassed = false
+				}
+
+				// Save flags
+				_ = settingsService.Save(r.Context(), fresh)
 
 				if setter, ok := aiService.(interface{ SetProvider(ai.Provider) }); ok {
 					if fresh.AIEnabled {
