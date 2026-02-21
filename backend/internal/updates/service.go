@@ -35,6 +35,7 @@ type Request struct {
 	ValidateIntervalSec  int
 	AIValidateLogs       bool
 	AIBlockRiskThreshold int
+	BypassAI             bool
 
 	// Portainer support
 	IsPortainerManaged  bool
@@ -202,7 +203,7 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 	}
 
 	// AI analysis step...
-	if s.ai != nil && s.ai.HasProvider() {
+	if !req.BypassAI && s.ai != nil && s.ai.HasProvider() {
 		s.setRunProgress(jobID, "running", 10)
 		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
 			notes := buildAIReleaseContext(req)
@@ -239,11 +240,15 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 			return
 		}
 	} else {
+		message := "skipped: ai provider not configured"
+		if req.BypassAI {
+			message = "skipped: bypass requested by user"
+		}
 		s.emit(jobID, gen.UpdateStepEvent{
 			JobID:     jobID,
 			Step:      "release_analysis",
 			Status:    "completed",
-			Message:   "skipped: ai provider not configured",
+			Message:   message,
 			Timestamp: time.Now().UTC().Unix(),
 		})
 	}

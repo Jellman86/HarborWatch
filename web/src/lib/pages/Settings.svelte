@@ -970,21 +970,24 @@
 
                 <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-6">
                     <div class="space-y-4">
-                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40">
-                            <AutomationFlowChart
-                                title={automationConfig[activeAutomationTab].title}
-                                subtitle={automationConfig[activeAutomationTab].subtitle}
-                                accent={automationConfig[activeAutomationTab].accent}
-                                steps={flowSteps(activeAutomationTab)}
-                            />
-                            <p class="mt-2 text-xs text-slate-500">
-                                Diagram shows the ordered execution path. Connectors always leave the bottom of each node and enter the top of the next step.
-                            </p>
-                        </div>
+                        {#if activeAutomationTab !== "general"}
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40 animate-in fade-in zoom-in duration-300">
+                                <AutomationFlowChart
+                                    title={automationConfig[activeAutomationTab].title}
+                                    subtitle={automationConfig[activeAutomationTab].subtitle}
+                                    accent={automationConfig[activeAutomationTab].accent}
+                                    steps={flowSteps(activeAutomationTab)}
+                                />
+                                <p class="mt-2 text-xs text-slate-500">
+                                    Diagram shows the ordered execution path for this domain.
+                                </p>
+                            </div>
+                        {/if}
+                        
                         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/25 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Flow Notes</p>
+                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Task Status Overview</p>
                             <p class="mt-1 text-[11px] text-slate-500">
-                                Active means all required tasks are enabled. Partial means only part of the domain is enabled. Idle means no scheduled tasks are currently active.
+                                Active means scheduled tasks are enabled. Partial means some are paused. Idle means no tasks are currently scheduled for this domain.
                             </p>
                         </div>
                     </div>

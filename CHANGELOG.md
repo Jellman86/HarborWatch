@@ -2,6 +2,30 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.8.1] - 2026-02-21
+
+### Added
+- **Fleet Management Enhancements:**
+  - Implemented client-side sorting for the Fleet view (Name, State, Memory, CPU).
+  - Added a "Hide Ignored" toggle to the Fleet filter bar (enabled by default) to reduce clutter from system containers.
+  - Added a hidden item count indicator to the visibility badge.
+- **Stacks Card View Refactor:**
+  - Replaced the Stacks table with a high-density, responsive card grid.
+  - Implemented a layered "stack of cards" CSS effect to visually represent container orchestration.
+  - Improved deep-linking from Stacks to filtered Fleet views.
+- **Container Lifecycle Refinement:**
+  - Added a clear "Automatic" vs "Manual" lifecycle mode selector for individual containers.
+  - Implemented a "Bypass AI Assessment" toggle for manual updates, allowing users to skip AI analysis when needed.
+  - Added a "Breaking Change Signals" historical list to the Lifecycle tab, surfacing past AI alerts.
+- **Improved Container Insights:**
+  - Moved the **Execution History** (Action History) to the Insights tab for better context and cleaner UI.
+  - Simplified the **Disk Usage** metrics to focus on container footprint and active mounts, removing confusing "vs Host" comparisons.
+  - Added "Optimal Setup Guidance" to the Intelligence tab to help users improve AI automation accuracy.
+
+### Changed
+- **Sidebar Organization:** Moved the "About" link to the bottom of the sidebar to prioritize management tools.
+- **UI Cleanup:** Removed the confusing automation flow diagram specifically from the **General** settings tab to focus on capacity and safety controls. The diagram remains for the Upgrades, Maintenance, and Security pipelines where it represents a linear flow.
+
 ## [0.8.0] - 2026-02-20
 
 ### Added

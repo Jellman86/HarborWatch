@@ -43,47 +43,45 @@
         Disk usage data unavailable for this container.
     </div>
 {:else}
-    <div class="space-y-4">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-4 space-y-3">
-                <div class="flex items-center justify-between">
-                    <p class="text-[11px] font-black uppercase tracking-wide text-slate-500">{rootHeading}</p>
-                    <p class="text-xs font-bold text-slate-700 dark:text-slate-200">{rootPercent.toFixed(1)}%</p>
+    <div class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="p-6 rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 flex flex-col justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Container Footprint</p>
+                    <p class="text-3xl font-black text-slate-900 dark:text-white mt-1">{formatBytes(rootFs)}</p>
                 </div>
-                <div class="h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                    <div class="h-full bg-sky-500" style={`width:${rootPercent.toFixed(2)}%`}></div>
-                </div>
-                <div class="text-[11px] text-slate-500">{formatBytes(rootFs)} used of {formatBytes(rootReference)}</div>
+                <p class="text-[11px] text-slate-500 mt-4 leading-relaxed">
+                    Total space taken by the container's root file system, including all read-only image layers.
+                </p>
             </div>
 
-            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-4 space-y-3">
-                <div class="flex items-center justify-between">
-                    <p class="text-[11px] font-black uppercase tracking-wide text-slate-500">{writableHeading}</p>
-                    <p class="text-xs font-bold text-slate-700 dark:text-slate-200">{writablePercent.toFixed(1)}%</p>
+            <div class="p-6 rounded-3xl bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 flex flex-col justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-orange-600 dark:text-orange-400">Writable Layer</p>
+                    <p class="text-3xl font-black text-orange-700 dark:text-orange-300 mt-1">{formatBytes(writable)}</p>
                 </div>
-                <div class="h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                    <div class="h-full bg-orange-500" style={`width:${writablePercent.toFixed(2)}%`}></div>
-                </div>
-                <div class="text-[11px] text-slate-500">{formatBytes(writable)} used of {formatBytes(writableReference)}</div>
+                <p class="text-[11px] text-orange-800/70 dark:text-orange-300/70 mt-4 leading-relaxed">
+                    Active changes made since the container started. High usage here often suggests missing persistent volumes.
+                </p>
             </div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div class="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 border border-slate-100 dark:border-slate-700">
-                <div class="text-[10px] font-black uppercase text-slate-500">Writable</div>
-                <div class="font-bold text-slate-700 dark:text-slate-200">{formatBytes(writable)}</div>
+        <div class="space-y-3">
+            <div class="flex items-center justify-between px-2">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Persistence Map</p>
+                <span class="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-bold text-slate-500 uppercase">{mounts} Active Mounts</span>
             </div>
-            <div class="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 border border-slate-100 dark:border-slate-700">
-                <div class="text-[10px] font-black uppercase text-slate-500">RootFS</div>
-                <div class="font-bold text-slate-700 dark:text-slate-200">{formatBytes(rootFs)}</div>
-            </div>
-            <div class="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 border border-slate-100 dark:border-slate-700">
-                <div class="text-[10px] font-black uppercase text-slate-500">Host Used</div>
-                <div class="font-bold text-slate-700 dark:text-slate-200">{formatBytes(hostUsed)}</div>
-            </div>
-            <div class="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 border border-slate-100 dark:border-slate-700">
-                <div class="text-[10px] font-black uppercase text-slate-500">Host Free / Mounts</div>
-                <div class="font-bold text-slate-700 dark:text-slate-200">{formatBytes(hostAvailable)} / {mounts}</div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div class="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Host Free</p>
+                        <p class="text-sm font-bold text-slate-900 dark:text-white">{formatBytes(hostAvailable)}</p>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                    </svg>
+                </div>
             </div>
         </div>
     </div>

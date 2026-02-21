@@ -66,6 +66,7 @@
     let scanMessage = $state("");
     let lifecycleMessage = $state("");
     let lifecycleMode = $state<"global" | "manual">("global");
+    let bypassAi = $state(false);
     let updateHistory = $state<UpdateJobStatus[]>([]);
     let loadingUpdateHistory = $state(false);
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
@@ -610,7 +611,8 @@
             validateUrl: detail.rules?.validateUrl || "",
             validateMode: detail.rules?.validateMode || "both",
             validateTimeoutSec: detail.rules?.validateTimeoutSec || 45,
-            validateIntervalSec: detail.rules?.validateIntervalSec || 2
+            validateIntervalSec: detail.rules?.validateIntervalSec || 2,
+            bypassAi: bypassAi
         });
     }
 
@@ -749,6 +751,41 @@
                         <h3 class="text-sm font-black uppercase tracking-tight text-slate-400 mb-4">Container disk usage</h3>
                         <DiskUsagePanel diskUsage={detail.diskUsage} />
                     </div>
+
+                    <!-- Moved Execution History here -->
+                    <div class="lg:col-span-2">
+                        <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 ml-2">Execution History</h3>
+                        <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                                        <th class="px-8 py-4">Action</th>
+                                        <th class="px-8 py-4">Target</th>
+                                        <th class="px-8 py-4">Status</th>
+                                        <th class="px-8 py-4">Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                                    {#each detail.actionHistory || [] as action}
+                                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                            <td class="px-8 py-4 font-bold text-slate-900 dark:text-white">{action.type}</td>
+                                            <td class="px-8 py-4 text-slate-500 font-mono text-xs">{action.target}</td>
+                                            <td class="px-8 py-4">
+                                                <span class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase {action.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+                                                    {action.status}
+                                                </span>
+                                            </td>
+                                            <td class="px-8 py-4 text-slate-400">{new Date(action.startedAt * 1000).toLocaleString()}</td>
+                                        </tr>
+                                    {:else}
+                                        <tr>
+                                            <td colspan="4" class="px-8 py-12 text-center text-slate-400 italic">No historical actions found for this asset.</td>
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             {:else if activeTab === 'security'}
                 <div class="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -837,17 +874,35 @@
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <button
                                         onclick={() => applyLifecycleModeToRules("global")}
-                                        class="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors {lifecycleMode === 'global' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                        class="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors {lifecycleMode === 'global' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-500'}"
                                     >
-                                        Use Global Automation
+                                        Automatic (Global)
                                     </button>
                                     <button
                                         onclick={() => applyLifecycleModeToRules("manual")}
-                                        class="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors {lifecycleMode === 'manual' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                        class="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors {lifecycleMode === 'manual' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-500'}"
                                     >
-                                        Manual Mode
+                                        Manual (User)
                                     </button>
                                 </div>
+
+                                {#if lifecycleMode === "manual"}
+                                    <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-700 space-y-3">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Bypass AI Assessment</p>
+                                                <p class="text-[11px] text-slate-500">Skip AI breaking-change analysis for manual runs.</p>
+                                            </div>
+                                            <button
+                                                onclick={() => bypassAi = !bypassAi}
+                                                class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                            >
+                                                <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                {/if}
+
                                 <div class="space-y-2">
                                     <label for="update-policy" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Update Policy</label>
                                     <select
@@ -860,29 +915,29 @@
                                         <option value="locked">Locked</option>
                                     </select>
                                     <p class="text-[11px] text-slate-500">{updatePolicyDescription(detail.rules.updatePolicy)}</p>
-                                    {#if lifecycleMode === "manual"}
-                                        <p class="text-[11px] text-slate-500">Auto Apply is disabled while lifecycle mode is Manual.</p>
+                                    {#if lifecycleMode === "manual" && detail.rules.updatePolicy === "auto"}
+                                        <p class="text-[11px] text-rose-500 font-bold uppercase tracking-tighter">Auto-apply will be converted to Manual on save.</p>
                                     {/if}
                                 </div>
                                 <div class="flex flex-wrap gap-3">
                                     <button
                                         onclick={saveRules}
                                         disabled={savingRules}
-                                        class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                                        class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-60"
                                     >
-                                        {savingRules ? "Saving..." : "Save Lifecycle Mode"}
+                                        {savingRules ? "Saving..." : "Save Policy"}
                                     </button>
                                     <button
                                         onclick={openManualUpdate}
                                         disabled={detail.rules.updatePolicy === "locked" || (intel?.portainerManaged && !intel?.portainerConfigured)}
-                                        class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                                        class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-500/20 hover:scale-105 transition-all"
                                         title={intel?.portainerManaged && !intel?.portainerConfigured ? "Portainer integration required" : ""}
                                     >
                                         Trigger Upgrade
                                     </button>
                                 </div>
                                 {#if lifecycleMessage}
-                                    <p class="text-[11px] text-slate-500">{lifecycleMessage}</p>
+                                    <p class="text-[11px] text-emerald-600 font-bold uppercase tracking-tighter">{lifecycleMessage}</p>
                                 {/if}
                             {/if}
                         </div>
@@ -1033,6 +1088,19 @@
                                 <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Release Provider</p>
                                 <p class="text-xs text-slate-700 dark:text-slate-300 break-all mt-1">{intel.repositoryProvider || "unknown"}</p>
                             </div>
+                            
+                            <div class="rounded-xl border border-brand-200 dark:border-brand-900/40 bg-brand-50 dark:bg-brand-900/10 p-4 space-y-2">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-brand-700 dark:text-brand-300">Pro-Tip: Optimal Setup</p>
+                                <p class="text-[11px] text-brand-800/80 dark:text-brand-200/80 leading-relaxed">
+                                    To maximize AI accuracy, ensure your container includes metadata. HarborWatch looks for:
+                                </p>
+                                <ul class="list-disc list-inside text-[10px] text-brand-700/70 dark:text-brand-300/70 space-y-1">
+                                    <li><code class="bg-brand-100 dark:bg-brand-900/40 px-1 rounded">org.opencontainers.image.source</code> label</li>
+                                    <li><code class="bg-brand-100 dark:bg-brand-900/40 px-1 rounded">harborwatch.intel.url</code> override label</li>
+                                    <li>Explicit overrides set in this tab</li>
+                                </ul>
+                            </div>
+
                             <p class="text-[11px] text-slate-500">Last override update: {intel.updatedAt ? new Date(intel.updatedAt * 1000).toLocaleString() : "Never"}</p>
                         {:else}
                             <p class="text-sm text-slate-500">No metadata available.</p>
@@ -1111,39 +1179,6 @@
             {/if}
         </div>
 
-        <!-- Action History -->
-        <div class="mt-12 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
-            <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 ml-2">Execution History</h3>
-            <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-                <table class="w-full text-left text-sm">
-                    <thead>
-                        <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                            <th class="px-8 py-4">Action</th>
-                            <th class="px-8 py-4">Target</th>
-                            <th class="px-8 py-4">Status</th>
-                            <th class="px-8 py-4">Time</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-                        {#each detail.actionHistory || [] as action}
-                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                <td class="px-8 py-4 font-bold text-slate-900 dark:text-white">{action.type}</td>
-                                <td class="px-8 py-4 text-slate-500 font-mono text-xs">{action.target}</td>
-                                <td class="px-8 py-4">
-                                    <span class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase {action.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
-                                        {action.status}
-                                    </span>
-                                </td>
-                                <td class="px-8 py-4 text-slate-400">{new Date(action.startedAt * 1000).toLocaleString()}</td>
-                            </tr>
-                        {:else}
-                            <tr>
-                                <td colspan="4" class="px-8 py-12 text-center text-slate-400 italic">No historical actions found for this asset.</td>
-                            </tr>
-                        {/each}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        {/if}
     {/if}
 </div>

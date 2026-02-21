@@ -23,6 +23,7 @@
     let validateMode = $state("both");
     let validateTimeout = $state(45);
     let validateInterval = $state(2);
+    let bypassAi = $state(false);
 
     // Pre-fill form from params when they change
     $effect(() => {
@@ -33,6 +34,7 @@
             if (params.validateMode) validateMode = params.validateMode;
             if (params.validateTimeoutSec) validateTimeout = params.validateTimeoutSec;
             if (params.validateIntervalSec) validateInterval = params.validateIntervalSec;
+            if (typeof params.bypassAi === "boolean") bypassAi = params.bypassAi;
         }
     });
 
@@ -90,7 +92,8 @@
                     validateUrl: validateURL,
                     validateMode: validateMode,
                     validateTimeoutSec: validateTimeout,
-                    validateIntervalSec: validateInterval
+                    validateIntervalSec: validateInterval,
+                    bypassAi: bypassAi
                 })
             });
             connectUpdateEvents(response.jobId);

@@ -18,10 +18,14 @@
     let imageRiskByKey = $state<Record<string, { critical: number; high: number; malwareInfected: boolean }>>({});
     let lastRiskKey = $state("");
     let searchQuery = $state("");
+    let showIgnored = $state(false);
+    let sortBy = $state<"name" | "state" | "memory" | "cpu">("name");
 
     $effect(() => {
         if (params?.search) {
             searchQuery = params.search;
+            // Auto-show ignored if searching for something specific
+            if (params.search.trim()) showIgnored = true;
         }
     });
 
@@ -217,6 +221,12 @@
 
     let visibleContainers = $derived(
         filteredContainers.filter((summary) => {
+            const ignored = isAutomationIgnored(summary);
+            // If searching explicitly, always show matches regardless of ignore state
+            if (normalizedSearch) return true;
+            // Otherwise, filter by ignore status if toggle is off
+            if (!showIgnored && ignored && activeFilter !== "ignored") return false;
+
             switch (activeFilter) {
                 case "updates":
                     return !!summary.updateAvailable;
@@ -225,11 +235,39 @@
                 case "high-risk":
                     return isHighRisk(summary);
                 case "ignored":
-                    return isAutomationIgnored(summary);
+                    return ignored;
                 default:
                     return true;
             }
+        }).sort((a, b) => {
+            if (sortBy === "name") {
+                const nameA = (a.names?.[0] || "").toLowerCase();
+                const nameB = (b.names?.[0] || "").toLowerCase();
+                return nameA.localeCompare(nameB);
+            }
+            if (sortBy === "state") {
+                return a.state.localeCompare(b.state);
+            }
+            if (sortBy === "memory") {
+                const metA = latestMetric(a.id);
+                const metB = latestMetric(b.id);
+                return (metB?.memoryUsage || 0) - (metA?.memoryUsage || 0);
+            }
+            if (sortBy === "cpu") {
+                const metA = latestMetric(a.id);
+                const metB = latestMetric(b.id);
+                return (metB?.cpuPercent || 0) - (metA?.cpuPercent || 0);
+            }
+            return 0;
         })
+    );
+
+    let ignoredCount = $derived(
+        filteredContainers.filter(c => isAutomationIgnored(c)).length
+    );
+
+    let hiddenIgnoredCount = $derived(
+        !showIgnored ? filteredContainers.filter(c => isAutomationIgnored(c) && activeFilter !== "ignored").length : 0
     );
 
     function latestMetric(id: string): Metric | null {
@@ -413,26 +451,58 @@
             </span>
             <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
                 {visibleContainers.length}/{safeContainers.length} Visible
+                {#if hiddenIgnoredCount > 0}
+                    <span class="ml-1 text-slate-400">({hiddenIgnoredCount} Hidden)</span>
+                {/if}
             </span>
         </div>
     </div>
 
-    <div class="flex flex-wrap items-center gap-2">
-        {#each [
-            { id: "all", label: "All" },
-            { id: "updates", label: "Upgrade Needed" },
-            { id: "intel", label: "Intel Issues" },
-            { id: "high-risk", label: "High Risk" },
-            { id: "ignored", label: "Ignored" }
-        ] as filter}
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-2">
+            {#each [
+                { id: "all", label: "All" },
+                { id: "updates", label: "Upgrade Needed" },
+                { id: "intel", label: "Intel Issues" },
+                { id: "high-risk", label: "High Risk" },
+                { id: "ignored", label: "Ignored" }
+            ] as filter}
+                <button
+                    type="button"
+                    onclick={() => activeFilter = filter.id as FleetFilter}
+                    class="px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest transition-colors {activeFilter === filter.id ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-300'}"
+                >
+                    {filter.label}
+                </button>
+            {/each}
+        </div>
+
+        <div class="flex items-center gap-2">
+            <select
+                bind:value={sortBy}
+                class="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-600 dark:text-slate-300"
+            >
+                <option value="name">Sort: Name</option>
+                <option value="state">Sort: State</option>
+                <option value="memory">Sort: Memory</option>
+                <option value="cpu">Sort: CPU</option>
+            </select>
+
             <button
                 type="button"
-                onclick={() => activeFilter = filter.id as FleetFilter}
-                class="px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest transition-colors {activeFilter === filter.id ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-300'}"
+                onclick={() => showIgnored = !showIgnored}
+                class="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all {showIgnored ? 'bg-brand-50 border-brand-200 text-brand-700 dark:bg-brand-900/20 dark:border-brand-800' : 'bg-white border-slate-200 text-slate-500 dark:bg-slate-900/40 dark:border-slate-700'}"
             >
-                {filter.label}
+                <div class="w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors {showIgnored ? 'bg-brand-600 border-brand-600 text-white' : 'border-slate-300 dark:border-slate-600 text-transparent'}">
+                    {#if showIgnored}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                        </svg>
+                    {/if}
+                </div>
+                Show Ignored
             </button>
-        {/each}
+        </div>
     </div>
 
     {#if loadingIgnoreTokens}

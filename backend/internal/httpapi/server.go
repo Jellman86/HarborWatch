@@ -1538,6 +1538,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					req.ValidateMode,
 					req.ValidateTimeoutSec,
 					req.ValidateIntervalSec,
+					req.BypassAI,
 					dockerClient,
 					currentPortainerService,
 					rulesService,
