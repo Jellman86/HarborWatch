@@ -972,9 +972,9 @@
                     {/if}
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-6">
-                    <div class="space-y-4">
-                        {#if activeAutomationTab !== "general"}
+                <div class="grid grid-cols-1 {activeAutomationTab === 'general' ? '' : 'xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]'} gap-6">
+                    {#if activeAutomationTab !== "general"}
+                        <div class="space-y-4">
                             <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40 animate-in fade-in zoom-in duration-300">
                                 <AutomationFlowChart
                                     title={automationConfig[activeAutomationTab].title}
@@ -986,15 +986,15 @@
                                     Diagram shows the ordered execution path for this domain.
                                 </p>
                             </div>
-                        {/if}
-                        
-                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/25 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Task Status Overview</p>
-                            <p class="mt-1 text-[11px] text-slate-500">
-                                Active means scheduled tasks are enabled. Partial means some are paused. Idle means no tasks are currently scheduled for this domain.
-                            </p>
+                            
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/25 p-4">
+                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Task Status Overview</p>
+                                <p class="mt-1 text-[11px] text-slate-500">
+                                    Active means scheduled tasks are enabled. Partial means some are paused. Idle means no tasks are currently scheduled for this domain.
+                                </p>
+                            </div>
                         </div>
-                    </div>
+                    {/if}
 
                     <div class="space-y-4">
                         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
