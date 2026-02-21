@@ -78,6 +78,11 @@
     let loadingIntel = $state(false);
     let savingIntel = $state(false);
 
+    // Active update job state
+    let activeUpdateJob = $state<UpdateJobStatus | null>(null);
+    let updateJobPolling = $state(false);
+    let updateJobError = $state("");
+
     function activeContainerId(): string {
         return String(detail?.summary?.id || id || "").trim();
     }
@@ -582,19 +587,6 @@
         toasts.info("ClamAV scan is still running. Results will appear when complete.");
     }
 
-    function openManualUpdate() {
-        if (!detail) return;
-        onNavigate("updates", {
-            containerId: detail.summary.id,
-            targetImage: detail.summary.image,
-            validateUrl: detail.rules?.validateUrl || "",
-            validateMode: detail.rules?.validateMode || "both",
-            validateTimeoutSec: detail.rules?.validateTimeoutSec || 45,
-            validateIntervalSec: detail.rules?.validateIntervalSec || 2,
-            bypassAi: bypassAi
-        });
-    }
-
     function intelStatusClass(): string {
         if (!intel) return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
         if (intel.fullAutomationReady) return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
@@ -606,6 +598,72 @@
         if (intel.fullAutomationReady) return "Automation Ready";
         if (intel.releaseIntelReady) return "Partial Readiness";
         return "Action Needed";
+    }
+
+    async function triggerManualUpdate() {
+        if (!detail || updateJobPolling) return;
+        
+        updateJobError = "";
+        activeUpdateJob = null;
+        updateJobPolling = true;
+        toasts.info(`Starting upgrade flow for ${detail.summary.names?.[0] || id}...`);
+
+        try {
+            const res = await fetch("/api/updates/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    containerId: detail.summary.id,
+                    targetImage: detail.summary.image,
+                    validateUrl: detail.rules?.validateUrl || "",
+                    validateMode: detail.rules?.validateMode || "both",
+                    validateTimeoutSec: detail.rules?.validateTimeoutSec || 45,
+                    validateIntervalSec: detail.rules?.validateIntervalSec || 2,
+                    bypassAi: bypassAi
+                })
+            });
+
+            const payload = await res.json();
+            if (!res.ok) throw new Error(payload?.message || `Failed to start update (${res.status})`);
+
+            // If we got a jobId, start polling it
+            if (payload.jobId) {
+                await pollUpdateStatus(payload.jobId);
+            }
+        } catch (e) {
+            updateJobError = e instanceof Error ? e.message : "Failed to trigger upgrade";
+            toasts.error(updateJobError);
+            updateJobPolling = false;
+        }
+    }
+
+    async function pollUpdateStatus(jobId: string) {
+        const maxPolls = 120; // 3 minutes at 1.5s intervals
+        for (let i = 0; i < maxPolls; i++) {
+            try {
+                const res = await fetch(`/api/updates/jobs/${encodeURIComponent(jobId)}`);
+                if (!res.ok) continue;
+                
+                const job = await res.json();
+                activeUpdateJob = job;
+
+                if (job.status === "completed" || job.status === "failed" || job.status === "rolled_back") {
+                    updateJobPolling = false;
+                    if (job.status === "completed") {
+                        toasts.success("Upgrade flow completed successfully.");
+                        await loadDetail(true); // Refresh detail view
+                    } else {
+                        toasts.error(`Upgrade flow ${job.status}: ${job.error || 'Check logs for details'}`);
+                    }
+                    return;
+                }
+            } catch (e) {
+                console.error("Failed to poll update job", e);
+            }
+            await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+        updateJobPolling = false;
+        toasts.warning("Upgrade flow is still running in the background.");
     }
 
     onMount(() => {
@@ -901,14 +959,47 @@
                                         {savingRules ? "Saving..." : "Save Selection"}
                                     </button>
                                     <button
-                                        onclick={openManualUpdate}
-                                        disabled={intel?.portainerManaged && !intel?.portainerConfigured}
+                                        onclick={triggerManualUpdate}
+                                        disabled={updateJobPolling || (intel?.portainerManaged && !intel?.portainerConfigured)}
                                         class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-500/20 hover:scale-105 transition-all"
                                         title={intel?.portainerManaged && !intel?.portainerConfigured ? "Portainer integration required" : ""}
                                     >
-                                        Trigger Upgrade
+                                        {updateJobPolling ? "Updating..." : "Trigger Upgrade"}
                                     </button>
                                 </div>
+
+                                {#if activeUpdateJob}
+                                    <div class="mt-6 p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Pipeline Status</p>
+                                                <p class="text-xs font-bold text-white mt-1 uppercase tracking-tight">
+                                                    {activeUpdateJob.status} ({activeUpdateJob.progress}%)
+                                                </p>
+                                            </div>
+                                            <div class="w-10 h-10 rounded-full border-2 border-brand-500 border-t-transparent animate-spin flex items-center justify-center">
+                                                <span class="text-[8px] font-black text-brand-500 animate-none">{activeUpdateJob.progress}%</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="space-y-2">
+                                            {#each activeUpdateJob.steps.slice(-3) as step}
+                                                <div class="flex items-center gap-3 text-[10px]">
+                                                    <span class="w-1.5 h-1.5 rounded-full {step.status === 'completed' ? 'bg-emerald-500' : step.status === 'failed' ? 'bg-rose-500' : 'bg-brand-500 animate-pulse'}"></span>
+                                                    <span class="font-bold text-slate-300 uppercase w-24 truncate">{step.step}</span>
+                                                    <span class="text-slate-500 truncate flex-1">{step.message}</span>
+                                                </div>
+                                            {/each}
+                                        </div>
+
+                                        {#if activeUpdateJob.error}
+                                            <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-bold italic">
+                                                Error: {activeUpdateJob.error}
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {/if}
+
                                 {#if lifecycleMessage}
                                     <p class="text-[11px] text-emerald-600 font-bold uppercase tracking-tighter">{lifecycleMessage}</p>
                                 {/if}
