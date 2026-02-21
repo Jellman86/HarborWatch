@@ -206,7 +206,7 @@
 
       {#if currentRoute === 'dashboard'}
         {#await import("./lib/pages/Dashboard.svelte") then Mod}
-          <Mod.default {containers} {images} {events} onRefresh={loadGlobalData} />
+          <Mod.default {containers} {images} {events} onRefresh={loadGlobalData} onNavigate={navigate} />
         {/await}
       {:else if currentRoute === 'containers'}
         {#await import("./lib/pages/Containers.svelte") then Mod}
