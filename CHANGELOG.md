@@ -15,8 +15,12 @@ All notable changes to HarborWatch are documented in this file.
   - Improved deep-linking from Stacks to filtered Fleet views.
 - **Container Lifecycle Refinement:**
   - Added a clear "Automatic" vs "Manual" lifecycle mode selector for individual containers.
-  - Implemented a "Bypass AI Assessment" toggle for manual updates, allowing users to skip AI analysis when needed.
+  - Re-engineered manual updates to trigger in the background ("Trigger & Stay"), allowing users to remain on the container page while watching real-time progress.
+  - Added "Force Update (Skip Health)" and "Bypass AI Assessment" toggles for manual runs.
   - Added a "Breaking Change Signals" historical list to the Lifecycle tab, surfacing past AI alerts.
+- **Global Automation Controls:**
+  - Implemented global "Watchtower Mode" toggles in Settings: **Global AI Bypass** and **Global Skip Health Check**.
+  - Added a "Bulk Enable Automatic Mode" button to set all containers to follow global automation policy in one click.
 - **Improved Container Insights:**
   - Moved the **Execution History** (Action History) to the Insights tab for better context and cleaner UI.
   - Simplified the **Disk Usage** metrics to focus on container footprint and active mounts, removing confusing "vs Host" comparisons.
