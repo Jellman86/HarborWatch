@@ -67,6 +67,7 @@
     let lifecycleMessage = $state("");
     let lifecycleMode = $state<"global" | "manual">("global");
     let bypassAi = $state(false);
+    let skipHealth = $state(false);
     let updateHistory = $state<UpdateJobStatus[]>([]);
     let loadingUpdateHistory = $state(false);
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
@@ -619,7 +620,8 @@
                     validateMode: detail.rules?.validateMode || "both",
                     validateTimeoutSec: detail.rules?.validateTimeoutSec || 45,
                     validateIntervalSec: detail.rules?.validateIntervalSec || 2,
-                    bypassAi: bypassAi
+                    bypassAi: bypassAi,
+                    skipHealthCheck: skipHealth
                 })
             });
 
@@ -944,6 +946,20 @@
                                                     aria-label="Toggle AI Bypass"
                                                 >
                                                     <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
+                                                </button>
+                                            </div>
+
+                                            <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                                <div>
+                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Force Update (Skip Health)</p>
+                                                    <p class="text-[11px] text-slate-500">Mimic Watchtower: no post-update health check or rollback.</p>
+                                                </div>
+                                                <button
+                                                    onclick={() => skipHealth = !skipHealth}
+                                                    class="w-10 h-5 rounded-full transition-colors relative {skipHealth ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                    aria-label="Toggle Skip Health Check"
+                                                >
+                                                    <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {skipHealth ? 'translate-x-5' : ''}"></div>
                                                 </button>
                                             </div>
                                         </div>

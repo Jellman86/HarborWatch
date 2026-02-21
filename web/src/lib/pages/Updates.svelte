@@ -24,6 +24,7 @@
     let validateTimeout = $state(45);
     let validateInterval = $state(2);
     let bypassAi = $state(false);
+    let skipHealthCheck = $state(false);
 
     // Pre-fill form from params when they change
     $effect(() => {
@@ -35,6 +36,7 @@
             if (params.validateTimeoutSec) validateTimeout = params.validateTimeoutSec;
             if (params.validateIntervalSec) validateInterval = params.validateIntervalSec;
             if (typeof params.bypassAi === "boolean") bypassAi = params.bypassAi;
+            if (typeof params.skipHealthCheck === "boolean") skipHealthCheck = params.skipHealthCheck;
         }
     });
 
@@ -93,7 +95,8 @@
                     validateMode: validateMode,
                     validateTimeoutSec: validateTimeout,
                     validateIntervalSec: validateInterval,
-                    bypassAi: bypassAi
+                    bypassAi: bypassAi,
+                    skipHealthCheck: skipHealthCheck
                 })
             });
             connectUpdateEvents(response.jobId);

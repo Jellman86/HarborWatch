@@ -110,6 +110,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 			0,
 			0,
 			false,
+			false,
 			t.dockerClient,
 			t.portainerService,
 			t.rulesService,

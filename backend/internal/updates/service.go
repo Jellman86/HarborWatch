@@ -36,6 +36,7 @@ type Request struct {
 	AIValidateLogs       bool
 	AIBlockRiskThreshold int
 	BypassAI             bool
+	SkipHealthCheck      bool
 
 	// Portainer support
 	IsPortainerManaged  bool
@@ -269,9 +270,20 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 		return
 	}
 	s.setRunProgress(jobID, "running", 80)
-	if err := s.runStep(ctx, jobID, "validate", func(ctx context.Context) error { return s.executor.Validate(ctx, req) }); err != nil {
-		s.rollback(jobID, req, err)
-		return
+	if !req.SkipHealthCheck {
+		if err := s.runStep(ctx, jobID, "validate", func(ctx context.Context) error { return s.executor.Validate(ctx, req) }); err != nil {
+			s.rollback(jobID, req, err)
+			return
+		}
+	} else {
+		s.emit(jobID, gen.UpdateStepEvent{
+			JobID:     jobID,
+			Step:      "validate",
+			Status:    "completed",
+			Message:   "skipped: force update requested (no health check)",
+			Timestamp: time.Now().UTC().Unix(),
+		})
+		s.setRunProgress(jobID, "running", 90)
 	}
 	// On success, cleanup backups
 	s.setRunProgress(jobID, "running", 95)
