@@ -22,6 +22,10 @@ All notable changes to HarborWatch are documented in this file.
   - Simplified the **Disk Usage** metrics to focus on container footprint and active mounts, removing confusing "vs Host" comparisons.
   - Added "Optimal Setup Guidance" to the Intelligence tab to help users improve AI automation accuracy.
 
+### Fixed
+- **Lifecycle Persistence:** Resolved a bug where manual lifecycle mode would revert to automatic after saving due to over-aggressive backend validation.
+- **Frontend Syntax:** Corrected a block closing error in the container details page that prevented correct rendering.
+
 ### Changed
 - **Sidebar Organization:** Moved the "About" link to the bottom of the sidebar to prioritize management tools.
 - **UI Cleanup:** Removed the confusing automation flow diagram specifically from the **General** settings tab to focus on capacity and safety controls. The diagram remains for the Upgrades, Maintenance, and Security pipelines where it represents a linear flow.

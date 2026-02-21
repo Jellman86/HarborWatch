@@ -95,12 +95,6 @@
                 data.malwareSummary = data.malwareSummary || [];
                 data.actionHistory = data.actionHistory || [];
                 data.recentMetrics = data.recentMetrics || [];
-                if (data.rules) {
-                    if (typeof data.rules.inheritAutomation !== "boolean") data.rules.inheritAutomation = true;
-                    if (typeof data.rules.upgradesAutomation !== "boolean") data.rules.upgradesAutomation = true;
-                    if (typeof data.rules.maintenanceAutomation !== "boolean") data.rules.maintenanceAutomation = true;
-                    if (typeof data.rules.securityAutomation !== "boolean") data.rules.securityAutomation = true;
-                }
                 detail = data;
                 syncLifecycleModeFromRules();
                 await Promise.all([
