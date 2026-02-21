@@ -125,12 +125,16 @@ func buildUpdateRequestForContainer(
 	}
 
 	aiBlockRiskThreshold := -1
+	globalBypassAI := false
+	globalSkipHealthCheck := false
 	if settingsService != nil {
 		settingsCtx, settingsCancel := context.WithTimeout(ctx, 2*time.Second)
 		if st, err := settingsService.Get(settingsCtx); err == nil {
 			if st.AIBlockRiskThreshold >= 0 && st.AIBlockRiskThreshold <= 100 {
 				aiBlockRiskThreshold = st.AIBlockRiskThreshold
 			}
+			globalBypassAI = st.GlobalBypassAI
+			globalSkipHealthCheck = st.GlobalSkipHealthCheck
 		}
 		settingsCancel()
 	}
@@ -221,8 +225,8 @@ func buildUpdateRequestForContainer(
 		ValidateIntervalSec:  effectiveRules.ValidateIntervalSec,
 		AIValidateLogs:       effectiveRules.AIValidateLogs,
 		AIBlockRiskThreshold: aiBlockRiskThreshold,
-		BypassAI:             bypassAI,
-		SkipHealthCheck:      skipHealthCheck,
+		BypassAI:             bypassAI || globalBypassAI,
+		SkipHealthCheck:      skipHealthCheck || globalSkipHealthCheck,
 		IsPortainerManaged:   isPortainer,
 		PortainerStackID:     stackID,
 		PortainerEndpointID:  endpointID,
