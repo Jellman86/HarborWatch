@@ -1,7 +1,5 @@
 package scanning
 
-package scanning
-
 import "context"
 
 // Result is the normalized output from a vulnerability scan.

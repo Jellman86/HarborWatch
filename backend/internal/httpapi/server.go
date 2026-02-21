@@ -76,6 +76,8 @@ type AIService interface {
 	AuditCompose(ctx context.Context, yaml string) (string, error)
 	AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error)
 	ListConversations(ctx context.Context, limit, offset int) ([]ai.ConversationRecord, error)
+	GetLatestFleetAdvice(ctx context.Context) (ai.FleetAdviceRecord, error)
+	SaveFleetAdvice(ctx context.Context, rec ai.FleetAdviceRecord) error
 }
 
 type DiagService interface {
@@ -1700,8 +1702,8 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				}
 
 				// Persist the advice
-				if usageStore != nil {
-					_ = usageStore.SaveFleetAdvice(r.Context(), ai.FleetAdviceRecord{
+				if aiService != nil {
+					_ = aiService.SaveFleetAdvice(r.Context(), ai.FleetAdviceRecord{
 						Timestamp: time.Now().UTC().Unix(),
 						Inventory: fmt.Sprintf("%d containers", len(containers)),
 						Advice:    advice,

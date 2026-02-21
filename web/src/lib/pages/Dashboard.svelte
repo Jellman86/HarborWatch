@@ -87,7 +87,7 @@
                     .filter(img => (img.vulnerabilityCritical || 0) > 0 || (img.vulnerabilityHigh || 0) > 0)
                     .map(img => {
                         // Find a container using this image to provide a link
-                        const container = safeContainers.find(c => c.image === img.primaryRef || (img.repoTags && img.repoTags.includes(c.image)));
+                        const container = safeContainers.find((c: ContainerSummary) => c.image === img.primaryRef || (img.repoTags && img.repoTags.includes(c.image)));
                         return { ...img, containerId: container?.id };
                     })
                     .sort((a, b) => (b.vulnerabilityCritical || 0) - (a.vulnerabilityCritical || 0))

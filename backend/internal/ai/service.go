@@ -295,6 +295,14 @@ func (s *Service) GetLatestFleetAdvice(ctx context.Context) (FleetAdviceRecord, 
 	return store.GetLatestFleetAdvice(ctx)
 }
 
+func (s *Service) SaveFleetAdvice(ctx context.Context, rec FleetAdviceRecord) error {
+	store := s.currentUsageStore()
+	if store == nil {
+		return errors.New("no usage store configured")
+	}
+	return store.SaveFleetAdvice(ctx, rec)
+}
+
 func (s *Service) bindUsageRecorderLocked(provider Provider) {
 	if provider == nil {
 		return
