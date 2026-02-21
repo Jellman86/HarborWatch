@@ -80,12 +80,13 @@
     .stack-card-container {
         position: relative;
         z-index: 1;
+        border-radius: 1.5rem;
     }
     .stack-card-container::before,
     .stack-card-container::after {
         content: '';
         position: absolute;
-        border-radius: 1.5rem;
+        border-radius: 1.5rem; /* Matches rounded-3xl */
         border: 1px solid theme('colors.slate.200');
         background: theme('colors.white');
         transition: all 0.3s ease;
