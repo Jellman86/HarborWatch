@@ -88,7 +88,8 @@
         position: absolute;
         border-radius: 1.5rem; /* Matches rounded-3xl */
         border: 1px solid theme('colors.slate.200');
-        background: theme('colors.white');
+        background: theme('colors.slate.50'); /* Subtle tint for visibility */
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         transition: all 0.3s ease;
     }
 
@@ -96,35 +97,36 @@
     :global(.dark) .stack-card-container::after {
         border-color: theme('colors.slate.700');
         background: theme('colors.slate.800');
+        box-shadow: none;
     }
 
     .stack-card-container::before {
-        top: 6px;
-        left: 6px;
-        right: -6px;
-        bottom: -6px;
+        top: 8px;
+        left: 8px;
+        right: -8px;
+        bottom: -8px;
         z-index: -1;
     }
     .stack-card-container::after {
-        top: 12px;
-        left: 12px;
-        right: -12px;
-        bottom: -12px;
+        top: 16px;
+        left: 16px;
+        right: -16px;
+        bottom: -16px;
         z-index: -2;
         opacity: 0.5;
     }
     
     .stack-card-container:hover::before {
-        top: 8px;
-        left: 8px;
-        right: -8px;
-        bottom: -8px;
+        top: 10px;
+        left: 10px;
+        right: -10px;
+        bottom: -10px;
     }
     .stack-card-container:hover::after {
-        top: 16px;
-        left: 16px;
-        right: -16px;
-        bottom: -16px;
+        top: 20px;
+        left: 20px;
+        right: -20px;
+        bottom: -20px;
     }
 </style>
 
