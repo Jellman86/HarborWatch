@@ -1091,6 +1091,8 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 							ValidateMode:          r.ValidateMode,
 							ValidateTimeoutSec:    r.ValidateTimeoutSec,
 							ValidateIntervalSec:   r.ValidateIntervalSec,
+							BypassAI:              r.BypassAI,
+							SkipHealthCheck:       r.SkipHealthCheck,
 							AIValidateLogs:        r.AIValidateLogs,
 							AutoRollback:          r.AutoRollback,
 							InheritAutomation:     r.InheritAutomation,

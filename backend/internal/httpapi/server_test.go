@@ -467,6 +467,36 @@ func TestDockerContainersEndpoint(t *testing.T) {
 	}
 }
 
+func TestContainerDetailIncludesLifecycleFlags(t *testing.T) {
+	rulesSvc := staticRulesService{
+		rule: rules.ContainerRules{
+			UpdatePolicy:    "auto",
+			BypassAI:        true,
+			SkipHealthCheck: true,
+		},
+	}
+	mux := NewMuxWithDeps(fakeDockerClient{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, rulesSvc, nil, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/c1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var got gen.ContainerDetail
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&got); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if got.Rules == nil {
+		t.Fatalf("expected rules in container detail")
+	}
+	if !got.Rules.BypassAI {
+		t.Fatalf("expected bypassAi=true in container detail rules")
+	}
+	if !got.Rules.SkipHealthCheck {
+		t.Fatalf("expected skipHealthCheck=true in container detail rules")
+	}
+}
+
 func TestReleaseSummaryEndpoint(t *testing.T) {
 	fake := fakeReleaseService{summary: gen.ReleaseRiskSummary{Repo: "Jellman86/HarborWatch", TotalRisk: 42}}
 	mux := NewMuxWithDeps(nil, nil, fake, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)

@@ -23,6 +23,8 @@ All notable changes to HarborWatch are documented in this file.
   - `security_sweep_trivy` now defaults to scanning only images of currently running, policy-allowed containers, preventing excessive queued jobs on hosts with many cached images.
 - **Automatic Upgrade Flag Consistency:**
   - Automated update runs now honor per-container `skipHealthCheck` the same way they already honor `bypassAi`.
+- **Lifecycle Toggle Persistence in UI:**
+  - Fixed container detail API rules mapping so saved `bypassAi` and `skipHealthCheck` values are returned correctly after refresh in both Automatic and Manual lifecycle modes.
 
 ## [0.8.2] - 2026-02-21
 
