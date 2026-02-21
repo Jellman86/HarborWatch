@@ -81,6 +81,7 @@
         position: relative;
         z-index: 1;
         border-radius: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     }
     .stack-card-container::before,
     .stack-card-container::after {
@@ -110,11 +111,15 @@
         box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     }
 
+    :global(.dark) .stack-card-container {
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+    }
+
     :global(.dark) .stack-card-container::before,
     :global(.dark) .stack-card-container::after {
         border-color: theme('colors.slate.700');
         background: theme('colors.slate.800');
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3); /* Subtle shadow for dark mode */
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3); /* Subtle shadow for dark mode layers */
     }
     
     .stack-card-container:hover::before {
