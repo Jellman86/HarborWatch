@@ -90,6 +90,7 @@
         border-radius: 1.5rem; /* Matches rounded-3xl */
         border: 1px solid theme('colors.slate.200');
         background: theme('colors.slate.50');
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         transition: all 0.3s ease;
     }
 
@@ -99,7 +100,6 @@
         right: -8px;
         bottom: -8px;
         z-index: -1;
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     }
     .stack-card-container::after {
         top: 16px;
@@ -108,18 +108,14 @@
         bottom: -16px;
         z-index: -2;
         opacity: 0.5;
-        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     }
 
-    :global(.dark) .stack-card-container {
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3);
-    }
-
+    :global(.dark) .stack-card-container,
     :global(.dark) .stack-card-container::before,
     :global(.dark) .stack-card-container::after {
         border-color: theme('colors.slate.700');
         background: theme('colors.slate.800');
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3); /* Subtle shadow for dark mode layers */
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3);
     }
     
     .stack-card-container:hover::before {
@@ -181,7 +177,7 @@
                     class="stack-card-container opacity-0 animate-reveal"
                     style="animation-delay: {0.1 + (i * 0.05)}s"
                 >
-                    <article class="bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden h-full flex flex-col group hover:border-brand-500 transition-all">
+                    <article class="bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 overflow-hidden h-full flex flex-col group hover:border-brand-500 transition-all">
                         <div class="p-6 flex-1 space-y-4 text-left">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0 flex-1">
