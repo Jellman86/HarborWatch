@@ -5,7 +5,7 @@
   import GlobalProgress from "./lib/components/GlobalProgress.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
   import { themeStore } from "./lib/stores/theme.svelte";
-  import { configStore } from "./lib/stores/config.svelte.ts";
+  import { configStore } from "./lib/stores/config.svelte";
   
   import type {
     ContainerSummary,
