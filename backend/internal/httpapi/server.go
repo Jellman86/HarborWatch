@@ -1692,7 +1692,7 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					for _, c := range containers {
 						b.WriteString(fmt.Sprintf("- %s (Image: %s, State: %s, Update: %t)\n", trimContainerName(c.Names), c.Image, c.State, c.UpdateAvailable))
 					}
-					
+
 					ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 					defer cancel()
 					aiAdvice, err := aiService.AnalyzeFleet(ctx, b.String())
@@ -2382,6 +2382,9 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 						fresh = loaded
 					}
 				}
+				if jobManager != nil {
+					jobManager.SetMaxConcurrency(fresh.AutoUpgradeMaxConcurrency)
+				}
 
 				if notificationService != nil {
 					if !fresh.DiscordEnabled || strings.TrimSpace(fresh.DiscordWebhookURL) == "" {
@@ -2529,9 +2532,9 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				}()
 
 				writeJSON(w, http.StatusAccepted, map[string]string{
-					"status": "accepted", 
+					"status":  "accepted",
 					"message": "Stack redeploy queued",
-					"jobId": jobID,
+					"jobId":   jobID,
 				})
 			})
 		})

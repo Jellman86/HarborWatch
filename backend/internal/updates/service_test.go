@@ -6,20 +6,25 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
+	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	_ "modernc.org/sqlite"
 )
 
 type fakeExecutor struct{ failStep string }
 
 type fakeAIProvider struct {
-	result ai.AnalysisResult
-	err    error
+	result    ai.AnalysisResult
+	err       error
+	health    ai.HealthAssessment
+	healthErr error
+	healthSet bool
 }
 
 func (f fakeAIProvider) Name() string { return "fake" }
@@ -35,8 +40,56 @@ func (f fakeAIProvider) AuditCompose(ctx context.Context, yaml string) (string, 
 func (f fakeAIProvider) AnalyzeMetrics(ctx context.Context, containerID string, metrics []any) (string, error) {
 	return "ok", nil
 }
+func (f fakeAIProvider) AnalyzeFleet(ctx context.Context, inventory string) (string, error) {
+	return "ok", nil
+}
 func (f fakeAIProvider) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (ai.HealthAssessment, error) {
+	if f.healthErr != nil {
+		return ai.HealthAssessment{}, f.healthErr
+	}
+	if f.healthSet {
+		return f.health, nil
+	}
 	return ai.HealthAssessment{Healthy: true, Confidence: 80, Summary: "healthy"}, nil
+}
+
+type fakePortainerClient struct {
+	updateErr error
+}
+
+func (f fakePortainerClient) GetStack(ctx context.Context, stackID int) (*portainer.Stack, error) {
+	return &portainer.Stack{}, nil
+}
+func (f fakePortainerClient) GetStackFile(ctx context.Context, stackID int) (string, error) {
+	return "services:\n  app:\n    image: example:latest", nil
+}
+func (f fakePortainerClient) UpdateStack(ctx context.Context, stackID int, endpointID int, yaml string, env []map[string]string, prune bool, pullImage bool) error {
+	return f.updateErr
+}
+func (f fakePortainerClient) ListStacks(ctx context.Context) ([]portainer.Stack, error) {
+	return []portainer.Stack{}, nil
+}
+
+type countingExecutor struct {
+	fakeExecutor
+	mu            sync.Mutex
+	validateCalls int
+}
+
+func (e *countingExecutor) Validate(ctx context.Context, req Request) error {
+	e.mu.Lock()
+	e.validateCalls++
+	e.mu.Unlock()
+	if e.failStep == "validate" {
+		return errors.New("validate failed")
+	}
+	return nil
+}
+
+func (e *countingExecutor) ValidateCallCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.validateCalls
 }
 
 func (f fakeExecutor) Preflight(ctx context.Context, req Request) error {
@@ -320,6 +373,123 @@ func TestUpdatePipelineFailsOnAIActionRequired(t *testing.T) {
 					t.Fatal("did not expect backup step when AI marks action_required=true")
 				}
 			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for failed status")
+}
+
+func TestPortainerUpdateHonorsBypassAndSkipHealthFlags(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	exec := &countingExecutor{}
+	aiSvc := ai.NewService(fakeAIProvider{
+		result: ai.AnalysisResult{
+			RiskScore: 95,
+			RiskLevel: ai.RiskCritical,
+			Summary:   "breaking change should be ignored when bypassing AI",
+		},
+	})
+	svc := NewService(store, exec, aiSvc, nil, nil, fakePortainerClient{}, jobs.NewManager(1))
+
+	res, err := svc.StartUpdate(Request{
+		ContainerID:         "test-c",
+		ContainerName:       "test-c",
+		TargetImage:         "img",
+		ValidateURL:         "http://x",
+		IsPortainerManaged:  true,
+		PortainerStackID:    1,
+		PortainerEndpointID: 1,
+		BypassAI:            true,
+		SkipHealthCheck:     true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.GetJob(context.Background(), res.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job != nil && job.Status == "completed" {
+			foundValidateSkip := false
+			for _, step := range job.Steps {
+				if step.Step == "validate" && strings.Contains(step.Message, "skipped: force update requested") {
+					foundValidateSkip = true
+				}
+			}
+			if !foundValidateSkip {
+				t.Fatal("expected validate step to be skipped when skipHealthCheck=true")
+			}
+			if got := exec.ValidateCallCount(); got != 0 {
+				t.Fatalf("expected no validate calls when skipHealthCheck=true, got %d", got)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for completed status")
+}
+
+func TestPortainerUpdateFailsWhenAIHealthAssessmentUnhealthy(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	exec := &countingExecutor{}
+	aiSvc := ai.NewService(fakeAIProvider{
+		result: ai.AnalysisResult{
+			RiskScore: 10,
+			RiskLevel: ai.RiskLow,
+			Summary:   "safe release",
+		},
+		health:    ai.HealthAssessment{Healthy: false, Confidence: 90, Summary: "readiness checks failing"},
+		healthSet: true,
+	})
+	svc := NewService(store, exec, aiSvc, nil, nil, fakePortainerClient{}, jobs.NewManager(1))
+
+	res, err := svc.StartUpdate(Request{
+		ContainerID:         "test-c",
+		ContainerName:       "test-c",
+		TargetImage:         "img",
+		ValidateURL:         "http://x",
+		IsPortainerManaged:  true,
+		PortainerStackID:    1,
+		PortainerEndpointID: 1,
+		AIValidateLogs:      true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.GetJob(context.Background(), res.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job != nil && job.Status == "failed" {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

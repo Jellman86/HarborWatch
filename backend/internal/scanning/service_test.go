@@ -75,7 +75,7 @@ func newTestStore(t *testing.T) *Store {
 
 func TestServiceStartScanSuccess(t *testing.T) {
 	store := newTestStore(t)
-	svc := NewService(fakeScanner{result: Result{Source: "fake", High: 2, Medium: 1}}, nil, store, nil, jobs.NewManager(1))
+	svc := NewService(fakeScanner{result: Result{Source: "fake", High: 2, Medium: 1}}, nil, nil, store, nil, jobs.NewManager(1))
 
 	started, err := svc.StartScan("nginx:latest")
 	if err != nil {
@@ -116,7 +116,7 @@ func TestServiceStartScanSuccess(t *testing.T) {
 
 func TestServiceStartScanFailure(t *testing.T) {
 	store := newTestStore(t)
-	svc := NewService(fakeScanner{err: errors.New("boom")}, nil, store, nil, jobs.NewManager(1))
+	svc := NewService(fakeScanner{err: errors.New("boom")}, nil, nil, store, nil, jobs.NewManager(1))
 
 	started, err := svc.StartScan("nginx:latest")
 	if err != nil {
@@ -141,7 +141,7 @@ func TestServiceStartScanFailure(t *testing.T) {
 func TestServiceCancelRunningJob(t *testing.T) {
 	store := newTestStore(t)
 	started := make(chan struct{})
-	svc := NewService(blockingScanner{started: started}, fakeMalwareScanner{}, store, nil, jobs.NewManager(1))
+	svc := NewService(blockingScanner{started: started}, fakeMalwareScanner{}, nil, store, nil, jobs.NewManager(1))
 
 	run, err := svc.StartScan("nginx:latest")
 	if err != nil {

@@ -139,6 +139,9 @@ func (f fakeScanService) MalwareDetailsForContainer(ctx context.Context, contain
 func (f fakeScanService) ActiveJobs() []gen.JobProgress {
 	return nil
 }
+func (f fakeScanService) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
+	return []gen.ImageSummary{}, nil
+}
 
 type fakeReleaseService struct{ summary gen.ReleaseRiskSummary }
 
@@ -172,11 +175,20 @@ func (f fakeAIService) AuditCompose(ctx context.Context, yaml string) (string, e
 func (f fakeAIService) AnalyzeMetrics(ctx context.Context, id string, metrics []any) (string, error) {
 	return "ok", nil
 }
+func (f fakeAIService) AnalyzeFleet(ctx context.Context, inventory string) (string, error) {
+	return "ok", nil
+}
 func (f fakeAIService) AnalyzeHealthLogs(ctx context.Context, containerID string, logs string) (ai.HealthAssessment, error) {
 	return ai.HealthAssessment{Healthy: true, Confidence: 80, Summary: "healthy"}, nil
 }
 func (f fakeAIService) ListConversations(ctx context.Context, limit, offset int) ([]ai.ConversationRecord, error) {
 	return []ai.ConversationRecord{}, nil
+}
+func (f fakeAIService) GetLatestFleetAdvice(ctx context.Context) (ai.FleetAdviceRecord, error) {
+	return ai.FleetAdviceRecord{}, nil
+}
+func (f fakeAIService) SaveFleetAdvice(ctx context.Context, rec ai.FleetAdviceRecord) error {
+	return nil
 }
 
 type fakePortainerClient struct {

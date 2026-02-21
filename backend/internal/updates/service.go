@@ -227,15 +227,15 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 			if blocked, reason := shouldBlockForAI(analysis, threshold); blocked {
 				if s.notif != nil {
 					s.notif.Dispatch(ctx, notifications.Message{
-						Title: "Update Blocked: AI High Risk",
-						Body:  fmt.Sprintf("AI analysis detected potential breaking changes for %s and has blocked the automatic rollout.", req.ContainerName),
-						Level: notifications.LevelCritical,
+						Title:  "Update Blocked: AI High Risk",
+						Body:   fmt.Sprintf("AI analysis detected potential breaking changes for %s and has blocked the automatic rollout.", req.ContainerName),
+						Level:  notifications.LevelCritical,
 						Source: "Update Engine",
 						Fields: map[string]string{
-							"Container": req.ContainerName,
-							"New Image": req.TargetImage,
+							"Container":  req.ContainerName,
+							"New Image":  req.TargetImage,
 							"Risk Score": fmt.Sprintf("%d/100", analysis.RiskScore),
-							"Reason":    reason,
+							"Reason":     reason,
 						},
 					})
 				}
@@ -349,7 +349,7 @@ func (s *Service) executePortainer(ctx context.Context, jobID string, req Reques
 	}
 
 	// AI analysis step...
-	if s.ai != nil && s.ai.HasProvider() {
+	if !req.BypassAI && s.ai != nil && s.ai.HasProvider() {
 		s.setRunProgress(jobID, "running", 10)
 		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
 			notes := buildAIReleaseContext(req)
@@ -377,6 +377,18 @@ func (s *Service) executePortainer(ctx context.Context, jobID string, req Reques
 			s.finish(jobID, "failed", err)
 			return
 		}
+	} else {
+		message := "skipped: ai provider not configured"
+		if req.BypassAI {
+			message = "skipped: bypass requested by user"
+		}
+		s.emit(jobID, gen.UpdateStepEvent{
+			JobID:     jobID,
+			Step:      "release_analysis",
+			Status:    "completed",
+			Message:   message,
+			Timestamp: time.Now().UTC().Unix(),
+		})
 	}
 
 	s.setRunProgress(jobID, "running", 20)
@@ -411,24 +423,37 @@ func (s *Service) executePortainer(ctx context.Context, jobID string, req Reques
 	}
 
 	s.setRunProgress(jobID, "running", 80)
-	if err := s.runStep(ctx, jobID, "validate", func(ctx context.Context) error {
-		// Portainer stacks might take a while to come back up, so we wait and validate
-		return s.executor.Validate(ctx, req)
-	}); err != nil {
-		s.finish(jobID, "failed", err) // Rollback for Portainer is manual or via manual stack revert for now
-		return
+	if !req.SkipHealthCheck {
+		if err := s.runStep(ctx, jobID, "validate", func(ctx context.Context) error {
+			// Portainer stacks might take a while to come back up, so we wait and validate
+			return s.executor.Validate(ctx, req)
+		}); err != nil {
+			s.finish(jobID, "failed", err) // Rollback for Portainer is manual or via manual stack revert for now
+			return
+		}
+	} else {
+		s.emit(jobID, gen.UpdateStepEvent{
+			JobID:     jobID,
+			Step:      "validate",
+			Status:    "completed",
+			Message:   "skipped: force update requested (no health check)",
+			Timestamp: time.Now().UTC().Unix(),
+		})
 	}
 
 	if req.AIValidateLogs && s.ai != nil && s.ai.HasProvider() {
 		s.setRunProgress(jobID, "running", 90)
-		_ = s.runStep(ctx, jobID, "ai_health_assessment", func(ctx context.Context) error {
+		if err := s.runStep(ctx, jobID, "ai_health_assessment", func(ctx context.Context) error {
 			logs, _ := collectContainerLogsForAI(ctx, req.ContainerID, 300)
 			assessment, err := s.ai.AnalyzeHealthLogs(ctx, req.ContainerID, logs)
 			if err == nil && !assessment.Healthy {
 				return fmt.Errorf("AI marked unhealthy: %s", assessment.Summary)
 			}
 			return nil
-		})
+		}); err != nil {
+			s.finish(jobID, "failed", err)
+			return
+		}
 	}
 
 	s.setRunProgress(jobID, "completed", 100)

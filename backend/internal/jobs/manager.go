@@ -39,7 +39,8 @@ type Manager struct {
 	containerLocks map[string]string // containerID -> jobID
 
 	maxConcurrency int
-	activeSlots    chan struct{}
+	inUse          int
+	slotChanged    chan struct{}
 }
 
 func NewManager(maxConcurrency int) *Manager {
@@ -50,7 +51,7 @@ func NewManager(maxConcurrency int) *Manager {
 		jobs:           make(map[string]*Job),
 		containerLocks: make(map[string]string),
 		maxConcurrency: maxConcurrency,
-		activeSlots:    make(chan struct{}, maxConcurrency),
+		slotChanged:    make(chan struct{}, 1),
 	}
 }
 
@@ -66,28 +67,36 @@ func (m *Manager) SetMaxConcurrency(n int) {
 	}
 
 	// Adjusting a semaphore at runtime is tricky in Go.
-	// For simplicity, we keep the existing channel and just update the limit for FUTURE jobs
-	// if we were to recreate the channel. But since it's a buffered channel, we can't easily
-	// resize it. We'll stick to the initial limit for this session or implement a more
-	// dynamic semaphore if really needed.
 	m.maxConcurrency = n
+	m.notifySlotChangeLocked()
 }
 
 func (m *Manager) AcquireSlot(ctx context.Context, jobID, containerID string) error {
-	m.mu.Lock()
-	if _, exists := m.containerLocks[containerID]; exists {
+	for {
+		m.mu.Lock()
+		if owner, exists := m.containerLocks[containerID]; exists && owner != jobID {
+			m.mu.Unlock()
+			return fmt.Errorf("container %s is already busy with another job", containerID)
+		}
+		m.containerLocks[containerID] = jobID
+		if m.inUse < m.maxConcurrency {
+			m.inUse++
+			m.mu.Unlock()
+			return nil
+		}
+		ch := m.slotChanged
 		m.mu.Unlock()
-		return fmt.Errorf("container %s is already busy with another job", containerID)
-	}
-	m.containerLocks[containerID] = jobID
-	m.mu.Unlock()
 
-	select {
-	case m.activeSlots <- struct{}{}:
-		return nil
-	case <-ctx.Done():
-		m.ReleaseSlot(jobID, containerID)
-		return ctx.Err()
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			m.mu.Lock()
+			if m.containerLocks[containerID] == jobID {
+				delete(m.containerLocks, containerID)
+			}
+			m.mu.Unlock()
+			return ctx.Err()
+		}
 	}
 }
 
@@ -96,12 +105,11 @@ func (m *Manager) ReleaseSlot(jobID, containerID string) {
 	if m.containerLocks[containerID] == jobID {
 		delete(m.containerLocks, containerID)
 	}
-	m.mu.Unlock()
-
-	select {
-	case <-m.activeSlots:
-	default:
+	if m.inUse > 0 {
+		m.inUse--
 	}
+	m.notifySlotChangeLocked()
+	m.mu.Unlock()
 }
 
 func (m *Manager) RegisterJob(job *Job) {
@@ -155,15 +163,8 @@ func (m *Manager) CancelAll() {
 	}
 	// Also clear container locks
 	m.containerLocks = make(map[string]string)
-
-	// Drain semaphore
-	for {
-		select {
-		case <-m.activeSlots:
-		default:
-			return
-		}
-	}
+	m.inUse = 0
+	m.notifySlotChangeLocked()
 }
 
 func (m *Manager) ActiveJobs() []gen.JobProgress {
@@ -188,4 +189,11 @@ func (m *Manager) ActiveJobs() []gen.JobProgress {
 		})
 	}
 	return out
+}
+
+func (m *Manager) notifySlotChangeLocked() {
+	select {
+	case m.slotChanged <- struct{}{}:
+	default:
+	}
 }

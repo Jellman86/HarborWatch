@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -76,9 +77,38 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
 		return fmt.Errorf("create scan_jobs table: %w", err)
 	}
 
-	// Migrate v0.5.0 -> v0.6.0 (add progress if missing)
-	_, _ = s.db.ExecContext(ctx, "ALTER TABLE scan_jobs ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
+	if err := s.ensureColumn(ctx, "scan_jobs", "progress", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("ensure scan_jobs.progress: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+CREATE INDEX IF NOT EXISTS idx_scan_results_target_scanned ON scan_results(target, scanned_at DESC);
+CREATE INDEX IF NOT EXISTS idx_malware_results_target_scanned ON malware_scan_results(target, scanned_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scan_jobs_type_started ON scan_jobs(type, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scan_jobs_status_started ON scan_jobs(status, started_at DESC);
+`); err != nil {
+		return fmt.Errorf("init scanning indexes: %w", err)
+	}
 
+	return nil
+}
+
+func (s *Store) ensureColumn(ctx context.Context, table, column, ddl string) error {
+	query := fmt.Sprintf("SELECT 1 FROM pragma_table_info('%s') WHERE name=? LIMIT 1", table)
+	var exists int
+	err := s.db.QueryRowContext(ctx, query, column).Scan(&exists)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, ddl)
+	if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return nil
+		}
+		return err
+	}
 	return nil
 }
 
