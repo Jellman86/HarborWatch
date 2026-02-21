@@ -157,8 +157,8 @@
         return risk.malwareInfected || risk.critical > 0 || risk.high > 0;
     }
 
-    function handleTriggerScan(image: string) {
-        onNavigate("security", { target: image });
+    function handleTriggerScan(id: string) {
+        onNavigate("container-detail", { id, tab: "security" });
     }
 
     const imageRepo = (image: string) => parseImageRef(image).repository;
@@ -661,7 +661,7 @@
                     </div>
                     <div class="flex gap-2">
                         <button
-                            onclick={() => handleTriggerScan(c.image)}
+                            onclick={() => handleTriggerScan(c.id)}
                             class="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-brand-600 transition-all"
                         >
                             Scan

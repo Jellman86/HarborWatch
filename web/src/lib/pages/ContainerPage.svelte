@@ -43,8 +43,9 @@
         updatedAt?: number;
     }
 
-    let { id, onNavigate } = $props<{
+    let { id, params, onNavigate } = $props<{
         id: string;
+        params?: { tab?: string };
         onNavigate: (route: string, params?: any) => void;
     }>();
 
@@ -64,6 +65,12 @@
     let runningMalwareScan = $state(false);
     let activeTab = $state("insights");
     let error = $state("");
+
+    $effect(() => {
+        if (params?.tab) {
+            activeTab = params.tab;
+        }
+    });
     let scanMessage = $state("");
     let lifecycleMessage = $state("");
     let lifecycleMode = $state<"global" | "manual">("global");

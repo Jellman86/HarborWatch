@@ -214,7 +214,7 @@
         {/await}
       {:else if currentRoute === 'container-detail'}
         {#await import("./lib/pages/ContainerPage.svelte") then Mod}
-          <Mod.default id={routeParams.id} onNavigate={navigate} />
+          <Mod.default id={routeParams.id} params={routeParams} onNavigate={navigate} />
         {/await}
       {:else if currentRoute === 'stacks'}
         {#await import("./lib/pages/Stacks.svelte") then Mod}
@@ -223,10 +223,6 @@
       {:else if currentRoute === 'images'}
         {#await import("./lib/pages/Images.svelte") then Mod}
           <Mod.default {images} />
-        {/await}
-      {:else if currentRoute === 'security'}
-        {#await import("./lib/pages/Security.svelte") then Mod}
-          <Mod.default params={routeParams} />
         {/await}
       {:else if currentRoute === 'automation'}
         {#await import("./lib/pages/Automation.svelte") then Mod}

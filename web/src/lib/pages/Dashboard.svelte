@@ -77,6 +77,11 @@
                 const data = await res.json();
                 return (Array.isArray(data) ? data : [])
                     .filter(img => (img.vulnerabilityCritical || 0) > 0 || (img.vulnerabilityHigh || 0) > 0)
+                    .map(img => {
+                        // Find a container using this image to provide a link
+                        const container = safeContainers.find(c => c.image === img.primaryRef || (img.repoTags && img.repoTags.includes(c.image)));
+                        return { ...img, containerId: container?.id };
+                    })
                     .sort((a, b) => (b.vulnerabilityCritical || 0) - (a.vulnerabilityCritical || 0))
                     .slice(0, 5);
             }
@@ -188,9 +193,11 @@
                                     </div>
                                     <div class="flex items-center gap-2 ml-4">
                                         <span class="px-2 py-0.5 rounded-lg bg-rose-100 text-rose-700 text-[10px] font-black">{risk.vulnerabilityCritical || 0} Critical</span>
-                                        <button onclick={() => onNavigate('security', { target: risk.primaryRef })} class="p-1.5 text-slate-400 hover:text-brand-600">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-                                        </button>
+                                        {#if risk.containerId}
+                                            <button onclick={() => onNavigate('container-detail', { id: risk.containerId, tab: 'security' })} class="p-1.5 text-slate-400 hover:text-brand-600">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                            </button>
+                                        {/if}
                                     </div>
                                 </div>
                             {:else}
