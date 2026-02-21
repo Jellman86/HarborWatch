@@ -81,7 +81,7 @@
         position: relative;
         z-index: 1;
         border-radius: 1.5rem;
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        box-shadow: none;
     }
     .stack-card-container::before,
     .stack-card-container::after {
@@ -90,7 +90,6 @@
         border-radius: 1.5rem; /* Matches rounded-3xl */
         border: 1px solid theme('colors.slate.200');
         background: theme('colors.slate.50');
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
         transition: all 0.3s ease;
     }
 
@@ -108,6 +107,7 @@
         bottom: -16px;
         z-index: -2;
         opacity: 0.5;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     }
 
     :global(.dark) .stack-card-container,
@@ -115,7 +115,11 @@
     :global(.dark) .stack-card-container::after {
         border-color: theme('colors.slate.700');
         background: theme('colors.slate.800');
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+        box-shadow: none;
+    }
+
+    :global(.dark) .stack-card-container::after {
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4);
     }
     
     .stack-card-container:hover::before {
