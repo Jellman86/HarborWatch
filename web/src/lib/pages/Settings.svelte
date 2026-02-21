@@ -5,6 +5,10 @@
     import type { ContainerSummary, Settings } from "../api-types";
     import { toasts } from "../stores/ToastStore";
 
+    let { onNavigate } = $props<{
+        onNavigate: (route: string, params?: any) => void;
+    }>();
+
     interface Schedule {
         id: string;
         cronSpec: string;

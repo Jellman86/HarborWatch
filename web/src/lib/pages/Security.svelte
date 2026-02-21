@@ -121,7 +121,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ target })
             });
-            activeJob = { jobId: response.jobId, target, status: response.status, source: "trivy", startedAt: Math.floor(Date.now() / 1000) };
+            activeJob = { jobId: response.jobId, target, status: response.status, source: "trivy", progress: 0, startedAt: Math.floor(Date.now() / 1000) };
             await pollJob(response.jobId);
         } catch (e) {
             scanError = "Vulnerability scan failed to start";
@@ -136,7 +136,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ target: malwareTarget })
             });
-            activeJob = { jobId: response.jobId, target: malwareTarget, status: response.status, source: "clamav", startedAt: Math.floor(Date.now() / 1000) };
+            activeJob = { jobId: response.jobId, target: malwareTarget, status: response.status, source: "clamav", progress: 0, startedAt: Math.floor(Date.now() / 1000) };
             await pollJob(response.jobId);
         } catch (e) {
             scanError = "Malware scan failed to start";

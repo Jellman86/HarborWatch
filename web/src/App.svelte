@@ -250,7 +250,7 @@
         {/await}
       {:else if currentRoute === 'settings'}
         {#await import("./lib/pages/Settings.svelte") then Mod}
-          <Mod.default />
+          <Mod.default onNavigate={navigate} />
         {/await}
       {:else if currentRoute === 'about'}
         {#await import("./lib/pages/About.svelte") then Mod}

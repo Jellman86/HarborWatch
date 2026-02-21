@@ -78,7 +78,7 @@
 
     let safeMetrics = $derived(
         (metrics || [])
-            .map((m) => {
+            .map((m: Metric) => {
                 const x = normalizeTimestamp(m?.timestamp);
                 const rawY = type === "cpu" ? toFinite(m?.cpuPercent) : toFinite(m?.memoryUsage);
                 if (x === null || rawY === null) return null;
@@ -87,8 +87,8 @@
                     : Math.max(0, rawY);
                 return { x, y: boundedY };
             })
-            .filter((point): point is { x: number; y: number } => point !== null)
-            .sort((a, b) => a.x - b.x)
+            .filter((point: { x: number; y: number } | null): point is { x: number; y: number } => point !== null)
+            .sort((a: { x: number; y: number }, b: { x: number; y: number }) => a.x - b.x)
     );
 
     let renderMetrics = $derived(downsamplePoints(safeMetrics, MAX_RENDER_POINTS));

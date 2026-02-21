@@ -11,7 +11,7 @@
     let aggregateProgress = $derived.by(() => {
         if (jobs.length === 0) return 0;
         // Map indeterminate (-1) or queued to 0 for the purpose of the bar
-        const total = jobs.reduce((acc, j) => acc + Math.max(0, j.progress), 0);
+        const total = jobs.reduce((acc: number, j: JobProgress) => acc + Math.max(0, j.progress), 0);
         return Math.round(total / jobs.length);
     });
 
@@ -34,11 +34,11 @@
             return `${jobVerb(jobs[0].type)} ${formatTarget(jobs[0].target)}`;
         }
         
-        const types = [...new Set(jobs.map(j => j.type))];
-        const targets = jobs.map(j => formatTarget(j.target));
+        const types = [...new Set(jobs.map((j: JobProgress) => j.type))];
+        const targets = jobs.map((j: JobProgress) => formatTarget(j.target));
         
         if (types.length === 1) {
-            const verb = jobVerb(types[0]);
+            const verb = jobVerb(types[0] as string);
             if (targets.length === 2) return `${verb} ${targets[0]} & ${targets[1]}`;
             return `${verb} ${targets[0]} and ${targets.length - 1} others`;
         }
@@ -50,14 +50,14 @@
         if (jobs.length === 0) return "";
         
         // Prefer showing the most 'interesting' message (e.g. not just 'queued')
-        const active = jobs.find(j => j.status === 'running' && j.message);
+        const active = jobs.find((j: JobProgress) => j.status === 'running' && j.message);
         if (active) return active.message;
         
         const last = jobs[jobs.length - 1];
         return last.message || last.status;
     });
 
-    let hasEstimatedProgress = $derived.by(() => jobs.some((j) => j.progressMode === "estimated"));
+    let hasEstimatedProgress = $derived.by(() => jobs.some((j: JobProgress) => j.progressMode === "estimated"));
 
     let showDetails = $state(false);
     let cancellingAll = $state(false);

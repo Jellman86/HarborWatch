@@ -213,14 +213,14 @@
     }
 
     let filteredContainers = $derived(
-        safeContainers.filter((summary) => {
+        safeContainers.filter((summary: ContainerSummary) => {
             if (!normalizedSearch) return true;
             return containerSearchText(summary).includes(normalizedSearch);
         })
     );
 
     let visibleContainers = $derived(
-        filteredContainers.filter((summary) => {
+        filteredContainers.filter((summary: ContainerSummary) => {
             const ignored = isAutomationIgnored(summary);
             // If searching explicitly, always show matches regardless of ignore state
             if (normalizedSearch) return true;
@@ -239,7 +239,7 @@
                 default:
                     return true;
             }
-        }).sort((a, b) => {
+        }).sort((a: ContainerSummary, b: ContainerSummary) => {
             if (sortBy === "name") {
                 const nameA = (a.names?.[0] || "").toLowerCase();
                 const nameB = (b.names?.[0] || "").toLowerCase();
@@ -263,11 +263,11 @@
     );
 
     let ignoredCount = $derived(
-        filteredContainers.filter(c => isAutomationIgnored(c)).length
+        filteredContainers.filter((c: ContainerSummary) => isAutomationIgnored(c)).length
     );
 
     let hiddenIgnoredCount = $derived(
-        !showIgnored ? filteredContainers.filter(c => isAutomationIgnored(c) && activeFilter !== "ignored").length : 0
+        !showIgnored ? filteredContainers.filter((c: ContainerSummary) => isAutomationIgnored(c) && activeFilter !== "ignored").length : 0
     );
 
     function latestMetric(id: string): Metric | null {
@@ -395,7 +395,7 @@
     }
 
     $effect(() => {
-        const ids = safeContainers.map((c) => c.id).filter(Boolean);
+        const ids = safeContainers.map((c: ContainerSummary) => c.id).filter(Boolean);
         const key = ids.join(",");
         if (key === lastSparklineKey) return;
         lastSparklineKey = key;
@@ -403,7 +403,7 @@
     });
 
     $effect(() => {
-        const ids = safeContainers.map((c) => c.id).filter(Boolean);
+        const ids = safeContainers.map((c: ContainerSummary) => c.id).filter(Boolean);
         const key = ids.join(",");
         if (key === lastIntelKey) return;
         lastIntelKey = key;
@@ -411,7 +411,7 @@
     });
 
     $effect(() => {
-        const refs = safeContainers.map((c) => normalizeImageKey(c.image)).filter(Boolean);
+        const refs = safeContainers.map((c: ContainerSummary) => normalizeImageKey(c.image)).filter(Boolean);
         const key = refs.join(",");
         if (key === lastRiskKey) return;
         lastRiskKey = key;

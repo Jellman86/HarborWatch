@@ -27,9 +27,9 @@
 
     let safeData = $derived(
         downsampleSeries((metrics || [])
-            .map((m) => toFinite(m?.cpuPercent))
-            .filter((v): v is number => v !== null)
-            .map((v) => Math.max(0, Math.min(100, v))), MAX_RENDER_POINTS)
+            .map((m: Metric) => toFinite(m?.cpuPercent))
+            .filter((v: number | null): v is number => v !== null)
+            .map((v: number) => Math.max(0, Math.min(100, v))), MAX_RENDER_POINTS)
     );
 
     let bounds = $derived((() => {

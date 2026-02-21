@@ -36,8 +36,8 @@
     let connectorMarkerId = $derived(`flow-arrow-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "default"}`);
 
     let flowNodes = $derived<FlowNode[]>([
-        { key: "start", kind: "terminal", label: "Start", logicalIndex: 0 },
-        ...steps.map((step, idx) => ({
+        { key: "start", kind: "terminal" as const, label: "Start", logicalIndex: 0 },
+        ...steps.map((step: FlowStep, idx: number) => ({
             key: `step-${idx}`,
             kind: "step" as const,
             label: step.label,
@@ -45,7 +45,7 @@
             stepNumber: idx + 1,
             state: step.state
         })),
-        { key: "end", kind: "terminal", label: "End", logicalIndex: steps.length + 1 }
+        { key: "end", kind: "terminal" as const, label: "End", logicalIndex: steps.length + 1 }
     ]);
 
     let gridStyle = $derived(`grid-template-columns: minmax(0, 1fr); row-gap: ${GRID_ROW_GAP}px;`);
