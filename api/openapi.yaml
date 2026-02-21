@@ -404,6 +404,18 @@ paths:
               schema:
                 type: object
   /api/ai/fleet-advice:
+    get:
+      operationId: getLatestFleetAdvice
+      responses:
+        '200':
+          description: Latest persisted fleet advice
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  advice: { type: string }
+                  timestamp: { type: integer, format: int64 }
     post:
       operationId: getFleetAdvice
       requestBody:
@@ -982,6 +994,8 @@ components:
         validateTimeoutSec: { type: integer }
         validateIntervalSec: { type: integer }
         validateMode: { type: string, enum: [http, docker, both] }
+        bypassAi: { type: boolean }
+        skipHealthCheck: { type: boolean }
     UpdateStartResponse:
       type: object
       required: [jobId, status]
@@ -1056,6 +1070,10 @@ components:
         retentionComposeAuditDays: { type: integer, minimum: 1, maximum: 3650 }
         retentionAIUsageDays: { type: integer, minimum: 1, maximum: 3650 }
         metricsNormalized: { type: boolean }
+        globalBypassAi: { type: boolean }
+        globalSkipHealthCheck: { type: boolean }
+        aiTestingPassed: { type: boolean }
+        portainerTestingPassed: { type: boolean }
         environmentOverrides:
           type: object
           additionalProperties: { type: boolean }

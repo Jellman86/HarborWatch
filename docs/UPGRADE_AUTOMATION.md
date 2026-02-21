@@ -34,20 +34,28 @@ Update execution itself is unchanged and still runs:
 7. `ai_health_assessment` (optional)
 8. `rollback` (on failure)
 
-## Policy Model
+## Lifecycle and Policy Model
 
-Each container has an `updatePolicy`:
+HarborWatch uses a simplified lifecycle model to manage how updates are applied:
 
-- `auto`
-  - Eligible for `container_update_apply`.
-  - Still gated by automation inheritance/domain controls.
-- `manual`
-  - Update checks still run.
-  - Automatic apply is skipped.
-  - Manual update trigger remains available.
-- `locked`
-  - Both manual and automatic updates are blocked.
-  - API returns `423 Locked` for manual run attempts.
+- **Automatic**
+  - Follows global automation settings.
+  - If the `container_update_apply` schedule is enabled, updates will be applied automatically.
+  - Effectively sets `updatePolicy` to `auto` and enables automation inheritance.
+- **Manual**
+  - Automatic application is disabled for this container.
+  - Users must explicitly trigger updates via the UI.
+  - Effectively sets `updatePolicy` to `manual` and disables automation inheritance.
+  - **Force Update** and **Bypass AI** options are available for manual triggers.
+
+## Global Safety Overrides (Watchtower Mode)
+
+You can globally override safety features in **Settings > Automations > Upgrades**:
+
+- **Global AI Bypass**: Disables AI breaking-change analysis for ALL containers.
+- **Watchtower Mode (Skip Health)**: Disables post-update health checks and rollbacks for ALL containers.
+
+These settings are useful for "rolling" release projects (like `nightly` builds) where traditional release notes are unavailable or health checks are unreliable.
 
 ## Automation Scoping and Exclusions
 
@@ -108,9 +116,12 @@ These runtime values can be configured from Settings unless pinned by environmen
 
 ### Container Detail -> Lifecycle
 
-- Lifecycle mode controls automation inheritance (`global` vs `manual`).
-- Update policy selector controls execution mode (`auto`, `manual`, `locked`).
-- Trigger Upgrade action is disabled when policy is `locked`.
+- Choice between **Automatic** and **Manual** modes.
+- **Manual Mode** exposes additional safety toggles:
+  - **Bypass AI Assessment**: Skip release analysis for this run.
+  - **Force Update (Skip Health)**: Skip post-update health validation.
+- **Trigger Upgrade**: Starts the update flow in the background while you remain on the page.
+- **Breaking Change Signals**: Historical list of past AI alerts for the container.
 - Lifecycle log and AI risk outcomes remain visible for auditability.
 
 ## Behavior Without AI
