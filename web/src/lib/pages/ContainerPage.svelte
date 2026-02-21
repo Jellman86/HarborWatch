@@ -317,36 +317,21 @@
             detail.rules.upgradesAutomation = true;
             detail.rules.maintenanceAutomation = true;
             detail.rules.securityAutomation = true;
+            detail.rules.updatePolicy = "auto";
             return;
         }
         detail.rules.inheritAutomation = false;
         detail.rules.upgradesAutomation = false;
         detail.rules.maintenanceAutomation = false;
         detail.rules.securityAutomation = false;
-        if (detail.rules.updatePolicy === "auto") {
-            detail.rules.updatePolicy = "manual";
-        }
-    }
-
-    function updatePolicyDescription(policy: string | undefined): string {
-        const normalized = String(policy || "manual").toLowerCase();
-        switch (normalized) {
-            case "auto":
-                return "Eligible for scheduled auto-apply when update automation is enabled.";
-            case "locked":
-                return "All upgrade runs are blocked for this container (manual and automated).";
-            default:
-                return "Updates are detected but applied only when manually triggered.";
-        }
+        detail.rules.updatePolicy = "manual";
     }
 
     async function saveRules() {
         if (!detail?.rules) return;
         const containerId = activeContainerId();
         if (!containerId) return;
-        if (lifecycleMode === "manual" && detail.rules.updatePolicy === "auto") {
-            detail.rules.updatePolicy = "manual";
-        }
+        
         lifecycleMessage = "";
         savingRules = true;
         try {
@@ -358,8 +343,8 @@
             if (res.ok) {
                 await loadDetail(true);
                 lifecycleMessage = lifecycleMode === "global"
-                    ? "Lifecycle mode set to global automation."
-                    : "Lifecycle mode set to manual.";
+                    ? "Lifecycle mode set to Automatic (Follows global policy)."
+                    : "Lifecycle mode set to Manual (User triggered only).";
                 toasts.success("Lifecycle policy updated.");
             } else {
                 const body = await res.json().catch(() => ({}));
@@ -861,8 +846,8 @@
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                         <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
                             <div>
-                                <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Lifecycle Controls</h3>
-                                <p class="text-[11px] text-slate-500 mt-1">Choose whether this container follows global automation policy or manual-only operation.</p>
+                                <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Lifecycle Management</h3>
+                                <p class="text-[11px] text-slate-500 mt-1">Choose whether this container updates automatically or requires manual intervention.</p>
                             </div>
                             {#if detail.rules}
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -870,60 +855,54 @@
                                         onclick={() => applyLifecycleModeToRules("global")}
                                         class="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors {lifecycleMode === 'global' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-500'}"
                                     >
-                                        Automatic (Global)
+                                        Automatic
                                     </button>
                                     <button
                                         onclick={() => applyLifecycleModeToRules("manual")}
                                         class="px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-widest transition-colors {lifecycleMode === 'manual' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900/40 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-500'}"
                                     >
-                                        Manual (User)
+                                        Manual
                                     </button>
                                 </div>
 
-                                {#if lifecycleMode === "manual"}
-                                    <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-700 space-y-3">
-                                        <div class="flex items-center justify-between">
-                                            <div>
-                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Bypass AI Assessment</p>
-                                                <p class="text-[11px] text-slate-500">Skip AI breaking-change analysis for manual runs.</p>
+                                <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-700 space-y-2">
+                                    {#if lifecycleMode === "global"}
+                                        <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                                            Follows global automation settings. Updates will be applied automatically if the "Container Auto-Apply" schedule is enabled.
+                                        </p>
+                                    {:else}
+                                        <div class="space-y-3">
+                                            <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                                                Automation is paused. You must explicitly trigger the upgrade flow using the button below.
+                                            </p>
+                                            <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                                <div>
+                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Bypass AI Assessment</p>
+                                                    <p class="text-[11px] text-slate-500">Skip AI breaking-change analysis for manual runs.</p>
+                                                </div>
+                                                <button
+                                                    onclick={() => bypassAi = !bypassAi}
+                                                    class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                    aria-label="Toggle AI Bypass"
+                                                >
+                                                    <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
+                                                </button>
                                             </div>
-                                            <button
-                                                onclick={() => bypassAi = !bypassAi}
-                                                class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                            >
-                                                <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
-                                            </button>
                                         </div>
-                                    </div>
-                                {/if}
-
-                                <div class="space-y-2">
-                                    <label for="update-policy" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Update Policy</label>
-                                    <select
-                                        id="update-policy"
-                                        bind:value={detail.rules.updatePolicy}
-                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                    >
-                                        <option value="manual">Manual</option>
-                                        <option value="auto" disabled={lifecycleMode === "manual"}>Auto Apply</option>
-                                        <option value="locked">Locked</option>
-                                    </select>
-                                    <p class="text-[11px] text-slate-500">{updatePolicyDescription(detail.rules.updatePolicy)}</p>
-                                    {#if lifecycleMode === "manual" && detail.rules.updatePolicy === "auto"}
-                                        <p class="text-[11px] text-rose-500 font-bold uppercase tracking-tighter">Auto-apply will be converted to Manual on save.</p>
                                     {/if}
                                 </div>
-                                <div class="flex flex-wrap gap-3">
+
+                                <div class="flex flex-wrap gap-3 pt-2">
                                     <button
                                         onclick={saveRules}
                                         disabled={savingRules}
                                         class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-60"
                                     >
-                                        {savingRules ? "Saving..." : "Save Policy"}
+                                        {savingRules ? "Saving..." : "Save Selection"}
                                     </button>
                                     <button
                                         onclick={openManualUpdate}
-                                        disabled={detail.rules.updatePolicy === "locked" || (intel?.portainerManaged && !intel?.portainerConfigured)}
+                                        disabled={intel?.portainerManaged && !intel?.portainerConfigured}
                                         class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-500/20 hover:scale-105 transition-all"
                                         title={intel?.portainerManaged && !intel?.portainerConfigured ? "Portainer integration required" : ""}
                                     >

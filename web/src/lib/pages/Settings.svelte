@@ -603,7 +603,7 @@
 
     async function bulkSetAutoApply() {
         if (!discoveredContainers.length) return;
-        if (!confirm(`Are you sure you want to set ALL (${discoveredContainers.length}) containers to "Auto Apply"? This will enable automated upgrades for every container not explicitly ignored.`)) return;
+        if (!confirm(`Are you sure you want to set ALL (${discoveredContainers.length}) containers to "Automatic"? This will enable automated upgrades for every container not explicitly ignored.`)) return;
 
         bulkUpdating = true;
         let success = 0;
@@ -619,7 +619,10 @@
                     body: JSON.stringify({
                         containerId: c.id,
                         updatePolicy: "auto",
-                        inheritAutomation: true
+                        inheritAutomation: true,
+                        upgradesAutomation: true,
+                        maintenanceAutomation: true,
+                        securityAutomation: true
                     })
                 });
                 if (!res.ok) throw new Error("fail");
@@ -632,9 +635,9 @@
             });
 
             if (fail > 0) {
-                toasts.warning(`Bulk update partial: ${success} set to Auto, ${fail} failed.`);
+                toasts.warning(`Bulk update partial: ${success} set to Automatic, ${fail} failed.`);
             } else {
-                toasts.success(`Successfully set all ${success} containers to Auto Apply.`);
+                toasts.success(`Successfully set all ${success} containers to Automatic.`);
             }
         } catch (e) {
             toasts.error("Bulk update failed to complete.");
@@ -1163,9 +1166,9 @@
                                                     disabled={bulkUpdating || !discoveredContainers.length}
                                                     class="w-full px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/20"
                                                 >
-                                                    {bulkUpdating ? "Applying..." : "Bulk Enable Auto-Apply"}
+                                                    {bulkUpdating ? "Applying..." : "Bulk Enable Automatic Mode"}
                                                 </button>
-                                                <p class="text-[10px] text-slate-500 italic mt-1 text-center">Set all containers to follow global auto-apply policy.</p>
+                                                <p class="text-[10px] text-slate-500 italic mt-1 text-center">Set all containers to follow global automation policy.</p>
                                             </div>
                                         </div>
                                     </div>
