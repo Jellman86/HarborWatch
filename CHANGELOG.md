@@ -2,6 +2,23 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.8.2] - 2026-02-21
+
+### Fixed
+- **Portainer Update Safety Flags:**
+  - Portainer-managed update pipelines now correctly honor **Bypass AI** and **Skip Health Check** toggles.
+  - Resolved a false-success path where Portainer AI health-assessment failures could be ignored and still report job completion.
+- **Runtime Concurrency Configuration:**
+  - Fixed job manager behavior so **Max Concurrent Tasks** changes apply at runtime after settings are saved, rather than only on startup.
+- **Migration Reliability:**
+  - Hardened SQLite migration behavior for scan/update stores by replacing silent `ALTER TABLE` failures with explicit column checks and surfaced errors.
+  - Added missing indexes for high-frequency update and scan query paths to improve sustained performance under larger history volumes.
+- **Test Suite Integrity:**
+  - Updated stale test doubles/interfaces and added regression coverage for Portainer bypass/health-validate behavior to keep `scripts/test.sh` green.
+
+### Tests
+- `./scripts/test.sh`
+
 ## [0.8.1] - 2026-02-21
 
 ### Added
