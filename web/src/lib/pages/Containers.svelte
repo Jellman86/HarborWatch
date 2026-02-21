@@ -18,6 +18,8 @@
     let lastIntelKey = $state("");
     let imageRiskByKey = $state<Record<string, { critical: number; high: number; malwareInfected: boolean }>>({});
     let lastRiskKey = $state("");
+    let aiBlockedByContainer = $state<Record<string, AIBlockedSignal>>({});
+    let lastAIBlockedKey = $state("");
     let searchQuery = $state("");
     let showIgnored = $state(false);
     let sortBy = $state<"name" | "state" | "memory" | "cpu">("name");
@@ -64,6 +66,14 @@
         portainerManaged?: boolean;
         portainerConfigured?: boolean;
         issues?: ContainerIntelIssue[];
+    }
+
+    interface AIBlockedSignal {
+        blocked: boolean;
+        reason?: string;
+        riskScore?: number;
+        riskLevel?: string;
+        updatedAt?: number;
     }
 
     const formatId = (id: string) => (id.length > 12 ? id.slice(0, 12) : id);
@@ -133,6 +143,31 @@
         if (!intel) return "";
         const first = (intel.issues || [])[0];
         return String(first?.message || "").trim();
+    }
+
+    function lookupAIBlocked(summary: ContainerSummary): AIBlockedSignal | null {
+        const id = String(summary.id || "").trim();
+        if (!id) return null;
+        if (aiBlockedByContainer[id]) return aiBlockedByContainer[id];
+        for (const [key, value] of Object.entries(aiBlockedByContainer)) {
+            if (!key) continue;
+            if (id.startsWith(key) || key.startsWith(id)) return value;
+        }
+        return null;
+    }
+
+    function hasAIBlocked(summary: ContainerSummary): boolean {
+        return !!lookupAIBlocked(summary)?.blocked;
+    }
+
+    function aiBlockedTooltip(summary: ContainerSummary): string {
+        const signal = lookupAIBlocked(summary);
+        if (!signal?.blocked) return "";
+        const parts: string[] = [];
+        if (signal.riskLevel) parts.push(`Risk ${signal.riskLevel}${signal.riskScore ? ` (${signal.riskScore})` : ""}`);
+        if (signal.reason) parts.push(signal.reason);
+        if (signal.updatedAt) parts.push(`Last blocked ${new Date(signal.updatedAt * 1000).toLocaleString()}`);
+        return parts.join(" • ");
     }
 
     function normalizeImageKey(raw: string): string {
@@ -398,6 +433,28 @@
         }
     }
 
+    async function loadAIBlockedSignals() {
+        try {
+            const res = await fetch("/api/updates/ai-blocked");
+            if (!res.ok) {
+                aiBlockedByContainer = {};
+                return;
+            }
+            const payload = await res.json();
+            const next: Record<string, AIBlockedSignal> = {};
+            if (payload && typeof payload === "object") {
+                for (const [id, value] of Object.entries(payload)) {
+                    const key = String(id || "").trim();
+                    if (!key || !value || typeof value !== "object") continue;
+                    next[key] = value as AIBlockedSignal;
+                }
+            }
+            aiBlockedByContainer = next;
+        } catch {
+            aiBlockedByContainer = {};
+        }
+    }
+
     $effect(() => {
         const ids = safeContainers.map((c: ContainerSummary) => c.id).filter(Boolean);
         const key = ids.join(",");
@@ -420,6 +477,14 @@
         if (key === lastRiskKey) return;
         lastRiskKey = key;
         loadImageRiskSignals();
+    });
+
+    $effect(() => {
+        const ids = safeContainers.map((c: ContainerSummary) => c.id).filter(Boolean);
+        const key = ids.join(",");
+        if (key === lastAIBlockedKey) return;
+        lastAIBlockedKey = key;
+        loadAIBlockedSignals();
     });
 
     onMount(() => {
@@ -554,6 +619,11 @@
                                     </svg>
                                 </span>
                             {/if}
+                            {#if hasAIBlocked(c)}
+                                <span class="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 rounded-lg text-[9px] font-black uppercase tracking-tight border border-rose-200 dark:border-rose-900/40" title={aiBlockedTooltip(c)}>
+                                    AI Blocked
+                                </span>
+                            {/if}
                             {#if ignored}
                                 <span class="p-1.5 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200 rounded-lg" title="Ignored from Automation">
                                     <!-- Ghost icon for ignored/stealth -->
@@ -640,6 +710,18 @@
                         <div class="rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-900/10 px-2.5 py-2">
                             <p class="text-[9px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300">AI Automation Needs Metadata</p>
                             <p class="mt-1 text-[10px] text-rose-700/90 dark:text-rose-200/90">{intelPrimaryIssue(c) || "Open Manage > Intelligence and configure repository/changelog overrides."}</p>
+                        </div>
+                    {/if}
+                    {#if hasAIBlocked(c)}
+                        <div class="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 px-2.5 py-2">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">AI Blocked Last Upgrade</p>
+                            <p class="mt-1 text-[10px] text-amber-800/90 dark:text-amber-200/90">{lookupAIBlocked(c)?.reason || "Risk threshold exceeded."}</p>
+                            <button
+                                onclick={() => onNavigate("container-detail", { id: c.id, tab: "lifecycle" })}
+                                class="mt-2 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300 hover:underline"
+                            >
+                                Review Lifecycle History
+                            </button>
                         </div>
                     {/if}
                 </div>

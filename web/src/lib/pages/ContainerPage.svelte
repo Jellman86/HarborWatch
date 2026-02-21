@@ -321,6 +321,7 @@
 
     function syncLifecycleModeFromRules() {
         lifecycleMode = detail?.rules?.inheritAutomation === false ? "manual" : "global";
+        bypassAi = !!(detail?.rules as any)?.bypassAi;
     }
 
     function applyLifecycleModeToRules(mode: "global" | "manual") {
@@ -345,6 +346,7 @@
         if (!detail?.rules) return;
         const containerId = activeContainerId();
         if (!containerId) return;
+        (detail.rules as any).bypassAi = !!bypassAi;
         
         lifecycleMessage = "";
         savingRules = true;
@@ -948,13 +950,13 @@
                                             {#if configStore.aiActive}
                                                 <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
                                                     <div>
-                                                        <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Bypass AI Assessment</p>
-                                                        <p class="text-[11px] text-slate-500">Skip AI breaking-change analysis for manual runs.</p>
+                                                        <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Ignore Breaking Change Signals</p>
+                                                        <p class="text-[11px] text-slate-500">Allow this container to auto-upgrade even when AI marks release analysis high risk.</p>
                                                     </div>
                                                     <button
                                                         onclick={() => bypassAi = !bypassAi}
-                                                        class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                        aria-label="Toggle AI Bypass"
+                                                        class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                        aria-label="Toggle Ignore Breaking Change Signals"
                                                     >
                                                         <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
                                                     </button>

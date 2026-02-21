@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	ErrUpdatePolicyLocked          = errors.New("update policy is locked")
-	ErrUpdatePolicyNotAuto         = errors.New("update policy is not auto")
+	ErrUpdatePolicyLocked           = errors.New("update policy is locked")
+	ErrUpdatePolicyNotAuto          = errors.New("update policy is not auto")
 	ErrPortainerIntegrationRequired = errors.New("portainer integration required for this container")
 )
 
@@ -225,7 +225,7 @@ func buildUpdateRequestForContainer(
 		ValidateIntervalSec:  effectiveRules.ValidateIntervalSec,
 		AIValidateLogs:       effectiveRules.AIValidateLogs,
 		AIBlockRiskThreshold: aiBlockRiskThreshold,
-		BypassAI:             bypassAI || globalBypassAI,
+		BypassAI:             bypassAI || effectiveRules.BypassAI || globalBypassAI,
 		SkipHealthCheck:      skipHealthCheck || globalSkipHealthCheck,
 		IsPortainerManaged:   isPortainer,
 		PortainerStackID:     stackID,

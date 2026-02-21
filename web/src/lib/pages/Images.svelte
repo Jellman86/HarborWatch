@@ -245,6 +245,23 @@
         if (img.outdated) return "Outdated";
         return "In use";
     }
+
+    function formatWhen(ts?: number): string {
+        const n = Number(ts || 0);
+        if (!Number.isFinite(n) || n <= 0) return "Unknown";
+        return new Date(n * 1000).toLocaleString();
+    }
+
+    function imageReferenceCount(img: ImageIntelligenceRow): number {
+        const refs = new Set<string>();
+        for (const tag of img.repoTags || []) {
+            const value = String(tag || "").trim();
+            if (value && value !== "<none>:<none>") refs.add(value);
+        }
+        const primary = String(img.primaryRef || "").trim();
+        if (primary && primary !== "<none>:<none>") refs.add(primary);
+        return refs.size;
+    }
 </script>
 
 <div class="space-y-6">
@@ -422,14 +439,34 @@
                                     {/if}
                                 </div>
                             </div>
+
+                            <div class="rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/30 p-3 space-y-2">
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Artifact Detail</p>
+                                <div class="grid grid-cols-2 gap-2 text-[10px]">
+                                    <div>
+                                        <p class="text-slate-400 uppercase tracking-widest text-[8px] font-black">References</p>
+                                        <p class="text-slate-700 dark:text-slate-200 font-bold">{imageReferenceCount(img)}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-slate-400 uppercase tracking-widest text-[8px] font-black">Usage</p>
+                                        <p class="text-slate-700 dark:text-slate-200 font-bold">{img.inUse ? "Active" : "Unused"}</p>
+                                    </div>
+                                    <div class="col-span-2">
+                                        <p class="text-slate-400 uppercase tracking-widest text-[8px] font-black">Last Security Scan</p>
+                                        <p class="text-slate-700 dark:text-slate-200 font-bold">{formatWhen(img.securityScannedAt)}</p>
+                                    </div>
+                                    <div class="col-span-2">
+                                        <p class="text-slate-400 uppercase tracking-widest text-[8px] font-black">Primary Reference</p>
+                                        <p class="text-slate-700 dark:text-slate-200 font-mono break-all">{img.primaryRef || img.repoTags?.[0] || img.id}</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="px-5 py-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700/50 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase">Artifact detail pending</span>
-                        <div class="flex gap-2">
-                            <!-- Placeholder for future per-image actions -->
-                        </div>
+                    <div class="px-5 py-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700/50 flex justify-between items-center">
+                        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{securitySummary(img)}</span>
+                        <span class="text-[9px] font-bold text-slate-400 uppercase">{lifecycleSummary(img)}</span>
                     </div>
                 </article>
             {/each}

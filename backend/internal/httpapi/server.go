@@ -797,6 +797,50 @@ func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseS
 	return newMuxWithDepsAndComposeAuditStore(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsService, portainerService, rulesService, intelService, nil, jobManager)
 }
 
+type updateAIBlockedSignal struct {
+	Blocked   bool   `json:"blocked"`
+	Reason    string `json:"reason,omitempty"`
+	RiskScore int    `json:"riskScore,omitempty"`
+	RiskLevel string `json:"riskLevel,omitempty"`
+	UpdatedAt int64  `json:"updatedAt,omitempty"`
+}
+
+func extractAIBlockedSignal(run gen.UpdateJobStatus) (updateAIBlockedSignal, bool) {
+	reason := ""
+	errMsg := strings.TrimSpace(run.Error)
+	if strings.Contains(strings.ToLower(errMsg), "ai blocked update:") {
+		reason = strings.TrimSpace(strings.TrimPrefix(errMsg, "AI blocked update:"))
+	}
+	if reason == "" {
+		for _, step := range run.Steps {
+			if strings.TrimSpace(step.Step) != "release_analysis" {
+				continue
+			}
+			if !strings.EqualFold(strings.TrimSpace(step.Status), "failed") {
+				continue
+			}
+			msg := strings.TrimSpace(step.Message)
+			if strings.Contains(strings.ToLower(msg), "ai blocked update:") {
+				reason = strings.TrimSpace(strings.TrimPrefix(msg, "AI blocked update:"))
+				break
+			}
+		}
+	}
+	if reason == "" {
+		return updateAIBlockedSignal{}, false
+	}
+	signal := updateAIBlockedSignal{
+		Blocked:   true,
+		Reason:    reason,
+		UpdatedAt: run.UpdatedAt,
+	}
+	if run.AIAnalysis != nil {
+		signal.RiskScore = run.AIAnalysis.RiskScore
+		signal.RiskLevel = run.AIAnalysis.RiskLevel
+	}
+	return signal, true
+}
+
 func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore, jobManager *jobs.Manager) http.Handler {
 	r := chi.NewRouter()
 	currentPortainerService := portainerService
@@ -1613,6 +1657,42 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					return
 				}
 				writeJSON(w, http.StatusOK, runs)
+			})
+
+			r.Get("/ai-blocked", func(w http.ResponseWriter, r *http.Request) {
+				result := map[string]updateAIBlockedSignal{}
+				if updateService == nil || dockerClient == nil {
+					writeJSON(w, http.StatusOK, result)
+					return
+				}
+
+				listCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+				defer cancel()
+				containers, err := dockerClient.ListContainers(listCtx)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "container_list_failed", err.Error())
+					return
+				}
+
+				for _, c := range containers {
+					id := strings.TrimSpace(c.ID)
+					if id == "" {
+						continue
+					}
+					historyCtx, historyCancel := context.WithTimeout(r.Context(), 300*time.Millisecond)
+					runs, err := updateService.ListContainerJobs(historyCtx, id, 10)
+					historyCancel()
+					if err != nil {
+						continue
+					}
+					for _, run := range runs {
+						if signal, ok := extractAIBlockedSignal(run); ok {
+							result[id] = signal
+							break
+						}
+					}
+				}
+				writeJSON(w, http.StatusOK, result)
 			})
 
 			r.Get("/events/{id}", func(w http.ResponseWriter, r *http.Request) {

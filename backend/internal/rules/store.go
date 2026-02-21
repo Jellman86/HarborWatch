@@ -16,6 +16,7 @@ type ContainerRules struct {
 	ValidateMode          string `json:"validateMode"` // http, docker, both
 	ValidateTimeoutSec    int    `json:"validateTimeoutSec"`
 	ValidateIntervalSec   int    `json:"validateIntervalSec"`
+	BypassAI              bool   `json:"bypassAi"`
 	AIValidateLogs        bool   `json:"aiValidateLogs"`
 	AutoRollback          bool   `json:"autoRollback"`
 	InheritAutomation     bool   `json:"inheritAutomation"`
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS container_rules (
     validate_mode TEXT DEFAULT 'both',
     validate_timeout_sec INTEGER DEFAULT 45,
     validate_interval_sec INTEGER DEFAULT 2,
+    bypass_ai INTEGER DEFAULT 0,
     ai_validate_logs INTEGER DEFAULT 0,
     auto_rollback INTEGER DEFAULT 1,
     inherit_automation INTEGER DEFAULT 1,
@@ -66,6 +68,9 @@ CREATE TABLE IF NOT EXISTS container_rules (
 	if err := s.ensureColumn(ctx, "ai_validate_logs", "INTEGER DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "bypass_ai", "INTEGER DEFAULT 0"); err != nil {
+		return err
+	}
 	if err := s.ensureColumn(ctx, "inherit_automation", "INTEGER DEFAULT 1"); err != nil {
 		return err
 	}
@@ -83,14 +88,14 @@ CREATE TABLE IF NOT EXISTS container_rules (
 
 func (s *Store) Get(ctx context.Context, id string) (ContainerRules, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation 
+SELECT container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, bypass_ai, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation 
 FROM container_rules WHERE container_id = ?
 `, id)
 
 	var r ContainerRules
-	var rollback, aiValidateLogs int
+	var rollback, aiValidateLogs, bypassAI int
 	var inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation int
-	if err := row.Scan(&r.ContainerID, &r.UpdatePolicy, &r.ValidateURL, &r.ValidateMode, &r.ValidateTimeoutSec, &r.ValidateIntervalSec, &aiValidateLogs, &rollback, &inheritAutomation, &upgradesAutomation, &maintenanceAutomation, &securityAutomation); err != nil {
+	if err := row.Scan(&r.ContainerID, &r.UpdatePolicy, &r.ValidateURL, &r.ValidateMode, &r.ValidateTimeoutSec, &r.ValidateIntervalSec, &bypassAI, &aiValidateLogs, &rollback, &inheritAutomation, &upgradesAutomation, &maintenanceAutomation, &securityAutomation); err != nil {
 		if err == sql.ErrNoRows {
 			return ContainerRules{
 				ContainerID:           id,
@@ -98,6 +103,7 @@ FROM container_rules WHERE container_id = ?
 				ValidateMode:          "both",
 				ValidateTimeoutSec:    45,
 				ValidateIntervalSec:   2,
+				BypassAI:              false,
 				AIValidateLogs:        false,
 				AutoRollback:          true,
 				InheritAutomation:     true,
@@ -108,6 +114,7 @@ FROM container_rules WHERE container_id = ?
 		}
 		return r, err
 	}
+	r.BypassAI = bypassAI == 1
 	r.AIValidateLogs = aiValidateLogs == 1
 	r.AutoRollback = rollback == 1
 	r.InheritAutomation = inheritAutomation == 1
@@ -136,6 +143,10 @@ func (s *Store) Save(ctx context.Context, r ContainerRules) error {
 	if r.AIValidateLogs {
 		aiValidateLogs = 1
 	}
+	bypassAI := 0
+	if r.BypassAI {
+		bypassAI = 1
+	}
 	if strings.TrimSpace(r.ValidateMode) == "" {
 		r.ValidateMode = "both"
 	}
@@ -163,21 +174,22 @@ func (s *Store) Save(ctx context.Context, r ContainerRules) error {
 		securityAutomation = 1
 	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO container_rules (container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO container_rules (container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, bypass_ai, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(container_id) DO UPDATE SET
     update_policy = excluded.update_policy,
     validate_url = excluded.validate_url,
     validate_mode = excluded.validate_mode,
     validate_timeout_sec = excluded.validate_timeout_sec,
     validate_interval_sec = excluded.validate_interval_sec,
+    bypass_ai = excluded.bypass_ai,
     ai_validate_logs = excluded.ai_validate_logs,
     auto_rollback = excluded.auto_rollback,
     inherit_automation = excluded.inherit_automation,
     upgrades_automation = excluded.upgrades_automation,
     maintenance_automation = excluded.maintenance_automation,
     security_automation = excluded.security_automation
-`, r.ContainerID, r.UpdatePolicy, r.ValidateURL, r.ValidateMode, r.ValidateTimeoutSec, r.ValidateIntervalSec, aiValidateLogs, rollback, inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation)
+`, r.ContainerID, r.UpdatePolicy, r.ValidateURL, r.ValidateMode, r.ValidateTimeoutSec, r.ValidateIntervalSec, bypassAI, aiValidateLogs, rollback, inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation)
 	return err
 }
 

@@ -400,6 +400,7 @@ func (f staticRulesService) Save(ctx context.Context, r rules.ContainerRules) er
 type fakeUpdateService struct {
 	startResp gen.UpdateStartResponse
 	job       *gen.UpdateJobStatus
+	runsByID  map[string][]gen.UpdateJobStatus
 }
 
 func (f fakeUpdateService) StartUpdate(req updates.Request) (gen.UpdateStartResponse, error) {
@@ -409,6 +410,9 @@ func (f fakeUpdateService) GetJob(ctx context.Context, jobID string) (*gen.Updat
 	return f.job, nil
 }
 func (f fakeUpdateService) ListContainerJobs(ctx context.Context, containerID string, limit int) ([]gen.UpdateJobStatus, error) {
+	if f.runsByID != nil {
+		return f.runsByID[containerID], nil
+	}
 	return []gen.UpdateJobStatus{}, nil
 }
 func (f fakeUpdateService) ActiveJobs() []gen.JobProgress {
@@ -493,6 +497,69 @@ func TestUpdateEndpoints(t *testing.T) {
 	mux.ServeHTTP(recEvents, httptest.NewRequest(http.MethodGet, "/api/updates/events/u1", nil))
 	if recEvents.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recEvents.Code)
+	}
+}
+
+func TestUpdateAIBlockedEndpoint(t *testing.T) {
+	up := fakeUpdateService{
+		runsByID: map[string][]gen.UpdateJobStatus{
+			"c1": {
+				{
+					JobID:       "u-ai-block",
+					ContainerID: "c1",
+					Status:      "failed",
+					Error:       "AI blocked update: risk_score=95 (threshold=80)",
+					UpdatedAt:   1700000001,
+					AIAnalysis: &gen.AIAnalysisSummary{
+						RiskScore: 95,
+						RiskLevel: "Critical",
+					},
+					Steps: []gen.UpdateStepEvent{
+						{Step: "release_analysis", Status: "failed", Message: "AI blocked update: risk_score=95 (threshold=80)"},
+					},
+				},
+			},
+			"c2": {
+				{
+					JobID:       "u-generic-fail",
+					ContainerID: "c2",
+					Status:      "failed",
+					Error:       "validate failed",
+					UpdatedAt:   1700000002,
+				},
+			},
+		},
+	}
+	docker := fakeDockerClient{
+		containers: []gen.ContainerSummary{
+			{ID: "c1", Names: []string{"/one"}, Image: "nginx:latest", State: "running"},
+			{ID: "c2", Names: []string{"/two"}, Image: "redis:latest", State: "running"},
+		},
+	}
+	mux := NewMuxWithDeps(docker, nil, nil, up, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/updates/ai-blocked", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var payload map[string]map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	entry, ok := payload["c1"]
+	if !ok {
+		t.Fatalf("expected c1 to have ai blocked signal, got %#v", payload)
+	}
+	if asBool(entry["blocked"]) != true {
+		t.Fatalf("expected blocked=true for c1, got %#v", entry["blocked"])
+	}
+	if asInt(entry["riskScore"]) != 95 {
+		t.Fatalf("expected riskScore=95, got %#v", entry["riskScore"])
+	}
+	if _, exists := payload["c2"]; exists {
+		t.Fatalf("expected c2 to be absent (generic failure), got %#v", payload["c2"])
 	}
 }
 
@@ -900,4 +967,26 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 func asString(v any) string {
 	s, _ := v.(string)
 	return s
+}
+
+func asBool(v any) bool {
+	switch val := v.(type) {
+	case bool:
+		return val
+	default:
+		return false
+	}
+}
+
+func asInt(v any) int {
+	switch val := v.(type) {
+	case int:
+		return val
+	case int64:
+		return int(val)
+	case float64:
+		return int(val)
+	default:
+		return 0
+	}
 }
