@@ -15,6 +15,9 @@
         return Math.round(total / jobs.length);
     });
 
+    let queuedCount = $derived(jobs.filter((j: JobProgress) => j.status === 'queued').length);
+    let activeCount = $derived(jobs.filter((j: JobProgress) => j.status === 'running').length);
+
     const formatTarget = (t: string) => t.replace(/^\//, '').replace(/^container:/, '').replace(/^image:/, '');
 
     const jobVerb = (type: string) => {
@@ -121,6 +124,11 @@
                     
                     <div class="flex items-center gap-4">
                         <div class="flex items-center gap-2">
+                            {#if queuedCount > 0}
+                                <span class="px-2 py-0.5 bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 text-[8px] font-black uppercase rounded-md animate-pulse">
+                                    {queuedCount} in Queue
+                                </span>
+                            {/if}
                             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
                                 {aggregateProgress}% Total
                             </p>
