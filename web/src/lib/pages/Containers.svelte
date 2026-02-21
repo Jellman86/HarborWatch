@@ -28,6 +28,9 @@
             // Auto-show ignored if searching for something specific
             if (params.search.trim()) showIgnored = true;
         }
+        if (params?.filter) {
+            activeFilter = params.filter as FleetFilter;
+        }
     });
 
     $effect(() => {

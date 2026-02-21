@@ -129,7 +129,7 @@
         </button>
 
         <button 
-            onclick={() => onNavigate('security')}
+            onclick={() => onNavigate('containers', { filter: 'high-risk' })}
             class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group text-left transition-all hover:border-rose-500 hover:scale-[1.02]"
         >
             <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform text-rose-500">
@@ -140,7 +140,7 @@
         </button>
 
         <button 
-            onclick={() => onNavigate('security')}
+            onclick={() => onNavigate('audit')}
             class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden group text-left transition-all hover:border-brand-500 hover:scale-[1.02]"
         >
             <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
