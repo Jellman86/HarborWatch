@@ -260,3 +260,47 @@ func TestFormatSkipReasonSummary_Deterministic(t *testing.T) {
 		t.Fatalf("unexpected summary: got %q want %q", got, want)
 	}
 }
+
+func TestAutomatedUpdateApplyTask_UsesRuleBypassAIAndSkipHealth(t *testing.T) {
+	container := gen.ContainerSummary{
+		ID:              "c-flags",
+		Names:           []string{"/flags"},
+		Image:           "ghcr.io/example/flags:v1",
+		UpdateAvailable: true,
+	}
+	dockerClient := autoTaskDockerClient{
+		containers: []gen.ContainerSummary{container},
+		byID:       map[string]gen.ContainerSummary{container.ID: container},
+	}
+	updateSvc := &recordingUpdateService{}
+	task := newAutomatedUpdateApplyTask(
+		dockerClient,
+		fakePortainerClient{},
+		updateSvc,
+		testRulesService{rule: rules.ContainerRules{
+			UpdatePolicy:    "auto",
+			ValidateURL:     "http://localhost:8080/health",
+			BypassAI:        true,
+			SkipHealthCheck: true,
+		}},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run task: %v", err)
+	}
+	if len(updateSvc.started) != 1 {
+		t.Fatalf("expected one started update, got %d", len(updateSvc.started))
+	}
+	if !updateSvc.started[0].BypassAI {
+		t.Fatalf("expected BypassAI=true from container rules")
+	}
+	if !updateSvc.started[0].SkipHealthCheck {
+		t.Fatalf("expected SkipHealthCheck=true from container rules")
+	}
+}

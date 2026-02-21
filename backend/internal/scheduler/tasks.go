@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
@@ -23,6 +24,11 @@ type ScannerService interface {
 
 type ContainerAutomationPolicy func(ctx context.Context, containerID string) bool
 type MalwareMountPolicy func(ctx context.Context, containerID, sourcePath string) bool
+
+const (
+	TrivySweepModeRunningOnly = "running-only"
+	TrivySweepModeAllImages   = "all-images"
+)
 
 // DockerPruneTask cleans up dangling images and stopped containers.
 type DockerPruneTask struct {
@@ -70,16 +76,21 @@ func (t *DockerPruneTask) Run(ctx context.Context) error {
 	return nil
 }
 
-// TrivySweepTask scans all running containers for vulnerabilities.
+// TrivySweepTask scans container images for vulnerabilities.
 type TrivySweepTask struct {
 	docker  *client.Client
 	scanner ScannerService
 	allow   ContainerAutomationPolicy
 	logger  Logger
+	mode    string
 }
 
 func NewTrivySweepTask(cli *client.Client, s ScannerService, allow ...ContainerAutomationPolicy) *TrivySweepTask {
-	task := &TrivySweepTask{docker: cli, scanner: s}
+	task := &TrivySweepTask{
+		docker:  cli,
+		scanner: s,
+		mode:    TrivySweepModeRunningOnly,
+	}
 	if len(allow) > 0 {
 		task.allow = allow[0]
 	}
@@ -93,6 +104,11 @@ func (t *TrivySweepTask) WithLogger(logger Logger) *TrivySweepTask {
 	return t
 }
 
+func (t *TrivySweepTask) WithMode(mode string) *TrivySweepTask {
+	t.mode = normalizeTrivySweepMode(mode)
+	return t
+}
+
 func (t *TrivySweepTask) log(level, message string) {
 	log.Printf("%s", message)
 	if t.logger != nil {
@@ -101,35 +117,101 @@ func (t *TrivySweepTask) log(level, message string) {
 }
 
 func (t *TrivySweepTask) Run(ctx context.Context) error {
-	t.log("INFO", "Starting Trivy security sweep task...")
-	
-	// Fetch all images to get unique primary references
-	images, err := t.scanner.ListImages(ctx)
-	if err != nil {
-		return fmt.Errorf("list images for sweep: %w", err)
+	mode := normalizeTrivySweepMode(t.mode)
+	t.log("INFO", fmt.Sprintf("Starting Trivy security sweep task (mode=%s)...", mode))
+
+	var targets []string
+	switch mode {
+	case TrivySweepModeAllImages:
+		images, err := t.scanner.ListImages(ctx)
+		if err != nil {
+			return fmt.Errorf("list images for trivy sweep: %w", err)
+		}
+		targets = trivyTargetsFromImages(images)
+	default:
+		if t.docker == nil {
+			return fmt.Errorf("docker client unavailable for trivy sweep mode=%s", mode)
+		}
+		containers, err := t.docker.ContainerList(ctx, container.ListOptions{})
+		if err != nil {
+			return fmt.Errorf("list running containers for trivy sweep: %w", err)
+		}
+		targets = trivyTargetsFromContainers(containers, t.allow, ctx)
 	}
 
 	queued := 0
-	for _, img := range images {
-		// Use the first tag or ID as target
-		target := img.ID
-		if len(img.RepoTags) > 0 {
-			target = img.RepoTags[0]
-		}
-		
-		if target == "" || strings.HasPrefix(target, "<none>") {
-			continue
-		}
-
+	queueErrors := 0
+	for _, target := range targets {
 		t.log("INFO", fmt.Sprintf("Queueing Trivy scan for %s", target))
 		if _, err := t.scanner.StartScan(target); err != nil {
+			queueErrors++
 			t.log("ERROR", fmt.Sprintf("Failed to queue Trivy scan for %s: %v", target, err))
 			continue
 		}
 		queued++
 	}
-	t.log("INFO", fmt.Sprintf("Trivy security sweep queued %d unique image scans", queued))
+	t.log("INFO", fmt.Sprintf("Trivy security sweep completed mode=%s discovered=%d queued=%d queue_errors=%d", mode, len(targets), queued, queueErrors))
 	return nil
+}
+
+func normalizeTrivySweepMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case TrivySweepModeAllImages:
+		return TrivySweepModeAllImages
+	default:
+		return TrivySweepModeRunningOnly
+	}
+}
+
+func trivyTargetsFromContainers(containers []container.Summary, allow ContainerAutomationPolicy, ctx context.Context) []string {
+	seen := make(map[string]struct{}, len(containers))
+	targets := make([]string, 0, len(containers))
+	for _, c := range containers {
+		if allow != nil && !allow(ctx, strings.TrimSpace(c.ID)) {
+			continue
+		}
+		target := strings.TrimSpace(c.Image)
+		if target == "" || strings.HasPrefix(target, "<none>") {
+			continue
+		}
+		if _, exists := seen[target]; exists {
+			continue
+		}
+		seen[target] = struct{}{}
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	return targets
+}
+
+func trivyTargetsFromImages(images []gen.ImageSummary) []string {
+	seen := make(map[string]struct{}, len(images))
+	targets := make([]string, 0, len(images))
+	for _, img := range images {
+		target := ""
+		if len(img.RepoTags) > 0 {
+			for _, tag := range img.RepoTags {
+				tag = strings.TrimSpace(tag)
+				if tag == "" || strings.HasPrefix(tag, "<none>") {
+					continue
+				}
+				target = tag
+				break
+			}
+		} else {
+			target = strings.TrimSpace(img.ID)
+		}
+		if target == "" || strings.HasPrefix(target, "<none>") {
+			continue
+		}
+		if _, exists := seen[target]; exists {
+			continue
+		}
+		seen[target] = struct{}{}
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	return targets
 }
 
 // ClamAVSweepTask scans all container host mounts for malware.

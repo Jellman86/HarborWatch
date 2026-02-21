@@ -38,6 +38,7 @@ type Settings struct {
 	MalwareIgnoredMounts        string `json:"malwareIgnoredMounts"`
 	AutoUpgradeMaxConcurrency   int    `json:"autoUpgradeMaxConcurrency"`
 	AutoUpgradeMinRetryMinutes  int    `json:"autoUpgradeMinRetryMinutes"`
+	TrivySweepMode              string `json:"trivySweepMode"`
 	ClamAVSnapshotMaxBytes      int64  `json:"clamavSnapshotMaxBytes"`
 	RetentionLogsDays           int    `json:"retentionLogsDays"`
 	RetentionMetricsDays        int    `json:"retentionMetricsDays"`
@@ -88,6 +89,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		AutomationIgnoredContainers: "harborwatch",
 		AutoUpgradeMaxConcurrency:   1,
 		AutoUpgradeMinRetryMinutes:  60,
+		TrivySweepMode:              "running-only",
 		ClamAVSnapshotMaxBytes:      2 << 30,
 		RetentionLogsDays:           30,
 		RetentionMetricsDays:        14,
@@ -157,6 +159,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.AutoUpgradeMaxConcurrency = parseStoredInt(value, st.AutoUpgradeMaxConcurrency, 1, 20)
 		case "auto_upgrade_min_retry_minutes":
 			st.AutoUpgradeMinRetryMinutes = parseStoredInt(value, st.AutoUpgradeMinRetryMinutes, 1, 24*60)
+		case "trivy_sweep_mode":
+			st.TrivySweepMode = normalizeTrivySweepMode(value)
 		case "clamav_snapshot_max_bytes":
 			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
 		case "retention_logs_days":
@@ -206,6 +210,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		"validateUrlPattern":          {&st.ValidateURLPattern, "HW_VALIDATE_PATTERN"},
 		"automationIgnoredContainers": {&st.AutomationIgnoredContainers, "HW_AUTOMATION_IGNORE_CONTAINERS"},
 		"malwareIgnoredMounts":        {&st.MalwareIgnoredMounts, "HW_MALWARE_IGNORE_MOUNTS"},
+		"trivySweepMode":              {&st.TrivySweepMode, "HW_TRIVY_SWEEP_MODE"},
 	}
 
 	for jsonKey, mapping := range envMap {
@@ -225,12 +230,12 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		ptr    *bool
 		envKey string
 	}{
-		"aiEnabled":           {&st.AIEnabled, "HW_AI_ENABLED"},
-		"discordEnabled":      {&st.DiscordEnabled, "HW_DISCORD_ENABLED"},
-		"portainerEnabled":    {&st.PortainerEnabled, "HW_PORTAINER_ENABLED"},
-		"uiAnimationsEnabled": {&st.UIAnimationsEnabled, "HW_UI_ANIMATIONS_ENABLED"},
-		"metricsNormalized":   {&st.MetricsNormalized, "HW_METRICS_NORMALIZED"},
-		"globalBypassAi":      {&st.GlobalBypassAI, "HW_GLOBAL_BYPASS_AI"},
+		"aiEnabled":             {&st.AIEnabled, "HW_AI_ENABLED"},
+		"discordEnabled":        {&st.DiscordEnabled, "HW_DISCORD_ENABLED"},
+		"portainerEnabled":      {&st.PortainerEnabled, "HW_PORTAINER_ENABLED"},
+		"uiAnimationsEnabled":   {&st.UIAnimationsEnabled, "HW_UI_ANIMATIONS_ENABLED"},
+		"metricsNormalized":     {&st.MetricsNormalized, "HW_METRICS_NORMALIZED"},
+		"globalBypassAi":        {&st.GlobalBypassAI, "HW_GLOBAL_BYPASS_AI"},
 		"globalSkipHealthCheck": {&st.GlobalSkipHealthCheck, "HW_GLOBAL_SKIP_HEALTH_CHECK"},
 	}
 	for jsonKey, mapping := range boolEnvMap {
@@ -279,6 +284,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		}
 	}
 
+	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
 	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
 	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
 
@@ -294,6 +300,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	st.AIBlockRiskThreshold = parseStoredInt(strconv.Itoa(st.AIBlockRiskThreshold), 80, 0, 100)
 	st.AutoUpgradeMaxConcurrency = parseStoredInt(strconv.Itoa(st.AutoUpgradeMaxConcurrency), 1, 1, 20)
 	st.AutoUpgradeMinRetryMinutes = parseStoredInt(strconv.Itoa(st.AutoUpgradeMinRetryMinutes), 60, 1, 24*60)
+	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
 	st.ClamAVSnapshotMaxBytes = parseStoredInt64(strconv.FormatInt(st.ClamAVSnapshotMaxBytes, 10), 2<<30, 1, 32<<30)
 	st.RetentionLogsDays = parseStoredInt(strconv.Itoa(st.RetentionLogsDays), 30, 1, 3650)
 	st.RetentionMetricsDays = parseStoredInt(strconv.Itoa(st.RetentionMetricsDays), 14, 1, 3650)
@@ -332,6 +339,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"malware_ignored_mounts":         st.MalwareIgnoredMounts,
 		"auto_upgrade_max_concurrency":   intString(st.AutoUpgradeMaxConcurrency),
 		"auto_upgrade_min_retry_minutes": intString(st.AutoUpgradeMinRetryMinutes),
+		"trivy_sweep_mode":               st.TrivySweepMode,
 		"clamav_snapshot_max_bytes":      int64String(st.ClamAVSnapshotMaxBytes),
 		"retention_logs_days":            intString(st.RetentionLogsDays),
 		"retention_metrics_days":         intString(st.RetentionMetricsDays),
@@ -341,10 +349,10 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"retention_compose_audit_days":   intString(st.RetentionComposeAuditDays),
 		"retention_ai_usage_days":        intString(st.RetentionAIUsageDays),
 		"metrics_normalized":             boolString(st.MetricsNormalized),
-		"global_bypass_ai":              boolString(st.GlobalBypassAI),
+		"global_bypass_ai":               boolString(st.GlobalBypassAI),
 		"global_skip_health_check":       boolString(st.GlobalSkipHealthCheck),
-		"ai_testing_passed":             boolString(st.AITestingPassed),
-		"portainer_testing_passed":      boolString(st.PortainerTestingPassed),
+		"ai_testing_passed":              boolString(st.AITestingPassed),
+		"portainer_testing_passed":       boolString(st.PortainerTestingPassed),
 	}
 
 	jsonToDbKey := map[string]string{
@@ -370,6 +378,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"malwareIgnoredMounts":        "malware_ignored_mounts",
 		"autoUpgradeMaxConcurrency":   "auto_upgrade_max_concurrency",
 		"autoUpgradeMinRetryMinutes":  "auto_upgrade_min_retry_minutes",
+		"trivySweepMode":              "trivy_sweep_mode",
 		"clamavSnapshotMaxBytes":      "clamav_snapshot_max_bytes",
 		"retentionLogsDays":           "retention_logs_days",
 		"retentionMetricsDays":        "retention_metrics_days",
@@ -501,4 +510,13 @@ func splitDelimitedList(raw string) []string {
 		out = append(out, part)
 	}
 	return out
+}
+
+func normalizeTrivySweepMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "all-images":
+		return "all-images"
+	default:
+		return "running-only"
+	}
 }

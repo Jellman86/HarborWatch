@@ -730,6 +730,8 @@ components:
         validateMode: { type: string, enum: [http, docker, both] }
         validateTimeoutSec: { type: integer }
         validateIntervalSec: { type: integer }
+        bypassAi: { type: boolean }
+        skipHealthCheck: { type: boolean }
         aiValidateLogs: { type: boolean }
         autoRollback: { type: boolean }
         inheritAutomation: { type: boolean }
@@ -1061,6 +1063,7 @@ components:
         malwareIgnoredMounts: { type: string }
         autoUpgradeMaxConcurrency: { type: integer, minimum: 1, maximum: 20 }
         autoUpgradeMinRetryMinutes: { type: integer, minimum: 1, maximum: 1440 }
+        trivySweepMode: { type: string, enum: [running-only, all-images] }
         clamavSnapshotMaxBytes: { type: integer, format: int64, minimum: 1 }
         retentionLogsDays: { type: integer, minimum: 1, maximum: 3650 }
         retentionMetricsDays: { type: integer, minimum: 1, maximum: 3650 }

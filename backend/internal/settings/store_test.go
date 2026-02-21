@@ -30,6 +30,9 @@ func TestGetDefaultsPrepopulateHarborWatchIgnore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get settings: %v", err)
 	}
+	if got.TrivySweepMode != "running-only" {
+		t.Fatalf("expected default trivy sweep mode running-only, got %q", got.TrivySweepMode)
+	}
 	if !strings.Contains(strings.ToLower(got.AutomationIgnoredContainers), "harborwatch") {
 		t.Fatalf("expected harborwatch in automation ignores, got %q", got.AutomationIgnoredContainers)
 	}
@@ -96,6 +99,22 @@ func TestGetAppliesRuntimeEnvOverridesForNumericSettings(t *testing.T) {
 	}
 	if !got.EnvironmentOverrides["clamavSnapshotMaxBytes"] {
 		t.Fatalf("expected clamavSnapshotMaxBytes override to be locked")
+	}
+}
+
+func TestGetAppliesTrivySweepModeEnvOverride(t *testing.T) {
+	t.Setenv("HW_TRIVY_SWEEP_MODE", "all-images")
+
+	store := newTestStore(t)
+	got, err := store.Get(context.Background())
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if got.TrivySweepMode != "all-images" {
+		t.Fatalf("expected TrivySweepMode=all-images, got %q", got.TrivySweepMode)
+	}
+	if !got.EnvironmentOverrides["trivySweepMode"] {
+		t.Fatalf("expected trivySweepMode override to be locked")
 	}
 }
 

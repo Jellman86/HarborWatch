@@ -125,6 +125,7 @@
         malwareIgnoredMounts: "",
         autoUpgradeMaxConcurrency: 1,
         autoUpgradeMinRetryMinutes: 60,
+        trivySweepMode: "running-only",
         clamavSnapshotMaxBytes: 2147483648,
         retentionLogsDays: 30,
         retentionMetricsDays: 14,
@@ -1214,6 +1215,23 @@
                                                 <p class="text-[10px] text-slate-500 italic mt-1 text-center">Set all containers to follow global automation policy.</p>
                                             </div>
                                         </div>
+                                    </div>
+                                {/if}
+
+                                {#if activeAutomationTab === "security"}
+                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-2">
+                                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">Trivy Sweep Scope</p>
+                                        <label for="trivy-sweep-mode" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Scan Target Selection</label>
+                                        <select
+                                            id="trivy-sweep-mode"
+                                            bind:value={settings.trivySweepMode}
+                                            disabled={isLocked("trivySweepMode")}
+                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                        >
+                                            <option value="running-only">Running containers only (default)</option>
+                                            <option value="all-images">All local images</option>
+                                        </select>
+                                        <p class="text-[11px] text-slate-500">`running-only` avoids queue inflation by scanning only images currently in use.</p>
                                     </div>
                                 {/if}
 

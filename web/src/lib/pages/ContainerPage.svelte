@@ -322,6 +322,7 @@
     function syncLifecycleModeFromRules() {
         lifecycleMode = detail?.rules?.inheritAutomation === false ? "manual" : "global";
         bypassAi = !!(detail?.rules as any)?.bypassAi;
+        skipHealth = !!(detail?.rules as any)?.skipHealthCheck;
     }
 
     function applyLifecycleModeToRules(mode: "global" | "manual") {
@@ -347,6 +348,7 @@
         const containerId = activeContainerId();
         if (!containerId) return;
         (detail.rules as any).bypassAi = !!bypassAi;
+        (detail.rules as any).skipHealthCheck = !!skipHealth;
         
         lifecycleMessage = "";
         savingRules = true;
@@ -943,41 +945,42 @@
                                             Follows global automation settings. Updates will be applied automatically if the "Container Auto-Apply" schedule is enabled.
                                         </p>
                                     {:else}
-                                        <div class="space-y-3">
-                                            <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                                                Automation is paused. You must explicitly trigger the upgrade flow using the button below.
-                                            </p>
-                                            {#if configStore.aiActive}
-                                                <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
-                                                    <div>
-                                                        <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Ignore Breaking Change Signals</p>
-                                                        <p class="text-[11px] text-slate-500">Allow this container to auto-upgrade even when AI marks release analysis high risk.</p>
-                                                    </div>
-                                                    <button
-                                                        onclick={() => bypassAi = !bypassAi}
-                                                        class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                        aria-label="Toggle Ignore Breaking Change Signals"
-                                                    >
-                                                        <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
-                                                    </button>
-                                                </div>
-                                            {/if}
+                                        <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                                            Automation is paused. This container will not be included in scheduled auto-upgrades; upgrades must be triggered manually.
+                                        </p>
+                                    {/if}
 
-                                            <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                    <div class="space-y-3 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                        {#if configStore.aiActive}
+                                            <div class="flex items-center justify-between">
                                                 <div>
-                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Force Update (Skip Health)</p>
-                                                    <p class="text-[11px] text-slate-500">Mimic Watchtower: no post-update health check or rollback.</p>
+                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Ignore Breaking Change Signals</p>
+                                                    <p class="text-[11px] text-slate-500">Applies to both manual and automatic runs for this container.</p>
                                                 </div>
                                                 <button
-                                                    onclick={() => skipHealth = !skipHealth}
-                                                    class="w-10 h-5 rounded-full transition-colors relative {skipHealth ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                    aria-label="Toggle Skip Health Check"
+                                                    onclick={() => bypassAi = !bypassAi}
+                                                    class="w-10 h-5 rounded-full transition-colors relative {bypassAi ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                    aria-label="Toggle Ignore Breaking Change Signals"
                                                 >
-                                                    <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {skipHealth ? 'translate-x-5' : ''}"></div>
+                                                    <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
                                                 </button>
                                             </div>
+                                        {/if}
+
+                                        <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                            <div>
+                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Skip Health Verification</p>
+                                                <p class="text-[11px] text-slate-500">Applies to both manual and automatic runs for this container.</p>
+                                            </div>
+                                            <button
+                                                onclick={() => skipHealth = !skipHealth}
+                                                class="w-10 h-5 rounded-full transition-colors relative {skipHealth ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                aria-label="Toggle Skip Health Check"
+                                            >
+                                                <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {skipHealth ? 'translate-x-5' : ''}"></div>
+                                            </button>
                                         </div>
-                                    {/if}
+                                    </div>
                                 </div>
 
                                 <div class="flex flex-wrap gap-3 pt-2">

@@ -329,6 +329,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	loadRuntimeSettings := func(ctx context.Context) settings.Settings {
 		st := settings.Settings{
 			AutomationIgnoredContainers: "harborwatch",
+			TrivySweepMode:              scheduler.TrivySweepModeRunningOnly,
 			RetentionLogsDays:           30,
 			RetentionMetricsDays:        14,
 			RetentionScanResultsDays:    30,
@@ -595,14 +596,17 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 
 			// Security: Scheduled Sweeps
 			if scanService != nil {
-				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
+				newTrivyTask := func(ctx context.Context) scheduler.Task {
+					st := loadRuntimeSettings(ctx)
 					return scheduler.NewTrivySweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
 						return containerAutomationEnabled(ctx, containerID, "security", "security_sweep_trivy")
-					}).WithLogger(diagService)
+					}).WithMode(st.TrivySweepMode).WithLogger(diagService)
+				}
+
+				schedSvc.RegisterTask("security_sweep_trivy", func() scheduler.Task {
+					return newTrivyTask(context.Background())
 				})
-				if err := schedSvc.AddTask("0 0 0 * * *", scheduler.NewTrivySweepTask(rawDocker, scanService, func(ctx context.Context, containerID string) bool {
-					return containerAutomationEnabled(ctx, containerID, "security", "security_sweep_trivy")
-				}).WithLogger(diagService), true); err != nil && diagService != nil {
+				if err := schedSvc.AddTask("0 0 0 * * *", newTrivyTask(context.Background()), true); err != nil && diagService != nil {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task security_sweep_trivy: %v", err))
 				}
 

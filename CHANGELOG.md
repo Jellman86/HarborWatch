@@ -2,6 +2,28 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [0.8.3] - 2026-02-21
+
+### Added
+- **Security Sweep Scope Control:**
+  - Added `trivySweepMode` setting with options **`running-only`** (default) and **`all-images`**.
+  - Added a Security automation UI selector in Settings to control Trivy sweep target scope.
+  - Added environment override support via `HW_TRIVY_SWEEP_MODE`.
+- **Per-Container Health Bypass Persistence:**
+  - Added `skipHealthCheck` to container lifecycle rules and persisted it in `container_rules`.
+  - Existing databases are migrated safely using additive `ensureColumn` logic.
+
+### Changed
+- **Lifecycle Controls (Manual + Automatic):**
+  - "Ignore Breaking Change Signals" and "Skip Health Verification" are now shown and saved for both lifecycle modes.
+  - Manual mode explicitly remains excluded from scheduled auto-apply, while still honoring these flags for manual runs.
+
+### Fixed
+- **Trivy Sweep Queue Inflation:**
+  - `security_sweep_trivy` now defaults to scanning only images of currently running, policy-allowed containers, preventing excessive queued jobs on hosts with many cached images.
+- **Automatic Upgrade Flag Consistency:**
+  - Automated update runs now honor per-container `skipHealthCheck` the same way they already honor `bypassAi`.
+
 ## [0.8.2] - 2026-02-21
 
 ### Fixed
