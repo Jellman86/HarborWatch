@@ -2424,7 +2424,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					"update_runs",
 					"update_steps",
 					"scan_jobs",
-					"vulnerability_results",
+					"scan_results",
 					"malware_scan_results",
 					"compose_audit_history",
 					"ai_usage_events",

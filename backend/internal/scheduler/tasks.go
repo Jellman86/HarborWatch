@@ -262,6 +262,13 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 	skippedMount := 0
 	queueErrors := 0
 
+	type scanTarget struct {
+		label string
+		source string
+	}
+	// Deduplicate by host source path to avoid redundant scans
+	uniqueSources := make(map[string]scanTarget)
+
 	for _, c := range containers {
 		if t.allow != nil && !t.allow(ctx, c.ID) {
 			skippedPolicy++
@@ -286,17 +293,26 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 			if dest == "" {
 				dest = source
 			}
-			targetLabel := fmt.Sprintf("container:%s:mount:%s", strings.TrimSpace(c.ID), dest)
-			t.log("INFO", fmt.Sprintf("Queueing ClamAV scan for %s (source=%s)", targetLabel, source))
-			if _, err := t.scanner.StartMalwareScanPath(targetLabel, source, false); err != nil {
-				queueErrors++
-				t.log("ERROR", fmt.Sprintf("Failed to queue ClamAV scan for %s: %v", targetLabel, err))
-				continue
+			
+			// We use the first container/mount we find as the primary label for this source path
+			if _, exists := uniqueSources[source]; !exists {
+				targetLabel := fmt.Sprintf("container:%s:mount:%s", strings.TrimSpace(c.ID), dest)
+				uniqueSources[source] = scanTarget{label: targetLabel, source: source}
 			}
-			queued++
 		}
 	}
-	t.log("INFO", fmt.Sprintf("ClamAV malware sweep queued=%d skipped_policy=%d skipped_mount=%d queue_errors=%d", queued, skippedPolicy, skippedMount, queueErrors))
+
+	for _, target := range uniqueSources {
+		t.log("INFO", fmt.Sprintf("Queueing ClamAV scan for %s (source=%s)", target.label, target.source))
+		if _, err := t.scanner.StartMalwareScanPath(target.label, target.source, false); err != nil {
+			queueErrors++
+			t.log("ERROR", fmt.Sprintf("Failed to queue ClamAV scan for %s: %v", target.label, err))
+			continue
+		}
+		queued++
+	}
+
+	t.log("INFO", fmt.Sprintf("ClamAV malware sweep queued=%d skipped_policy=%d skipped_mount=%d queue_errors=%d (deduplicated from %d containers)", queued, skippedPolicy, skippedMount, queueErrors, len(containers)))
 	return nil
 }
 

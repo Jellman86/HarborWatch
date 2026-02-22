@@ -1102,14 +1102,15 @@
 
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">{automationConfig[activeAutomationTab].title}</p>
-                        <p class="text-[11px] text-slate-500 mt-1">
-                            {#if activeAutomationTab === "general"}
-                                {automationConfig[activeAutomationTab].subtitle}
-                            {:else}
+                        {#if activeAutomationTab !== "general"}
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">{automationConfig[activeAutomationTab].title}</p>
+                            <p class="text-[11px] text-slate-500 mt-1">
                                 Domain status: <span class="font-bold">{domainEnabled(activeAutomationTab) ? "Enabled" : "Disabled"}</span>
-                            {/if}
-                        </p>
+                            </p>
+                        {:else}
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Global Configuration</p>
+                            <p class="text-[11px] text-slate-500 mt-1">System-wide automation parameters</p>
+                        {/if}
                     </div>
                     {#if activeAutomationTab !== "general"}
                         <div class="flex items-center gap-2">
@@ -1156,47 +1157,50 @@
                     {/if}
 
                     <div class="space-y-4">
-                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">
-                                {activeAutomationTab === "general" ? "Global Pipeline Configuration" : "Automation Task Controls"}
-                            </p>
-                            <p class="text-[11px] text-slate-500 mt-1">
-                                {activeAutomationTab === "general" 
-                                    ? "Manage system-wide throughput and safety rules that affect all background flows." 
-                                    : "Use toggles to enable schedules, set cadence/time, and run on-demand checks for validation."}
-                            </p>
-                        </div>
+                        {#if activeAutomationTab !== "general"}
+                            <div class="px-2 py-1">
+                                <p class="text-xs font-black uppercase tracking-wider text-brand-500 dark:text-brand-400">
+                                    Automation Task Controls
+                                </p>
+                                <p class="text-[11px] text-slate-500 mt-1">
+                                    Use toggles to enable schedules, set cadence/time, and run on-demand checks for validation.
+                                </p>
+                            </div>
+                        {/if}
 
                         {#if activeAutomationTab === "general"}
-                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
-                                <div>
-                                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Global Task Concurrency</p>
+                            <div class="space-y-4">
+                                <div class="px-2 py-1">
+                                    <p class="text-xs font-black uppercase tracking-wider text-brand-500 dark:text-brand-400">Global Task Concurrency</p>
                                     <p class="text-[11px] text-slate-500 mt-1">Control how many heavy background operations (updates, scans, redeployments) can run simultaneously.</p>
                                 </div>
-                                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                    <div class="space-y-2">
-                                        <label for="global-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Concurrent Tasks</label>
-                                        <input
-                                            id="global-max-concurrency"
-                                            type="number"
-                                            min="1"
-                                            max="10"
-                                            bind:value={settings.autoUpgradeMaxConcurrency}
-                                            disabled={isLocked("autoUpgradeMaxConcurrency")}
-                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                        />
-                                        <p class="text-[11px] text-slate-500">Global limit for all heavy background jobs across the appliance.</p>
+                                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                        <div class="space-y-2">
+                                            <label for="global-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Concurrent Tasks</label>
+                                            <input
+                                                id="global-max-concurrency"
+                                                type="number"
+                                                min="1"
+                                                max="10"
+                                                bind:value={settings.autoUpgradeMaxConcurrency}
+                                                disabled={isLocked("autoUpgradeMaxConcurrency")}
+                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                            />
+                                            <p class="text-[11px] text-slate-500">Global limit for all heavy background jobs across the appliance.</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Safety Section</span>
-                                    <p class="text-xs font-black uppercase tracking-wider text-slate-500">Automation Safety Exclusions</p>
+                            <div class="space-y-4">
+                                <div class="px-2 py-1 flex flex-wrap items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Safety Policy</span>
+                                    <p class="text-xs font-black uppercase tracking-wider text-brand-500 dark:text-brand-400">Automation Safety Exclusions</p>
                                 </div>
-                                <p class="text-[11px] text-slate-500 mt-2">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
-                                <div class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                <div class="rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                                    <p class="text-[11px] text-slate-500 mb-4">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
+                                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                     <div class="space-y-2">
                                         <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
                                         <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto">
@@ -1252,13 +1256,13 @@
                                 </div>
                             </div>
                         {:else}
-                            <div class="space-y-3">
+                            <div class="space-y-4">
                                 {#if activeAutomationTab === "upgrades"}
+                                    <div class="px-2 py-1">
+                                        <p class="text-xs font-black uppercase tracking-wider text-brand-500 dark:text-brand-400">Upgrade Runtime Controls</p>
+                                        <p class="text-[11px] text-slate-500 mt-1">Tune how aggressively auto-apply runs and how long failed containers wait before retry.</p>
+                                    </div>
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
-                                        <div>
-                                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Upgrade Runtime Controls</p>
-                                            <p class="text-[11px] text-slate-500 mt-1">Tune how aggressively auto-apply runs and how long failed containers wait before retry.</p>
-                                        </div>
                                         <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                             <div class="space-y-4">
                                                 <div class="space-y-2">
@@ -1325,8 +1329,11 @@
                                 {/if}
 
                                 {#if activeAutomationTab === "security"}
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-2">
-                                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">Trivy Sweep Scope</p>
+                                    <div class="px-2 py-1">
+                                        <p class="text-xs font-black uppercase tracking-wider text-brand-500 dark:text-brand-400">Trivy Sweep Scope</p>
+                                        <p class="text-[11px] text-slate-500 mt-1">`running-only` avoids queue inflation by scanning only images currently in use.</p>
+                                    </div>
+                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
                                         <label for="trivy-sweep-mode" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Scan Target Selection</label>
                                         <select
                                             id="trivy-sweep-mode"
@@ -1337,16 +1344,18 @@
                                             <option value="running-only">Running containers only (default)</option>
                                             <option value="all-images">All local images</option>
                                         </select>
-                                        <p class="text-[11px] text-slate-500">`running-only` avoids queue inflation by scanning only images currently in use.</p>
                                     </div>
                                 {/if}
 
                                 {#if activeAutomationTab === "remediation"}
+                                    <div class="px-2 py-1">
+                                        <p class="text-xs font-black uppercase tracking-wider text-brand-500 dark:text-brand-400">Unhealthy Auto-Remediation</p>
+                                        <p class="text-[11px] text-slate-500 mt-1">Listen for Docker health events and automatically restart unhealthy containers (opt-in per container).</p>
+                                    </div>
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                         <div class="flex items-center justify-between gap-4">
-                                            <div>
-                                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Unhealthy Auto-Remediation</p>
-                                                <p class="text-[11px] text-slate-500 mt-1">Listen for Docker health events and automatically restart unhealthy containers (opt-in per container).</p>
+                                            <div class="flex-1">
+                                                <p class="text-[11px] text-slate-500 italic">Enable global monitoring of container health status.</p>
                                             </div>
                                             <button
                                                 onclick={() => settings.unhealthyAutoRemediationEnabled = !settings.unhealthyAutoRemediationEnabled}
@@ -1390,11 +1399,13 @@
                                 {#if activeAutomationTab === "maintenance"}
                                     {@const retentionTask = scheduleById("history_retention_prune")}
                                     {@const retentionDraft = retentionTask ? draftForTask(retentionTask) : null}
+                                    <div class="px-2 py-1">
+                                        <p class="text-xs font-black uppercase tracking-wider text-brand-500 dark:text-brand-400">Historical Data Retention</p>
+                                        <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
+                                    </div>
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                         <div class="flex flex-wrap items-center justify-between gap-3">
                                             <div>
-                                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Historical Data Retention</p>
-                                                <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
                                                 {#if retentionTask}
                                                     <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{cronLabel(retentionTask.cronSpec)} | Last run: {formatTime(retentionTask.lastRun)}</p>
                                                 {/if}
