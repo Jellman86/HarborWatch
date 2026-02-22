@@ -26,7 +26,7 @@
         monthDays: number[];
     }
 
-    type AutomationDomain = "general" | "upgrades" | "maintenance" | "security";
+    type AutomationDomain = "general" | "upgrades" | "maintenance" | "security" | "remediation";
     type AIProvider = "openai" | "anthropic" | "gemini";
 
     interface ModelOption {
@@ -221,6 +221,13 @@
             accent: "#f97316",
             tasks: ["security_sweep_trivy", "malware_sweep_clamav", "clamav_signature_update"],
             flow: ["Inventory Assets", "Run Trivy", "Run ClamAV", "Prioritize Findings", "Escalate Action"]
+        },
+        remediation: {
+            title: "Self-Healing & Remediation",
+            subtitle: "Automatically recover from container health failures",
+            accent: "#ec4899",
+            tasks: [],
+            flow: ["Listen for Events", "Verify Rules", "Cooldown Check", "Restart Container", "Log Outcome"]
         }
     };
 
@@ -1019,7 +1026,8 @@
                         { id: "general", label: "General" },
                         { id: "upgrades", label: "Upgrades" },
                         { id: "maintenance", label: "Maintenance" },
-                        { id: "security", label: "Security" }
+                        { id: "security", label: "Security" },
+                        { id: "remediation", label: "Remediation" }
                     ] as tab}
                         <button
                             onclick={() => activeAutomationTab = tab.id as AutomationDomain}
@@ -1271,7 +1279,7 @@
                                     </div>
                                 {/if}
 
-                                {#if activeAutomationTab === "maintenance"}
+                                {#if activeAutomationTab === "remediation"}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                         <div class="flex items-center justify-between gap-4">
                                             <div>
@@ -1315,7 +1323,9 @@
                                             </div>
                                         {/if}
                                     </div>
+                                {/if}
 
+                                {#if activeAutomationTab === "maintenance"}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                         <div>
                                             <p class="text-xs font-black uppercase tracking-wider text-slate-500">Historical Data Retention Prune</p>
