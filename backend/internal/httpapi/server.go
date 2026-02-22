@@ -22,6 +22,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/healthremediation"
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
@@ -41,6 +42,7 @@ type DockerClient interface {
 	GetContainer(ctx context.Context, id string) (gen.ContainerSummary, error)
 	GetContainerLogs(ctx context.Context, id string, tail int, since time.Time, timestamps bool) (dockerengine.ContainerLogs, error)
 	GetContainerComposeConfig(ctx context.Context, id string, portainer *portainer.Client) (string, error)
+	RestartContainer(ctx context.Context, id string) error
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 	OpenEventStream(ctx context.Context) (io.ReadCloser, error)
 }
@@ -250,6 +252,12 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	}
 	notificationService := notifications.NewService()
 
+	// 3.5 Unhealthy Auto-Remediation
+	hrSvc := healthremediation.NewService(db, dockerClient, rulesStore, settingsStore, diagService, jobManager)
+	if err := hrSvc.Init(context.Background()); err != nil && diagService != nil {
+		diagService.Log("ERROR", "HealthRemediation", fmt.Sprintf("Failed to init remediation store: %v", err))
+	}
+
 	var portainerService *portainer.Client
 	if err != nil {
 		if diagService != nil {
@@ -337,6 +345,9 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 			RetentionUpdateRunsDays:     90,
 			RetentionComposeAuditDays:   90,
 			RetentionAIUsageDays:        180,
+			UnhealthyAutoRemediationEnabled:    true,
+			UnhealthyRestartCooldownSecDefault: 300,
+			MaxRestartsPerWindow:               3,
 		}
 		if settingsStore == nil {
 			return st
@@ -632,6 +643,9 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task clamav_signature_update: %v", err))
 				}
 			}
+
+			// Start remediation listener
+			go hrSvc.Start(context.Background())
 		}
 	}
 
@@ -736,6 +750,18 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 					setErr(err)
 				} else {
 					diagService.Log("INFO", "Scheduler", fmt.Sprintf("AI usage retention prune completed: deleted=%d days=%d", usageDeleted, usageDays))
+				}
+			}
+
+			if hrSvc != nil {
+				remedyDays := retentionDays(st.RetentionUpdateRunsDays, 90) // Reuse update runs retention for now
+				remedyCutoff := now.Add(-time.Duration(remedyDays) * 24 * time.Hour).Unix()
+				remedyDeleted, err := hrSvc.PruneRuns(ctx, remedyCutoff)
+				if err != nil {
+					diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Retention prune failed (remediation_runs): %v", err))
+					setErr(err)
+				} else if remedyDeleted > 0 {
+					diagService.Log("INFO", "Scheduler", fmt.Sprintf("Remediation history retention prune completed: deleted=%d days=%d", remedyDeleted, remedyDays))
 				}
 			}
 
@@ -1174,6 +1200,25 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 			r.Get("/{id}/logs", getContainerLogs)
 			// Backward-compatible alias for older frontend builds.
 			r.Get("/containers/{id}/logs", getContainerLogs)
+
+			r.Post("/{id}/restart", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				id := chi.URLParam(r, "id")
+				ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				defer cancel()
+				if err := dockerClient.RestartContainer(ctx, id); err != nil {
+					status := http.StatusBadGateway
+					if isContainerNotFoundError(err) {
+						status = http.StatusNotFound
+					}
+					writeError(w, status, "restart_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "restarted"})
+			})
 
 			registerRulesRoutes := func(router chi.Router) {
 				getRules := func(w http.ResponseWriter, r *http.Request) {

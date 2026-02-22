@@ -76,6 +76,8 @@
     let lifecycleMode = $state<"global" | "manual">("global");
     let bypassAi = $state(false);
     let skipHealth = $state(false);
+    let restartOnUnhealthy = $state(false);
+    let unhealthyRestartCooldownSec = $state(300);
     let updateHistory = $state<UpdateJobStatus[]>([]);
     let loadingUpdateHistory = $state(false);
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
@@ -323,6 +325,8 @@
         lifecycleMode = detail?.rules?.inheritAutomation === false ? "manual" : "global";
         bypassAi = !!(detail?.rules as any)?.bypassAi;
         skipHealth = !!(detail?.rules as any)?.skipHealthCheck;
+        restartOnUnhealthy = !!detail?.rules?.restartOnUnhealthy;
+        unhealthyRestartCooldownSec = detail?.rules?.unhealthyRestartCooldownSec ?? 300;
     }
 
     function applyLifecycleModeToRules(mode: "global" | "manual") {
@@ -349,6 +353,8 @@
         if (!containerId) return;
         (detail.rules as any).bypassAi = !!bypassAi;
         (detail.rules as any).skipHealthCheck = !!skipHealth;
+        detail.rules.restartOnUnhealthy = restartOnUnhealthy;
+        detail.rules.unhealthyRestartCooldownSec = Number(unhealthyRestartCooldownSec);
         
         lifecycleMessage = "";
         savingRules = true;
@@ -680,6 +686,27 @@
         toasts.warning("Upgrade flow is still running in the background.");
     }
 
+    async function restartContainer() {
+        const containerId = activeContainerId();
+        if (!containerId || loading) return;
+        
+        toasts.info(`Restarting ${detail?.summary?.names?.[0]?.replace(/^\//, '') || 'container'}...`);
+        try {
+            const res = await fetch(`/api/docker/${encodeURIComponent(containerId)}/restart`, {
+                method: "POST"
+            });
+            if (res.ok) {
+                toasts.success("Restart command sent.");
+                setTimeout(() => loadDetail(true), 2000);
+            } else {
+                const body = await res.json().catch(() => ({}));
+                toasts.error(body?.message || `Restart failed (${res.status})`);
+            }
+        } catch (e) {
+            toasts.error("Failed to send restart command.");
+        }
+    }
+
     onMount(() => {
         loadDetail();
     });
@@ -769,7 +796,10 @@
             </div>
 
             <div class="flex gap-2 w-full md:w-auto">
-                <button class="flex-1 md:flex-none px-4 md:px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:scale-105 transition-all">
+                <button 
+                    onclick={restartContainer}
+                    class="flex-1 md:flex-none px-4 md:px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:scale-105 transition-all"
+                >
                     Restart
                 </button>
                 <button class="flex-1 md:flex-none px-4 md:px-6 py-3 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-rose-500/20 hover:scale-105 transition-all">
@@ -980,6 +1010,37 @@
                                                 <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {skipHealth ? 'translate-x-5' : ''}"></div>
                                             </button>
                                         </div>
+
+                                        <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                            <div>
+                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Restart on Unhealthy</p>
+                                                <p class="text-[11px] text-slate-500">Automatically restart if Docker reports container as unhealthy.</p>
+                                            </div>
+                                            <button
+                                                onclick={() => restartOnUnhealthy = !restartOnUnhealthy}
+                                                class="w-10 h-5 rounded-full transition-colors relative {restartOnUnhealthy ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                aria-label="Toggle Restart on Unhealthy"
+                                            >
+                                                <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {restartOnUnhealthy ? 'translate-x-5' : ''}"></div>
+                                            </button>
+                                        </div>
+
+                                        {#if restartOnUnhealthy}
+                                            <div class="flex flex-col gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                                <label for="remediation-cooldown" class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Restart Cooldown (seconds)</label>
+                                                <div class="flex items-center gap-3">
+                                                    <input 
+                                                        id="remediation-cooldown"
+                                                        type="number" 
+                                                        min="0"
+                                                        bind:value={unhealthyRestartCooldownSec}
+                                                        class="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                    />
+                                                    <span class="text-[10px] font-bold text-slate-400 uppercase">{Math.round(unhealthyRestartCooldownSec / 60)} min</span>
+                                                </div>
+                                                <p class="text-[10px] text-slate-500">Wait this long between consecutive auto-restarts. Set to 0 to use global default.</p>
+                                            </div>
+                                        {/if}
                                     </div>
                                 </div>
 

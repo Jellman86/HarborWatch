@@ -58,6 +58,9 @@ func (f fakeDockerClient) GetContainerLogs(ctx context.Context, id string, tail 
 func (f fakeDockerClient) GetContainerComposeConfig(ctx context.Context, id string, ps *portainer.Client) (string, error) {
 	return "version: '3'", nil
 }
+func (f fakeDockerClient) RestartContainer(ctx context.Context, id string) error {
+	return nil
+}
 func (f fakeDockerClient) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
 	return f.images, nil
 }

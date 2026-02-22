@@ -39,6 +39,10 @@ func (f autoTaskDockerClient) GetContainerComposeConfig(ctx context.Context, id 
 	return "", nil
 }
 
+func (f autoTaskDockerClient) RestartContainer(ctx context.Context, id string) error {
+	return nil
+}
+
 func (f autoTaskDockerClient) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
 	return []gen.ImageSummary{}, nil
 }

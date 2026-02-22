@@ -45,7 +45,7 @@
     }
 
     type AIUsageSpan = "24h" | "7d" | "30d" | "90d";
-    type RetentionWindowPreset = "1d" | "7d" | "30d" | "90d" | "270d" | "infinite" | "custom";
+    type RetentionWindowPreset = "7d" | "30d" | "90d" | "365d";
 
     interface AIUsageBreakdown {
         provider: string;
@@ -128,6 +128,7 @@
         autoUpgradeMinRetryMinutes: 60,
         trivySweepMode: "running-only",
         clamavSnapshotMaxBytes: 2147483648,
+        dataRetentionDays: 30,
         retentionLogsDays: 30,
         retentionMetricsDays: 14,
         retentionScanResultsDays: 30,
@@ -138,6 +139,9 @@
         metricsNormalized: true,
         globalBypassAi: false,
         globalSkipHealthCheck: false,
+        unhealthyAutoRemediationEnabled: true,
+        unhealthyRestartCooldownSecDefault: 300,
+        maxRestartsPerWindow: 3,
         environmentOverrides: {}
     };
 
@@ -286,37 +290,25 @@
         return tokens.some((token) => containerMatchesToken(container, token));
     }
 
-    const retentionPresetToDays: Record<Exclude<RetentionWindowPreset, "custom">, number> = {
-        "1d": 1,
+    const retentionPresetToDays: Record<RetentionWindowPreset, number> = {
         "7d": 7,
         "30d": 30,
         "90d": 90,
-        "270d": 270,
-        "infinite": 3650
+        "365d": 365
     };
 
     function detectRetentionWindowPreset(): RetentionWindowPreset {
-        const values = [
-            Number(settings.retentionLogsDays || 0),
-            Number(settings.retentionMetricsDays || 0),
-            Number(settings.retentionScanResultsDays || 0),
-            Number(settings.retentionScanJobsDays || 0),
-            Number(settings.retentionUpdateRunsDays || 0),
-            Number(settings.retentionComposeAuditDays || 0),
-            Number(settings.retentionAIUsageDays || 0)
-        ].map((v) => Math.max(1, Math.min(3650, v || 1)));
-        const first = values[0];
-        if (!values.every((v) => v === first)) return "custom";
+        const current = Number(settings.dataRetentionDays || 30);
         for (const [preset, days] of Object.entries(retentionPresetToDays)) {
-            if (days === first) return preset as RetentionWindowPreset;
+            if (days === current) return preset as RetentionWindowPreset;
         }
-        return "custom";
+        return "30d";
     }
 
     function applyRetentionWindowPreset(preset: RetentionWindowPreset) {
         retentionWindowPreset = preset;
-        if (preset === "custom") return;
         const days = retentionPresetToDays[preset];
+        settings.dataRetentionDays = days;
         settings.retentionLogsDays = days;
         settings.retentionMetricsDays = days;
         settings.retentionScanResultsDays = days;
@@ -1821,8 +1813,52 @@
                             disabled={isLocked("clamavSnapshotMaxBytes")}
                             class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                         />
-                        <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes)}</span>. Increase if large container mount snapshots are skipped.</p>
+                        <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>. Increase if large container mount snapshots are skipped.</p>
                     </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Unhealthy Auto-Remediation</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Listen for Docker health events and automatically restart unhealthy containers (opt-in per container).</p>
+                        </div>
+                        <button
+                            onclick={() => settings.unhealthyAutoRemediationEnabled = !settings.unhealthyAutoRemediationEnabled}
+                            disabled={isLocked("unhealthyAutoRemediationEnabled")}
+                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.unhealthyAutoRemediationEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                            aria-label="Toggle unhealthy auto-remediation"
+                        >
+                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.unhealthyAutoRemediationEnabled ? 'right-1' : 'left-1'}"></div>
+                        </button>
+                    </div>
+
+                    {#if settings.unhealthyAutoRemediationEnabled}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <div class="space-y-2">
+                                <label for="remediation-cooldown-default" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Default Restart Cooldown (seconds)</label>
+                                <input
+                                    id="remediation-cooldown-default"
+                                    type="number"
+                                    min="0"
+                                    bind:value={settings.unhealthyRestartCooldownSecDefault}
+                                    disabled={isLocked("unhealthyRestartCooldownSecDefault")}
+                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                />
+                            </div>
+                            <div class="space-y-2">
+                                <label for="max-restarts-per-window" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Restarts (per hour window)</label>
+                                <input
+                                    id="max-restarts-per-window"
+                                    type="number"
+                                    min="0"
+                                    bind:value={settings.maxRestartsPerWindow}
+                                    disabled={isLocked("maxRestartsPerWindow")}
+                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                />
+                            </div>
+                        </div>
+                    {/if}
                 </div>
 
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
@@ -1838,55 +1874,19 @@
                             onchange={(e) => applyRetentionWindowPreset((e.currentTarget as HTMLSelectElement).value as RetentionWindowPreset)}
                             class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                         >
-                            <option value="1d">1 day</option>
                             <option value="7d">1 week</option>
                             <option value="30d">1 month</option>
                             <option value="90d">3 months</option>
-                            <option value="270d">9 months</option>
-                            <option value="infinite">Infinite (not recommended)</option>
-                            <option value="custom">Custom (advanced)</option>
+                            <option value="365d">1 year</option>
                         </select>
                         <p class="text-[11px] text-slate-500">`docker_system_prune` remains separate and unchanged.</p>
                     </div>
-                    {#if retentionWindowPreset !== "custom"}
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">
-                            <p class="text-[11px] text-slate-600 dark:text-slate-300">
-                                Unified rolling window applied across metrics, logs, scan history, update lifecycle history, compose audit history, and AI usage history:
-                                <span class="font-bold">{retentionPresetToDays[retentionWindowPreset as Exclude<RetentionWindowPreset, "custom">] === 3650 ? " 3650 days (effective infinite)" : ` ${retentionPresetToDays[retentionWindowPreset as Exclude<RetentionWindowPreset, "custom">]} days`}</span>.
-                            </p>
-                        </div>
-                    {:else}
-                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                            <div class="space-y-2">
-                                <label for="retention-logs-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">System Health Logs (days)</label>
-                                <input id="retention-logs-days" type="number" min="1" bind:value={settings.retentionLogsDays} disabled={isLocked("retentionLogsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            </div>
-                            <div class="space-y-2">
-                                <label for="retention-metrics-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Container Metrics (days)</label>
-                                <input id="retention-metrics-days" type="number" min="1" bind:value={settings.retentionMetricsDays} disabled={isLocked("retentionMetricsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            </div>
-                            <div class="space-y-2">
-                                <label for="retention-scan-results-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Security Scan Results (days)</label>
-                                <input id="retention-scan-results-days" type="number" min="1" bind:value={settings.retentionScanResultsDays} disabled={isLocked("retentionScanResultsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            </div>
-                            <div class="space-y-2">
-                                <label for="retention-scan-jobs-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Security Scan Jobs (days)</label>
-                                <input id="retention-scan-jobs-days" type="number" min="1" bind:value={settings.retentionScanJobsDays} disabled={isLocked("retentionScanJobsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            </div>
-                            <div class="space-y-2">
-                                <label for="retention-update-runs-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Upgrade Lifecycle Runs (days)</label>
-                                <input id="retention-update-runs-days" type="number" min="1" bind:value={settings.retentionUpdateRunsDays} disabled={isLocked("retentionUpdateRunsDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            </div>
-                            <div class="space-y-2">
-                                <label for="retention-compose-audit-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Compose Audit History (days)</label>
-                                <input id="retention-compose-audit-days" type="number" min="1" bind:value={settings.retentionComposeAuditDays} disabled={isLocked("retentionComposeAuditDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            </div>
-                            <div class="space-y-2">
-                                <label for="retention-ai-usage-days" class="text-[10px] font-black uppercase tracking-wider text-slate-400">AI Usage History (days)</label>
-                                <input id="retention-ai-usage-days" type="number" min="1" bind:value={settings.retentionAIUsageDays} disabled={isLocked("retentionAIUsageDays")} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            </div>
-                        </div>
-                    {/if}
+                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">
+                        <p class="text-[11px] text-slate-600 dark:text-slate-300">
+                            Unified rolling window applied across metrics, logs, scan history, update lifecycle history, compose audit history, and AI usage history:
+                            <span class="font-bold">{retentionPresetToDays[retentionWindowPreset]} days</span>.
+                        </p>
+                    </div>
                     <p class="text-[11px] text-slate-500">Retention cleanup runs via <span class="font-mono">metrics_prune</span>, <span class="font-mono">diag_log_prune</span>, and <span class="font-mono">history_retention_prune</span>. The policy is a rolling window, not a fixed wipe date.</p>
                 </div>
 

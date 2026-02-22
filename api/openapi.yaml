@@ -738,6 +738,8 @@ components:
         upgradesAutomation: { type: boolean }
         maintenanceAutomation: { type: boolean }
         securityAutomation: { type: boolean }
+        restartOnUnhealthy: { type: boolean }
+        unhealthyRestartCooldownSec: { type: integer, minimum: 0 }
     Metric:
       type: object
       required: [containerId, timestamp, cpuPercent, memoryUsage, memoryLimit, pids]
@@ -1065,6 +1067,7 @@ components:
         autoUpgradeMinRetryMinutes: { type: integer, minimum: 1, maximum: 1440 }
         trivySweepMode: { type: string, enum: [running-only, all-images] }
         clamavSnapshotMaxBytes: { type: integer, format: int64, minimum: 1 }
+        dataRetentionDays: { type: integer, minimum: 1, maximum: 3650 }
         retentionLogsDays: { type: integer, minimum: 1, maximum: 3650 }
         retentionMetricsDays: { type: integer, minimum: 1, maximum: 3650 }
         retentionScanResultsDays: { type: integer, minimum: 1, maximum: 3650 }
@@ -1077,6 +1080,9 @@ components:
         globalSkipHealthCheck: { type: boolean }
         aiTestingPassed: { type: boolean }
         portainerTestingPassed: { type: boolean }
+        unhealthyAutoRemediationEnabled: { type: boolean }
+        unhealthyRestartCooldownSecDefault: { type: integer, minimum: 0 }
+        maxRestartsPerWindow: { type: integer, minimum: 0 }
         environmentOverrides:
           type: object
           additionalProperties: { type: boolean }

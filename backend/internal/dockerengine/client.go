@@ -198,6 +198,26 @@ func (c *Client) OpenEventStream(ctx context.Context) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
+func (c *Client) RestartContainer(ctx context.Context, id string) error {
+	path := fmt.Sprintf("/containers/%s/restart", url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL.String()+path, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("docker restart request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("docker restart failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
 func (c *Client) GetContainerLogs(ctx context.Context, id string, tail int, since time.Time, timestamps bool) (ContainerLogs, error) {
 	if strings.TrimSpace(id) == "" {
 		return ContainerLogs{}, fmt.Errorf("container id is required")

@@ -40,6 +40,7 @@ type Settings struct {
 	AutoUpgradeMinRetryMinutes  int    `json:"autoUpgradeMinRetryMinutes"`
 	TrivySweepMode              string `json:"trivySweepMode"`
 	ClamAVSnapshotMaxBytes      int64  `json:"clamavSnapshotMaxBytes"`
+	DataRetentionDays           int    `json:"dataRetentionDays"`
 	RetentionLogsDays           int    `json:"retentionLogsDays"`
 	RetentionMetricsDays        int    `json:"retentionMetricsDays"`
 	RetentionScanResultsDays    int    `json:"retentionScanResultsDays"`
@@ -50,6 +51,9 @@ type Settings struct {
 	MetricsNormalized           bool   `json:"metricsNormalized"`
 	GlobalBypassAI              bool   `json:"globalBypassAi"`
 	GlobalSkipHealthCheck       bool   `json:"globalSkipHealthCheck"`
+	UnhealthyAutoRemediationEnabled     bool   `json:"unhealthyAutoRemediationEnabled"`
+	UnhealthyRestartCooldownSecDefault  int    `json:"unhealthyRestartCooldownSecDefault"`
+	MaxRestartsPerWindow                int    `json:"maxRestartsPerWindow"`
 	AITestingPassed             bool   `json:"aiTestingPassed"`
 	PortainerTestingPassed      bool   `json:"portainerTestingPassed"`
 
@@ -91,6 +95,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		AutoUpgradeMinRetryMinutes:  60,
 		TrivySweepMode:              "running-only",
 		ClamAVSnapshotMaxBytes:      2 << 30,
+		DataRetentionDays:           30,
 		RetentionLogsDays:           30,
 		RetentionMetricsDays:        14,
 		RetentionScanResultsDays:    30,
@@ -98,6 +103,9 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		RetentionUpdateRunsDays:     90,
 		RetentionComposeAuditDays:   90,
 		RetentionAIUsageDays:        180,
+		UnhealthyAutoRemediationEnabled:     true,
+		UnhealthyRestartCooldownSecDefault:  300,
+		MaxRestartsPerWindow:                3,
 		MetricsNormalized:           true,
 		EnvironmentOverrides:        make(map[string]bool),
 	}
@@ -163,6 +171,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.TrivySweepMode = normalizeTrivySweepMode(value)
 		case "clamav_snapshot_max_bytes":
 			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
+		case "data_retention_days":
+			st.DataRetentionDays = parseStoredInt(value, st.DataRetentionDays, 1, 3650)
 		case "retention_logs_days":
 			st.RetentionLogsDays = parseStoredInt(value, st.RetentionLogsDays, 1, 3650)
 		case "retention_metrics_days":
@@ -183,6 +193,12 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.GlobalBypassAI = parseStoredBool(value, st.GlobalBypassAI)
 		case "global_skip_health_check":
 			st.GlobalSkipHealthCheck = parseStoredBool(value, st.GlobalSkipHealthCheck)
+		case "unhealthy_auto_remediation_enabled":
+			st.UnhealthyAutoRemediationEnabled = parseStoredBool(value, st.UnhealthyAutoRemediationEnabled)
+		case "unhealthy_restart_cooldown_sec_default":
+			st.UnhealthyRestartCooldownSecDefault = parseStoredInt(value, st.UnhealthyRestartCooldownSecDefault, 0, 3600*24)
+		case "max_restarts_per_window":
+			st.MaxRestartsPerWindow = parseStoredInt(value, st.MaxRestartsPerWindow, 0, 100)
 		case "ai_testing_passed":
 			st.AITestingPassed = parseStoredBool(value, st.AITestingPassed)
 		case "portainer_testing_passed":
@@ -269,6 +285,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		ptr    *int
 		envKey string
 	}{
+		"dataRetentionDays":         {&st.DataRetentionDays, "HW_DATA_RETENTION_DAYS"},
 		"retentionLogsDays":         {&st.RetentionLogsDays, "HW_RETENTION_LOG_DAYS"},
 		"retentionMetricsDays":      {&st.RetentionMetricsDays, "HW_RETENTION_METRICS_DAYS"},
 		"retentionScanResultsDays":  {&st.RetentionScanResultsDays, "HW_RETENTION_SCAN_RESULTS_DAYS"},
@@ -302,13 +319,14 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	st.AutoUpgradeMinRetryMinutes = parseStoredInt(strconv.Itoa(st.AutoUpgradeMinRetryMinutes), 60, 1, 24*60)
 	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
 	st.ClamAVSnapshotMaxBytes = parseStoredInt64(strconv.FormatInt(st.ClamAVSnapshotMaxBytes, 10), 2<<30, 1, 32<<30)
-	st.RetentionLogsDays = parseStoredInt(strconv.Itoa(st.RetentionLogsDays), 30, 1, 3650)
-	st.RetentionMetricsDays = parseStoredInt(strconv.Itoa(st.RetentionMetricsDays), 14, 1, 3650)
-	st.RetentionScanResultsDays = parseStoredInt(strconv.Itoa(st.RetentionScanResultsDays), 30, 1, 3650)
-	st.RetentionScanJobsDays = parseStoredInt(strconv.Itoa(st.RetentionScanJobsDays), 30, 1, 3650)
-	st.RetentionUpdateRunsDays = parseStoredInt(strconv.Itoa(st.RetentionUpdateRunsDays), 90, 1, 3650)
-	st.RetentionComposeAuditDays = parseStoredInt(strconv.Itoa(st.RetentionComposeAuditDays), 90, 1, 3650)
-	st.RetentionAIUsageDays = parseStoredInt(strconv.Itoa(st.RetentionAIUsageDays), 180, 1, 3650)
+	st.DataRetentionDays = parseStoredInt(strconv.Itoa(st.DataRetentionDays), 30, 1, 3650)
+	st.RetentionLogsDays = st.DataRetentionDays
+	st.RetentionMetricsDays = st.DataRetentionDays
+	st.RetentionScanResultsDays = st.DataRetentionDays
+	st.RetentionScanJobsDays = st.DataRetentionDays
+	st.RetentionUpdateRunsDays = st.DataRetentionDays
+	st.RetentionComposeAuditDays = st.DataRetentionDays
+	st.RetentionAIUsageDays = st.DataRetentionDays
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -341,6 +359,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"auto_upgrade_min_retry_minutes": intString(st.AutoUpgradeMinRetryMinutes),
 		"trivy_sweep_mode":               st.TrivySweepMode,
 		"clamav_snapshot_max_bytes":      int64String(st.ClamAVSnapshotMaxBytes),
+		"data_retention_days":            intString(st.DataRetentionDays),
 		"retention_logs_days":            intString(st.RetentionLogsDays),
 		"retention_metrics_days":         intString(st.RetentionMetricsDays),
 		"retention_scan_results_days":    intString(st.RetentionScanResultsDays),
@@ -351,6 +370,9 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"metrics_normalized":             boolString(st.MetricsNormalized),
 		"global_bypass_ai":               boolString(st.GlobalBypassAI),
 		"global_skip_health_check":       boolString(st.GlobalSkipHealthCheck),
+		"unhealthy_auto_remediation_enabled": boolString(st.UnhealthyAutoRemediationEnabled),
+		"unhealthy_restart_cooldown_sec_default": intString(st.UnhealthyRestartCooldownSecDefault),
+		"max_restarts_per_window":        intString(st.MaxRestartsPerWindow),
 		"ai_testing_passed":              boolString(st.AITestingPassed),
 		"portainer_testing_passed":       boolString(st.PortainerTestingPassed),
 	}
@@ -380,6 +402,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"autoUpgradeMinRetryMinutes":  "auto_upgrade_min_retry_minutes",
 		"trivySweepMode":              "trivy_sweep_mode",
 		"clamavSnapshotMaxBytes":      "clamav_snapshot_max_bytes",
+		"dataRetentionDays":           "data_retention_days",
 		"retentionLogsDays":           "retention_logs_days",
 		"retentionMetricsDays":        "retention_metrics_days",
 		"retentionScanResultsDays":    "retention_scan_results_days",
@@ -390,6 +413,9 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"metricsNormalized":           "metrics_normalized",
 		"globalBypassAi":              "global_bypass_ai",
 		"globalSkipHealthCheck":       "global_skip_health_check",
+		"unhealthyAutoRemediationEnabled": "unhealthy_auto_remediation_enabled",
+		"unhealthyRestartCooldownSecDefault": "unhealthy_restart_cooldown_sec_default",
+		"maxRestartsPerWindow":        "max_restarts_per_window",
 		"aiTestingPassed":             "ai_testing_passed",
 		"portainerTestingPassed":      "portainer_testing_passed",
 	}

@@ -24,6 +24,9 @@ FROM update_runs
 UNION ALL
 SELECT job_id as id, type, target, status, progress, error, started_at, completed_at
 FROM scan_jobs
+UNION ALL
+SELECT id, 'Remediation' as type, container_name as target, status, 100 as progress, error, started_at, completed_at
+FROM remediation_runs
 ORDER BY started_at DESC
 LIMIT 100
 `
@@ -59,10 +62,14 @@ FROM scan_jobs
 WHERE target = ? OR target = (
 	SELECT target_image FROM update_runs WHERE container_id = ? ORDER BY created_at DESC LIMIT 1
 )
+UNION ALL
+SELECT id, 'Remediation' as type, container_name as target, container_id, status, 100 as progress, error, started_at, completed_at
+FROM remediation_runs
+WHERE container_id = ?
 ORDER BY started_at DESC
 LIMIT 50
 `
-	rows, err := s.db.QueryContext(ctx, query, containerID, containerID, containerID)
+	rows, err := s.db.QueryContext(ctx, query, containerID, containerID, containerID, containerID)
 	if err != nil {
 		return nil, fmt.Errorf("query container audit jobs: %w", err)
 	}

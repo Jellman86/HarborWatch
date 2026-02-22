@@ -16,6 +16,7 @@ const (
 	JobTypeUpdate   JobType = "update"
 	JobTypeScan     JobType = "scan"
 	JobTypeRedeploy JobType = "redeploy"
+	JobTypeRemediation JobType = "remediation"
 )
 
 // Job represents a queued or running task.
