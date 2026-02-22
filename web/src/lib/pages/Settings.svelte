@@ -1255,7 +1255,8 @@
                                     </div>
                                 </div>
                             </div>
-                        {:else}
+                        </div>
+                    {:else}
                             <div class="space-y-4">
                                 {#if activeAutomationTab === "upgrades"}
                                     <div class="px-2 py-1">
