@@ -368,6 +368,7 @@
     }
 
     function domainEnabled(domain: AutomationDomain): boolean {
+        if (domain === "remediation") return settings.unhealthyAutoRemediationEnabled;
         const scoped = schedulesForDomain(domain);
         return scoped.length > 0 && scoped.some((s) => s.enabled);
     }
@@ -387,6 +388,14 @@
     async function setDomainEnabled(domain: AutomationDomain, enabled: boolean) {
         if (domainToggleBusy) return;
         domainToggleBusy = domain;
+
+        if (domain === "remediation") {
+            settings.unhealthyAutoRemediationEnabled = enabled;
+            toasts.success(`${enabled ? "Enabled" : "Disabled"} ${automationConfig[domain].title}.`);
+            domainToggleBusy = "";
+            return;
+        }
+
         const scoped = schedulesForDomain(domain);
         try {
             let changed = 0;
@@ -417,14 +426,23 @@
     }
 
     function flowSteps(domain: AutomationDomain): Array<{ label: string; state: "active" | "idle" | "warning" }> {
+        const enabled = domainEnabled(domain);
         const scoped = schedulesForDomain(domain);
         const total = Math.max(scoped.length, 1);
-        const active = scoped.filter((s) => s.enabled).length;
+        const activeCount = scoped.filter((s) => s.enabled).length;
+
         return automationConfig[domain].flow.map((label, idx, arr) => {
-            if (active === 0) return { label, state: "idle" as const };
-            if (active >= total) return { label, state: "active" as const };
-            if (idx === 0 || idx === arr.length - 1) return { label, state: "active" as const };
-            return { label, state: "warning" as const };
+            if (!enabled) return { label, state: "idle" as const };
+            
+            // For domains with tasks (upgrades, maintenance, security)
+            if (scoped.length > 0) {
+                if (activeCount >= total) return { label, state: "active" as const };
+                if (idx === 0 || idx === arr.length - 1) return { label, state: "active" as const };
+                return { label, state: "warning" as const };
+            }
+
+            // For taskless domains (remediation)
+            return { label, state: "active" as const };
         });
     }
 
@@ -1356,104 +1374,106 @@
                                     </div>
                                 {/if}
 
-                                {#each schedulesForDomain(activeAutomationTab) as task, i (task.id + i)}
-                                    {@const draft = draftForTask(task)}
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">
-                                        <div class="flex flex-wrap items-center justify-between gap-3">
-                                            <div>
-                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
-                                                <p class="text-[11px] text-slate-500 mt-1">{taskDescription(task.id)}</p>
-                                                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{cronLabel(task.cronSpec)} | Last run: {formatTime(task.lastRun)}</p>
+                                {#if activeAutomationTab !== "remediation"}
+                                    {#each schedulesForDomain(activeAutomationTab) as task, i (task.id + i)}
+                                        {@const draft = draftForTask(task)}
+                                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">
+                                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                                <div>
+                                                    <p class="text-sm font-black text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
+                                                    <p class="text-[11px] text-slate-500 mt-1">{taskDescription(task.id)}</p>
+                                                    <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{cronLabel(task.cronSpec)} | Last run: {formatTime(task.lastRun)}</p>
+                                                </div>
+                                                <div class="flex items-center gap-2">
+                                                    <button
+                                                        onclick={() => runTask(task.id)}
+                                                        class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
+                                                    >Run Now</button>
+                                                    <button
+                                                        onclick={() => toggleTask(task.id, task.enabled)}
+                                                        class="w-10 h-5 rounded-full relative transition-colors {task.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                        aria-label="Toggle task"
+                                                    >
+                                                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {task.enabled ? 'right-1' : 'left-1'}"></div>
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div class="flex items-center gap-2">
+
+                                            <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                                                <div class="space-y-1">
+                                                    <label for={"cadence-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
+                                                    <select
+                                                        id={"cadence-" + task.id}
+                                                        value={draft.cadence}
+                                                        onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
+                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                    >
+                                                        <option value="daily">Daily</option>
+                                                        <option value="weekly">Weekly</option>
+                                                        <option value="monthly">Monthly</option>
+                                                    </select>
+                                                    <p class="text-[11px] text-slate-500">Defines how often this task is eligible to run.</p>
+                                                </div>
+
+                                                <div class="space-y-1">
+                                                    <label for={"time-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
+                                                    <input
+                                                        id={"time-" + task.id}
+                                                        type="time"
+                                                        value={draft.time}
+                                                        onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                    />
+                                                    <p class="text-[11px] text-slate-500">Local time used by the scheduler for this task.</p>
+                                                </div>
+
                                                 <button
-                                                    onclick={() => runTask(task.id)}
-                                                    class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
-                                                >Run Now</button>
-                                                <button
-                                                    onclick={() => toggleTask(task.id, task.enabled)}
-                                                    class="w-10 h-5 rounded-full relative transition-colors {task.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                    aria-label="Toggle task"
+                                                    onclick={() => saveTaskSchedule(task.id)}
+                                                    disabled={!scheduleDirty(task) || savingScheduleId === task.id}
+                                                    class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
                                                 >
-                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {task.enabled ? 'right-1' : 'left-1'}"></div>
+                                                    {savingScheduleId === task.id ? "Saving..." : "Save Schedule"}
                                                 </button>
                                             </div>
-                                        </div>
 
-                                        <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                                            <div class="space-y-1">
-                                                <label for={"cadence-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
-                                                <select
-                                                    id={"cadence-" + task.id}
-                                                    value={draft.cadence}
-                                                    onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                >
-                                                    <option value="daily">Daily</option>
-                                                    <option value="weekly">Weekly</option>
-                                                    <option value="monthly">Monthly</option>
-                                                </select>
-                                                <p class="text-[11px] text-slate-500">Defines how often this task is eligible to run.</p>
-                                            </div>
-
-                                            <div class="space-y-1">
-                                                <label for={"time-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
-                                                <input
-                                                    id={"time-" + task.id}
-                                                    type="time"
-                                                    value={draft.time}
-                                                    onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                />
-                                                <p class="text-[11px] text-slate-500">Local time used by the scheduler for this task.</p>
-                                            </div>
-
-                                            <button
-                                                onclick={() => saveTaskSchedule(task.id)}
-                                                disabled={!scheduleDirty(task) || savingScheduleId === task.id}
-                                                class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
-                                            >
-                                                {savingScheduleId === task.id ? "Saving..." : "Save Schedule"}
-                                            </button>
-                                        </div>
-
-                                        {#if draft.cadence === "weekly"}
-                                            <div class="space-y-1">
-                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
-                                                <div class="flex flex-wrap gap-2">
-                                                    {#each weekdayOptions as day}
-                                                        <button
-                                                            onclick={() => toggleWeeklyDay(task.id, day.value)}
-                                                            class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {draft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                        >
-                                                            {day.label}
-                                                        </button>
-                                                    {/each}
+                                            {#if draft.cadence === "weekly"}
+                                                <div class="space-y-1">
+                                                    <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        {#each weekdayOptions as day}
+                                                            <button
+                                                                onclick={() => toggleWeeklyDay(task.id, day.value)}
+                                                                class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {draft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                            >
+                                                                {day.label}
+                                                            </button>
+                                                        {/each}
+                                                    </div>
+                                                    <p class="text-[11px] text-slate-500">Select one or more weekdays for weekly execution.</p>
                                                 </div>
-                                                <p class="text-[11px] text-slate-500">Select one or more weekdays for weekly execution.</p>
-                                            </div>
-                                        {:else if draft.cadence === "monthly"}
-                                            <div class="space-y-1">
-                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
-                                                <div class="flex flex-wrap gap-1.5">
-                                                    {#each monthDayOptions as day}
-                                                        <button
-                                                            onclick={() => toggleMonthDay(task.id, day)}
-                                                            class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {draft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                        >
-                                                            {day}
-                                                        </button>
-                                                    {/each}
+                                            {:else if draft.cadence === "monthly"}
+                                                <div class="space-y-1">
+                                                    <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
+                                                    <div class="flex flex-wrap gap-1.5">
+                                                        {#each monthDayOptions as day}
+                                                            <button
+                                                                onclick={() => toggleMonthDay(task.id, day)}
+                                                                class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {draft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                            >
+                                                                {day}
+                                                            </button>
+                                                        {/each}
+                                                    </div>
+                                                    <p class="text-[11px] text-slate-500">Select one or more month days. Tasks run on matching calendar dates.</p>
                                                 </div>
-                                                <p class="text-[11px] text-slate-500">Select one or more month days. Tasks run on matching calendar dates.</p>
-                                            </div>
-                                        {/if}
-                                    </div>
-                                {:else}
-                                    <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-sm text-slate-500 italic">
-                                        No scheduler tasks found for this automation domain.
-                                    </div>
-                                {/each}
+                                            {/if}
+                                        </div>
+                                    {:else}
+                                        <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-sm text-slate-500 italic">
+                                            No scheduler tasks found for this automation domain.
+                                        </div>
+                                    {/each}
+                                {/if}
                             </div>
                         {/if}
                     </div>
