@@ -37,6 +37,8 @@ type Service struct {
 	jobCancels map[string]context.CancelFunc
 }
 
+var ErrDuplicateActiveScan = errors.New("a matching scan is already queued or running")
+
 func NewService(scanner Scanner, malwareScanner MalwareScanner, docker DockerClient, store *Store, diag DiagService, jm *jobs.Manager) *Service {
 	return &Service{
 		scanner:        scanner,
@@ -74,7 +76,7 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 	s.jobCancels[jobID] = runCancel
 	s.mu.Unlock()
 
-	s.jobManager.RegisterJob(&jobs.Job{
+	jobTracker := &jobs.Job{
 		ID:         jobID,
 		Type:       jobs.JobTypeScan,
 		Subtype:    "trivy",
@@ -84,7 +86,15 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 		Message:    "Waiting for concurrency slot",
 		StartedAt:  time.Now().UTC().Unix(),
 		Cancel:     runCancel,
-	})
+	}
+	if existingID, duplicate := s.jobManager.RegisterJobIfNoDuplicate(jobTracker); duplicate {
+		s.mu.Lock()
+		delete(s.jobs, jobID)
+		delete(s.jobCancels, jobID)
+		s.mu.Unlock()
+		runCancel()
+		return gen.ScanStartResponse{}, fmt.Errorf("%w for target %s (job=%s)", ErrDuplicateActiveScan, target, existingID)
+	}
 
 	_ = s.store.CreateJob(context.Background(), job, "vulnerability")
 	if s.diag != nil {
@@ -161,7 +171,7 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 	s.jobCancels[jobID] = runCancel
 	s.mu.Unlock()
 
-	s.jobManager.RegisterJob(&jobs.Job{
+	jobTracker := &jobs.Job{
 		ID:         jobID,
 		Type:       jobs.JobTypeScan,
 		Subtype:    "clamav",
@@ -171,7 +181,15 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 		Message:    "Waiting for concurrency slot",
 		StartedAt:  time.Now().UTC().Unix(),
 		Cancel:     runCancel,
-	})
+	}
+	if existingID, duplicate := s.jobManager.RegisterJobIfNoDuplicate(jobTracker); duplicate {
+		s.mu.Lock()
+		delete(s.jobs, jobID)
+		delete(s.jobCancels, jobID)
+		s.mu.Unlock()
+		runCancel()
+		return gen.ScanStartResponse{}, fmt.Errorf("%w for target %s (job=%s)", ErrDuplicateActiveScan, targetLabel, existingID)
+	}
 
 	_ = s.store.CreateJob(context.Background(), job, "malware")
 	if s.diag != nil {

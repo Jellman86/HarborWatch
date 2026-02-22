@@ -1314,6 +1314,10 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				}
 				resp, err := scanService.StartScan(req.Target)
 				if err != nil {
+					if errors.Is(err, scanning.ErrDuplicateActiveScan) {
+						writeError(w, http.StatusConflict, "scan_already_running", err.Error())
+						return
+					}
 					writeError(w, http.StatusBadRequest, "scan_start_failed", err.Error())
 					return
 				}
@@ -1332,6 +1336,10 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				}
 				resp, err := scanService.StartMalwareScan(req.Target)
 				if err != nil {
+					if errors.Is(err, scanning.ErrDuplicateActiveScan) {
+						writeError(w, http.StatusConflict, "malware_scan_already_running", err.Error())
+						return
+					}
 					writeError(w, http.StatusBadRequest, "malware_scan_start_failed", err.Error())
 					return
 				}
@@ -2604,18 +2612,22 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 				jobID := "redeploy-" + idStr + "-" + strconv.FormatInt(time.Now().Unix(), 10)
 				lockID := "portainer-stack-" + idStr
 
+				job := &jobs.Job{
+					ID:         jobID,
+					Type:       jobs.JobTypeRedeploy,
+					Target:     lockID,
+					TargetName: "Stack: " + targetStack.Name,
+					Status:     "queued",
+					Message:    "Waiting for concurrency slot",
+					StartedAt:  time.Now().UTC().Unix(),
+				}
+				if existingID, duplicate := jobManager.RegisterJobIfNoDuplicate(job); duplicate {
+					writeError(w, http.StatusConflict, "redeploy_already_running", fmt.Sprintf("A redeploy for this stack is already queued or running (job=%s)", existingID))
+					return
+				}
+
 				// Run in background with JobManager coordination
 				go func() {
-					job := &jobs.Job{
-						ID:         jobID,
-						Type:       jobs.JobTypeRedeploy,
-						Target:     lockID,
-						TargetName: "Stack: " + targetStack.Name,
-						Status:     "queued",
-						Message:    "Waiting for concurrency slot",
-						StartedAt:  time.Now().UTC().Unix(),
-					}
-					jobManager.RegisterJob(job)
 					defer jobManager.FinishJob(jobID)
 
 					// 20 minute timeout for large stack redeploys

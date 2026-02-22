@@ -180,3 +180,27 @@ func TestServiceCancelRunningJob(t *testing.T) {
 	}
 	t.Fatalf("expected cancelled status, got %s", final.Status)
 }
+
+func TestServiceRejectsDuplicateActiveTrivyScan(t *testing.T) {
+	store := newTestStore(t)
+	started := make(chan struct{})
+	svc := NewService(blockingScanner{started: started}, fakeMalwareScanner{}, nil, store, nil, jobs.NewManager(1))
+
+	first, err := svc.StartScan("nginx:latest")
+	if err != nil {
+		t.Fatalf("start first scan: %v", err)
+	}
+	if first.JobID == "" {
+		t.Fatalf("expected first job id")
+	}
+
+	_, err = svc.StartScan("nginx:latest")
+	if err == nil {
+		t.Fatalf("expected duplicate active scan to be rejected")
+	}
+	if !errors.Is(err, ErrDuplicateActiveScan) {
+		t.Fatalf("expected ErrDuplicateActiveScan, got %v", err)
+	}
+
+	_, _ = svc.CancelJob(context.Background(), first.JobID)
+}

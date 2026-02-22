@@ -31,6 +31,9 @@ All notable changes to HarborWatch are documented in this file.
   - Update history is now indexed by both container ID and container name, so lifecycle logs remain visible after local recreates that replace the container ID.
 - **Duplicate Update Start Hardening:**
   - Added stronger duplicate-start protection in the update service and DB indexing to reduce race-condition double-starts for the same container.
+- **Cross-Job Duplicate Start Guarding:**
+  - Added active-job duplicate detection in the shared JobManager and applied it to Trivy scans, ClamAV scans, and Portainer stack redeploy jobs so duplicates are rejected before they appear in the progress queue.
+  - Scan APIs now return conflict responses for duplicate active scan requests instead of creating transient duplicate queued jobs.
 
 ### Changed
 - **Retention UX Simplification:**

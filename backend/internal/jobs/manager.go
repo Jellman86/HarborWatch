@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
@@ -119,6 +120,40 @@ func (m *Manager) RegisterJob(job *Job) {
 		job.ProgressMode = "measured"
 	}
 	m.jobs[job.ID] = job
+}
+
+func (m *Manager) RegisterJobIfNoDuplicate(job *Job) (existingJobID string, duplicate bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, existing := range m.jobs {
+		if existing == nil {
+			continue
+		}
+		if existing.ID == job.ID {
+			continue
+		}
+		if existing.Type != job.Type {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(existing.Subtype), strings.TrimSpace(job.Subtype)) {
+			continue
+		}
+		if strings.TrimSpace(existing.Target) == "" || strings.TrimSpace(job.Target) == "" {
+			continue
+		}
+		if existing.Target != job.Target {
+			continue
+		}
+		status := strings.ToLower(strings.TrimSpace(existing.Status))
+		if status == "queued" || status == "running" {
+			return existing.ID, true
+		}
+	}
+	if job.ProgressMode == "" {
+		job.ProgressMode = "measured"
+	}
+	m.jobs[job.ID] = job
+	return "", false
 }
 
 func (m *Manager) UpdateJob(id string, progress int, status, message string) {
