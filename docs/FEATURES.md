@@ -1,4 +1,4 @@
-# 🐳 Project Features
+# Project Features
 
 HarborWatch was built to be a friendly, all-in-one companion for your Docker fleet. I wanted to create something that handles the boring stuff (like checking for updates and cleaning up logs) so you can focus on actually using your self-hosted services.
 
@@ -8,6 +8,10 @@ Here is a breakdown of what HarborWatch can do for you.
 
 ## 📊 Fleet Dashboard
 The dashboard is the "command center" for your host. It gives you a high-level view of everything running without being overwhelming.
+
+<p align="center">
+  <img src="assets/dashboard.png" alt="HarborWatch Dashboard" width="800" />
+</p>
 
 *   **Real-time Metrics**: See CPU and Memory usage for every container with pretty sparkline charts. It helps you spot a "runaway" container at a glance.
 *   **Disk Usage Analysis**: HarborWatch calculates the writable layer and mount sizes, so you know exactly which container is eating up your SSD.

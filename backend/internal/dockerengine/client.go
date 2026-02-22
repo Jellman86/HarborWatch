@@ -27,8 +27,9 @@ const maxContainerLogBytes = 2 << 20 // 2MiB safety cap per request.
 
 // Client is a lightweight Docker Engine API client over a Unix socket.
 type Client struct {
-	httpClient *http.Client
-	baseURL    *url.URL
+	httpClient      *http.Client
+	streamingClient *http.Client
+	baseURL         *url.URL
 }
 
 type ContainerLogs struct {
@@ -68,8 +69,9 @@ func NewFromEnv() (*Client, error) {
 
 	base, _ := url.Parse("http://docker")
 	return &Client{
-		httpClient: &http.Client{Transport: transport, Timeout: 15 * time.Second},
-		baseURL:    base,
+		httpClient:      &http.Client{Transport: transport, Timeout: 15 * time.Second},
+		streamingClient: &http.Client{Transport: transport, Timeout: 0},
+		baseURL:         base,
 	}, nil
 }
 
@@ -184,7 +186,7 @@ func (c *Client) OpenEventStream(ctx context.Context) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.streamingClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("docker events request failed: %w", err)
 	}

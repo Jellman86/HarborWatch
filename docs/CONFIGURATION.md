@@ -40,7 +40,7 @@ services:
     restart: unless-stopped
 ```
 
-## 🐳 Docker Socket
+## Docker Socket
 HarborWatch needs access to `/var/run/docker.sock` to see your containers, read their logs, and perform updates. I've built the backend to be lightweight and read-only whenever possible, only taking "write" actions (like restarting or pulling images) when you or your automation rules specifically request it.
 
 ---

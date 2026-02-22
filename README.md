@@ -1,7 +1,7 @@
-# <p align="center">🐳 HarborWatch</p>
+# <p align="center">HarborWatch</p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Jellman86/HarborWatch/dev/agents/signpost.png" alt="HarborWatch Logo" width="200" />
+  <img src="docs/assets/app-icon.png" alt="HarborWatch Logo" width="200" />
 </p>
 
 <p align="center">
@@ -29,6 +29,10 @@ HarborWatch is a local-first appliance that transforms passive monitoring into a
 | **❤️ Self-Healing** | Automatically restarts containers that fall into an `unhealthy` state, with smart cooldowns to prevent loops. |
 | **🧹 Auto-Housekeeping** | Keeps your host clean by pruning old images and maintaining a tidy database automatically. |
 | **🤖 AI Integration** | Optional support for OpenAI, Anthropic, or Gemini to audit your configs and summarize release risks. |
+
+<p align="center">
+  <img src="docs/assets/dashboard.png" alt="HarborWatch Dashboard" width="800" />
+</p>
 
 ---
 
@@ -76,8 +80,6 @@ I've written some detailed guides if you want to get into the nitty-gritty:
 
 ---
 
-## 📜 Personal Note
-
-This project is a labor of love. It’s built to work like a team of SREs is watching your server, but it’s just a single lightweight app designed to make self-hosting a little more joyful.
+## 🤝 Feedback
 
 If you find a bug or have an idea, feel free to open an issue!
