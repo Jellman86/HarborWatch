@@ -782,6 +782,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	}
 
 	return newMuxWithDepsAndComposeAuditStore(
+		db,
 		dockerClient,
 		scanService,
 		releaseService,
@@ -823,8 +824,8 @@ type PortainerClient interface {
 	ListStacks(ctx context.Context) ([]portainer.Stack, error)
 }
 
-func NewMuxWithDeps(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, jobManager *jobs.Manager) http.Handler {
-	return newMuxWithDepsAndComposeAuditStore(dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsService, portainerService, rulesService, intelService, nil, jobManager)
+func NewMuxWithDeps(db *sql.DB, dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, jobManager *jobs.Manager) http.Handler {
+	return newMuxWithDepsAndComposeAuditStore(db, dockerClient, scanService, releaseService, updateService, auditService, aiService, schedSvc, metricService, diagService, notificationService, settingsService, portainerService, rulesService, intelService, nil, jobManager)
 }
 
 type updateAIBlockedSignal struct {
@@ -871,7 +872,7 @@ func extractAIBlockedSignal(run gen.UpdateJobStatus) (updateAIBlockedSignal, boo
 	return signal, true
 }
 
-func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore, jobManager *jobs.Manager) http.Handler {
+func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore, jobManager *jobs.Manager) http.Handler {
 	r := chi.NewRouter()
 	currentPortainerService := portainerService
 
@@ -2411,6 +2412,51 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					diagService.Log("WARN", "System", "All background jobs cancelled by user")
 				}
 				writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "All jobs cancelled"})
+			})
+
+			r.Post("/clear-history", func(w http.ResponseWriter, r *http.Request) {
+				if db == nil {
+					writeError(w, http.StatusServiceUnavailable, "db_unavailable", "Database not available")
+					return
+				}
+
+				tables := []string{
+					"update_runs",
+					"update_steps",
+					"scan_jobs",
+					"vulnerability_results",
+					"malware_scan_results",
+					"compose_audit_history",
+					"ai_usage_events",
+					"remediation_runs",
+					"container_metrics",
+					"internal_logs",
+				}
+
+				tx, err := db.BeginTx(r.Context(), nil)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+					return
+				}
+				defer tx.Rollback()
+
+				for _, table := range tables {
+					if _, err := tx.ExecContext(r.Context(), fmt.Sprintf("DELETE FROM %s", table)); err != nil {
+						writeError(w, http.StatusInternalServerError, "db_error", fmt.Sprintf("failed to clear %s: %v", table, err))
+						return
+					}
+				}
+
+				if err := tx.Commit(); err != nil {
+					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+					return
+				}
+
+				if diagService != nil {
+					diagService.Log("WARN", "System", "All historical data cleared by user")
+				}
+
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "All historical data cleared"})
 			})
 
 			r.Get("/logs", func(w http.ResponseWriter, r *http.Request) {

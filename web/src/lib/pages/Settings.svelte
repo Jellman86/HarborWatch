@@ -1020,6 +1020,24 @@
         document.documentElement.classList.toggle("no-motion", !settings.uiAnimationsEnabled);
     });
 
+    async function clearHistory() {
+        if (!confirm("Are you absolutely sure? This will permanently delete all historical metrics, scan results, update logs, and AI usage events. This cannot be undone.")) {
+            return;
+        }
+        
+        try {
+            const res = await fetch("/api/system/clear-history", { method: "POST" });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.message || `Clear failed (${res.status})`);
+            }
+            toasts.success("All historical data has been cleared.");
+            await loadAll();
+        } catch (e) {
+            toasts.error(e instanceof Error ? e.message : "Failed to clear history");
+        }
+    }
+
     onMount(() => {
         loadAll();
     });
@@ -1395,6 +1413,19 @@
                                             </p>
                                         </div>
                                         <p class="text-[11px] text-slate-500">Retention cleanup runs via <span class="font-mono">metrics_prune</span>, <span class="font-mono">diag_log_prune</span>, and <span class="font-mono">history_retention_prune</span>. The policy is a rolling window, not a fixed wipe date.</p>
+                                    </div>
+
+                                    <div class="rounded-2xl border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 p-4 space-y-3">
+                                        <div>
+                                            <p class="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Manual Data Wipe</p>
+                                            <p class="text-[11px] text-rose-700/70 dark:text-rose-300/60 mt-1">Immediately purge all historical records from the database. Settings and rules are preserved.</p>
+                                        </div>
+                                        <button
+                                            onclick={clearHistory}
+                                            class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-rose-500/20"
+                                        >
+                                            Clear All History
+                                        </button>
                                     </div>
                                 {/if}
 
