@@ -364,7 +364,7 @@
     function schedulesForDomain(domain: AutomationDomain): Schedule[] {
         let tasks = automationConfig[domain].tasks;
         if (domain === "maintenance") {
-            tasks = tasks.filter((id) => id !== "metrics_prune" && id !== "diag_log_prune");
+            tasks = tasks.filter((id) => id !== "metrics_prune" && id !== "diag_log_prune" && id !== "history_retention_prune");
         }
         return tasks
             .map((id) => scheduleById(id))
@@ -1388,44 +1388,80 @@
                                 {/if}
 
                                 {#if activeAutomationTab === "maintenance"}
+                                    {@const retentionTask = scheduleById("history_retention_prune")}
+                                    {@const retentionDraft = retentionTask ? draftForTask(retentionTask) : null}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
-                                        <div>
-                                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Historical Data Retention</p>
-                                            <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
+                                        <div class="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Historical Data Retention</p>
+                                                <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
+                                                {#if retentionTask}
+                                                    <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{cronLabel(retentionTask.cronSpec)} | Last run: {formatTime(retentionTask.lastRun)}</p>
+                                                {/if}
+                                            </div>
+                                            {#if retentionTask}
+                                                <div class="flex items-center gap-2">
+                                                    <button
+                                                        onclick={() => runTask(retentionTask.id)}
+                                                        class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
+                                                    >Run Now</button>
+                                                    <button
+                                                        onclick={() => toggleTask(retentionTask.id, retentionTask.enabled)}
+                                                        class="w-10 h-5 rounded-full relative transition-colors {retentionTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                        aria-label="Toggle task"
+                                                    >
+                                                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {retentionTask.enabled ? 'right-1' : 'left-1'}"></div>
+                                                    </button>
+                                                </div>
+                                            {/if}
                                         </div>
-                                        <div class="space-y-2">
-                                            <label for="retention-window-preset" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retention Window</label>
-                                            <select
-                                                id="retention-window-preset"
-                                                bind:value={retentionWindowPreset}
-                                                onchange={(e) => applyRetentionWindowPreset((e.currentTarget as HTMLSelectElement).value as RetentionWindowPreset)}
-                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                            >
-                                                <option value="7d">1 week</option>
-                                                <option value="30d">1 month</option>
-                                                <option value="90d">3 months</option>
-                                                                                            <option value="365d">1 year</option>
-                                                                                        </select>
-                                                                                    </div>
-                                                                                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">                                            <p class="text-[11px] text-slate-600 dark:text-slate-300">
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                            <div class="space-y-2">
+                                                <label for="retention-window-preset" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retention Window</label>
+                                                <select
+                                                    id="retention-window-preset"
+                                                    bind:value={retentionWindowPreset}
+                                                    onchange={(e) => applyRetentionWindowPreset((e.currentTarget as HTMLSelectElement).value as RetentionWindowPreset)}
+                                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                >
+                                                    <option value="7d">1 week</option>
+                                                    <option value="30d">1 month</option>
+                                                    <option value="90d">3 months</option>
+                                                    <option value="365d">1 year</option>
+                                                </select>
+                                            </div>
+
+                                            {#if retentionTask && retentionDraft}
+                                                <div class="space-y-2">
+                                                    <label for="retention-time" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Daily Cleanup Time</label>
+                                                    <div class="flex items-center gap-2">
+                                                        <input
+                                                            id="retention-time"
+                                                            type="time"
+                                                            value={retentionDraft.time}
+                                                            onchange={(e) => patchScheduleDraft(retentionTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                                            class="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                        />
+                                                        <button
+                                                            onclick={() => saveTaskSchedule(retentionTask.id)}
+                                                            disabled={!scheduleDirty(retentionTask) || savingScheduleId === retentionTask.id}
+                                                            class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest whitespace-nowrap"
+                                                        >
+                                                            {savingScheduleId === retentionTask.id ? "..." : "Save"}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            {/if}
+                                        </div>
+
+                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">
+                                            <p class="text-[11px] text-slate-600 dark:text-slate-300">
                                                 Unified rolling window applied across metrics, logs, scan history, update lifecycle history, compose audit history, and AI usage history:
                                                 <span class="font-bold">{retentionPresetToDays[retentionWindowPreset]} days</span>.
                                             </p>
                                         </div>
-                                        <p class="text-[11px] text-slate-500">Retention cleanup runs via <span class="font-mono">metrics_prune</span>, <span class="font-mono">diag_log_prune</span>, and <span class="font-mono">history_retention_prune</span>. The policy is a rolling window, not a fixed wipe date.</p>
-                                    </div>
-
-                                    <div class="rounded-2xl border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 p-4 space-y-3">
-                                        <div>
-                                            <p class="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Manual Data Wipe</p>
-                                            <p class="text-[11px] text-rose-700/70 dark:text-rose-300/60 mt-1">Immediately purge all historical records from the database. Settings and rules are preserved.</p>
-                                        </div>
-                                        <button
-                                            onclick={clearHistory}
-                                            class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-rose-500/20"
-                                        >
-                                            Clear All History
-                                        </button>
+                                        <p class="text-[11px] text-slate-500">The policy is a rolling window, not a fixed wipe date. Cleanup runs via <span class="font-mono">metrics_prune</span>, <span class="font-mono">diag_log_prune</span>, and <span class="font-mono">history_retention_prune</span>.</p>
                                     </div>
                                 {/if}
 
@@ -1528,6 +1564,21 @@
                                             No scheduler tasks found for this automation domain.
                                         </div>
                                     {/each}
+                                {/if}
+
+                                {#if activeAutomationTab === "maintenance"}
+                                    <div class="rounded-2xl border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 p-4 space-y-3">
+                                        <div>
+                                            <p class="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Manual Data Wipe</p>
+                                            <p class="text-[11px] text-rose-700/70 dark:text-rose-300/60 mt-1">Immediately purge all historical records from the database. Settings and rules are preserved.</p>
+                                        </div>
+                                        <button
+                                            onclick={clearHistory}
+                                            class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-rose-500/20"
+                                        >
+                                            Clear All History
+                                        </button>
+                                    </div>
                                 {/if}
                             </div>
                         {/if}
