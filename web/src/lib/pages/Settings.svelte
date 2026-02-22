@@ -1271,6 +1271,81 @@
                                     </div>
                                 {/if}
 
+                                {#if activeAutomationTab === "maintenance"}
+                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                                        <div class="flex items-center justify-between gap-4">
+                                            <div>
+                                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Unhealthy Auto-Remediation</p>
+                                                <p class="text-[11px] text-slate-500 mt-1">Listen for Docker health events and automatically restart unhealthy containers (opt-in per container).</p>
+                                            </div>
+                                            <button
+                                                onclick={() => settings.unhealthyAutoRemediationEnabled = !settings.unhealthyAutoRemediationEnabled}
+                                                disabled={isLocked("unhealthyAutoRemediationEnabled")}
+                                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.unhealthyAutoRemediationEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                aria-label="Toggle unhealthy auto-remediation"
+                                            >
+                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.unhealthyAutoRemediationEnabled ? 'right-1' : 'left-1'}"></div>
+                                            </button>
+                                        </div>
+
+                                        {#if settings.unhealthyAutoRemediationEnabled}
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                                <div class="space-y-2">
+                                                    <label for="remediation-cooldown-default" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Default Restart Cooldown (seconds)</label>
+                                                    <input
+                                                        id="remediation-cooldown-default"
+                                                        type="number"
+                                                        min="0"
+                                                        bind:value={settings.unhealthyRestartCooldownSecDefault}
+                                                        disabled={isLocked("unhealthyRestartCooldownSecDefault")}
+                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                    />
+                                                </div>
+                                                <div class="space-y-2">
+                                                    <label for="max-restarts-per-window" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Restarts (per hour window)</label>
+                                                    <input
+                                                        id="max-restarts-per-window"
+                                                        type="number"
+                                                        min="0"
+                                                        bind:value={settings.maxRestartsPerWindow}
+                                                        disabled={isLocked("maxRestartsPerWindow")}
+                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                    />
+                                                </div>
+                                            </div>
+                                        {/if}
+                                    </div>
+
+                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                                        <div>
+                                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Historical Data Retention Prune</p>
+                                            <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <label for="retention-window-preset" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retention Window</label>
+                                            <select
+                                                id="retention-window-preset"
+                                                bind:value={retentionWindowPreset}
+                                                onchange={(e) => applyRetentionWindowPreset((e.currentTarget as HTMLSelectElement).value as RetentionWindowPreset)}
+                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                            >
+                                                <option value="7d">1 week</option>
+                                                <option value="30d">1 month</option>
+                                                <option value="90d">3 months</option>
+                                                <option value="365d">1 year</option>
+                                            </select>
+                                            <p class="text-[11px] text-slate-500">`docker_system_prune` remains separate and unchanged.</p>
+                                        </div>
+                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">
+                                            <p class="text-[11px] text-slate-600 dark:text-slate-300">
+                                                Unified rolling window applied across metrics, logs, scan history, update lifecycle history, compose audit history, and AI usage history:
+                                                <span class="font-bold">{retentionPresetToDays[retentionWindowPreset]} days</span>.
+                                            </p>
+                                        </div>
+                                        <p class="text-[11px] text-slate-500">Retention cleanup runs via <span class="font-mono">metrics_prune</span>, <span class="font-mono">diag_log_prune</span>, and <span class="font-mono">history_retention_prune</span>. The policy is a rolling window, not a fixed wipe date.</p>
+                                    </div>
+                                {/if}
+
                                 {#each schedulesForDomain(activeAutomationTab) as task, i (task.id + i)}
                                     {@const draft = draftForTask(task)}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">
@@ -1815,79 +1890,6 @@
                         />
                         <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>. Increase if large container mount snapshots are skipped.</p>
                     </div>
-                </div>
-
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
-                    <div class="flex items-center justify-between gap-4">
-                        <div>
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Unhealthy Auto-Remediation</p>
-                            <p class="text-[11px] text-slate-500 mt-1">Listen for Docker health events and automatically restart unhealthy containers (opt-in per container).</p>
-                        </div>
-                        <button
-                            onclick={() => settings.unhealthyAutoRemediationEnabled = !settings.unhealthyAutoRemediationEnabled}
-                            disabled={isLocked("unhealthyAutoRemediationEnabled")}
-                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.unhealthyAutoRemediationEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                            aria-label="Toggle unhealthy auto-remediation"
-                        >
-                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.unhealthyAutoRemediationEnabled ? 'right-1' : 'left-1'}"></div>
-                        </button>
-                    </div>
-
-                    {#if settings.unhealthyAutoRemediationEnabled}
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-                            <div class="space-y-2">
-                                <label for="remediation-cooldown-default" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Default Restart Cooldown (seconds)</label>
-                                <input
-                                    id="remediation-cooldown-default"
-                                    type="number"
-                                    min="0"
-                                    bind:value={settings.unhealthyRestartCooldownSecDefault}
-                                    disabled={isLocked("unhealthyRestartCooldownSecDefault")}
-                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                />
-                            </div>
-                            <div class="space-y-2">
-                                <label for="max-restarts-per-window" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Restarts (per hour window)</label>
-                                <input
-                                    id="max-restarts-per-window"
-                                    type="number"
-                                    min="0"
-                                    bind:value={settings.maxRestartsPerWindow}
-                                    disabled={isLocked("maxRestartsPerWindow")}
-                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                />
-                            </div>
-                        </div>
-                    {/if}
-                </div>
-
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
-                    <div>
-                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">Historical Data Retention Prune</p>
-                        <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
-                    </div>
-                    <div class="space-y-2">
-                        <label for="retention-window-preset" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retention Window</label>
-                        <select
-                            id="retention-window-preset"
-                            bind:value={retentionWindowPreset}
-                            onchange={(e) => applyRetentionWindowPreset((e.currentTarget as HTMLSelectElement).value as RetentionWindowPreset)}
-                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                        >
-                            <option value="7d">1 week</option>
-                            <option value="30d">1 month</option>
-                            <option value="90d">3 months</option>
-                            <option value="365d">1 year</option>
-                        </select>
-                        <p class="text-[11px] text-slate-500">`docker_system_prune` remains separate and unchanged.</p>
-                    </div>
-                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">
-                        <p class="text-[11px] text-slate-600 dark:text-slate-300">
-                            Unified rolling window applied across metrics, logs, scan history, update lifecycle history, compose audit history, and AI usage history:
-                            <span class="font-bold">{retentionPresetToDays[retentionWindowPreset]} days</span>.
-                        </p>
-                    </div>
-                    <p class="text-[11px] text-slate-500">Retention cleanup runs via <span class="font-mono">metrics_prune</span>, <span class="font-mono">diag_log_prune</span>, and <span class="font-mono">history_retention_prune</span>. The policy is a rolling window, not a fixed wipe date.</p>
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
