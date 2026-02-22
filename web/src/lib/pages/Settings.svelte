@@ -884,7 +884,7 @@
             case "container_update_check": return "Container Update Check";
             case "container_update_apply": return "Container Auto-Apply";
             case "docker_system_prune": return "Docker System Prune";
-            case "history_retention_prune": return "System Data Retention Cleanup";
+            case "history_retention_prune": return "Historical Data Retention";
             case "security_sweep_trivy": return "Trivy Security Sweep";
             case "malware_sweep_clamav": return "ClamAV Malware Sweep";
             case "clamav_signature_update": return "ClamAV Signature Update";
@@ -1372,7 +1372,7 @@
                                 {#if activeAutomationTab === "maintenance"}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                         <div>
-                                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Historical Data Retention Prune</p>
+                                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Historical Data Retention</p>
                                             <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
                                         </div>
                                         <div class="space-y-2">
