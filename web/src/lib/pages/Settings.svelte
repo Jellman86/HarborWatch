@@ -362,7 +362,11 @@
     }
 
     function schedulesForDomain(domain: AutomationDomain): Schedule[] {
-        return automationConfig[domain].tasks
+        let tasks = automationConfig[domain].tasks;
+        if (domain === "maintenance") {
+            tasks = tasks.filter((id) => id !== "metrics_prune" && id !== "diag_log_prune");
+        }
+        return tasks
             .map((id) => scheduleById(id))
             .filter((v): v is Schedule => !!v);
     }
@@ -383,6 +387,14 @@
         });
         if (!res.ok) throw new Error(`toggle failed (${res.status})`);
         schedules = schedules.map((s) => (s.id === id ? { ...s, enabled } : s));
+
+        if (id === "history_retention_prune") {
+            // Also toggle internal sub-tasks
+            await Promise.all([
+                setScheduleEnabled("metrics_prune", enabled),
+                setScheduleEnabled("diag_log_prune", enabled)
+            ]).catch(() => {});
+        }
     }
 
     async function setDomainEnabled(domain: AutomationDomain, enabled: boolean) {
@@ -799,6 +811,22 @@
             }
             schedules = schedules.map((s) => (s.id === id ? { ...s, cronSpec } : s));
             scheduleDrafts = { ...scheduleDrafts, [id]: parseScheduleDraft(cronSpec) };
+            
+            if (id === "history_retention_prune") {
+                // Sync internal sub-tasks to the same schedule
+                const updateTask = (subId: string) => fetch("/api/scheduler/update", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: subId, cronSpec })
+                }).then(async (res) => {
+                    if (res.ok) {
+                        schedules = schedules.map((s) => (s.id === subId ? { ...s, cronSpec } : s));
+                        scheduleDrafts = { ...scheduleDrafts, [subId]: parseScheduleDraft(cronSpec) };
+                    }
+                });
+                await Promise.all([updateTask("metrics_prune"), updateTask("diag_log_prune")]).catch(() => {});
+            }
+
             toasts.success(`Schedule updated for ${taskLabel(id)}.`);
         } catch (e) {
             toasts.error(e instanceof Error ? e.message : "Failed to update schedule");
@@ -856,9 +884,7 @@
             case "container_update_check": return "Container Update Check";
             case "container_update_apply": return "Container Auto-Apply";
             case "docker_system_prune": return "Docker System Prune";
-            case "metrics_prune": return "Metrics Retention Prune";
-            case "diag_log_prune": return "Diagnostics Log Prune";
-            case "history_retention_prune": return "Historical Data Retention Prune";
+            case "history_retention_prune": return "System Data Retention Cleanup";
             case "security_sweep_trivy": return "Trivy Security Sweep";
             case "malware_sweep_clamav": return "ClamAV Malware Sweep";
             case "clamav_signature_update": return "ClamAV Signature Update";
@@ -879,7 +905,7 @@
             case "diag_log_prune":
                 return "Deletes aged diagnostics logs after retention limits are reached.";
             case "history_retention_prune":
-                return "Prunes aged scan history, update runs, compose audits, and AI usage records using configured lifecycle limits.";
+                return "Unified task that prunes logs, metrics, scan history, update runs, and AI records using the configured retention window.";
             case "security_sweep_trivy":
                 return "Runs Trivy vulnerability scans and records findings for image risk evaluation.";
             case "malware_sweep_clamav":
@@ -1360,12 +1386,10 @@
                                                 <option value="7d">1 week</option>
                                                 <option value="30d">1 month</option>
                                                 <option value="90d">3 months</option>
-                                                <option value="365d">1 year</option>
-                                            </select>
-                                            <p class="text-[11px] text-slate-500">`docker_system_prune` remains separate and unchanged.</p>
-                                        </div>
-                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">
-                                            <p class="text-[11px] text-slate-600 dark:text-slate-300">
+                                                                                            <option value="365d">1 year</option>
+                                                                                        </select>
+                                                                                    </div>
+                                                                                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">                                            <p class="text-[11px] text-slate-600 dark:text-slate-300">
                                                 Unified rolling window applied across metrics, logs, scan history, update lifecycle history, compose audit history, and AI usage history:
                                                 <span class="font-bold">{retentionPresetToDays[retentionWindowPreset]} days</span>.
                                             </p>
