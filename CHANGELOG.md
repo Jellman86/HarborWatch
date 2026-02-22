@@ -25,6 +25,17 @@ All notable changes to HarborWatch are documented in this file.
   - Automated update runs now honor per-container `skipHealthCheck` the same way they already honor `bypassAi`.
 - **Lifecycle Toggle Persistence in UI:**
   - Fixed container detail API rules mapping so saved `bypassAi` and `skipHealthCheck` values are returned correctly after refresh in both Automatic and Manual lifecycle modes.
+- **Local Update Validation Robustness:**
+  - Fixed local update recreate/validate flow to validate the replacement container by stable container name (when available), preventing false validation timeouts against stale pre-recreate container IDs.
+- **Lifecycle History Continuity After Recreate:**
+  - Update history is now indexed by both container ID and container name, so lifecycle logs remain visible after local recreates that replace the container ID.
+- **Duplicate Update Start Hardening:**
+  - Added stronger duplicate-start protection in the update service and DB indexing to reduce race-condition double-starts for the same container.
+
+### Changed
+- **Retention UX Simplification:**
+  - Reworked System Settings retention controls around a single **Historical Data Retention Prune** rolling-window preset (`1d`, `1w`, `1m`, `3m`, `9m`, `infinite`) with an optional advanced custom mode.
+  - Clarified in the UI that retention is a rolling window and that `docker_system_prune` remains a separate maintenance action.
 
 ## [0.8.2] - 2026-02-21
 

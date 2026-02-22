@@ -1662,6 +1662,17 @@ func newMuxWithDepsAndComposeAuditStore(dockerClient DockerClient, scanService S
 					writeError(w, http.StatusBadGateway, "update_read_failed", err.Error())
 					return
 				}
+				if len(runs) == 0 && dockerClient != nil {
+					inspectCtx, inspectCancel := context.WithTimeout(r.Context(), 2*time.Second)
+					if summary, inspectErr := dockerClient.GetContainer(inspectCtx, id); inspectErr == nil {
+						if name := strings.TrimSpace(trimContainerName(summary.Names)); name != "" {
+							if byName, listErr := updateService.ListContainerJobs(ctx, name, limit); listErr == nil && len(byName) > 0 {
+								runs = byName
+							}
+						}
+					}
+					inspectCancel()
+				}
 				writeJSON(w, http.StatusOK, runs)
 			})
 

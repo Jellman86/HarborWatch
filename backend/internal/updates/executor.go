@@ -69,6 +69,7 @@ func (CommandExecutor) Pull(ctx context.Context, req Request) error {
 
 func (CommandExecutor) Recreate(ctx context.Context, req Request) error {
 	backupName := fmt.Sprintf("%s_backup_%d", req.ContainerID, time.Now().Unix())
+	liveRef := liveContainerRef(req)
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return fmt.Errorf("failed to create docker client: %w", err)
@@ -113,7 +114,7 @@ func (CommandExecutor) Recreate(ctx context.Context, req Request) error {
 		networkingConfig.EndpointsConfig = endpoints
 	}
 
-	created, err := cli.ContainerCreate(ctx, newConfig, hostConfig, networkingConfig, nil, req.ContainerID)
+	created, err := cli.ContainerCreate(ctx, newConfig, hostConfig, networkingConfig, nil, liveRef)
 	if err != nil {
 		return fmt.Errorf("failed to create replacement container: %w", err)
 	}
@@ -166,7 +167,7 @@ func (CommandExecutor) Validate(ctx context.Context, req Request) error {
 			httpOK = ok
 		}
 		if mode == "docker" || mode == "both" {
-			ok, err := validateDockerState(ctx, dockerClient, req.ContainerID)
+			ok, err := validateDockerState(ctx, dockerClient, liveContainerRef(req))
 			if err != nil {
 				lastErr = err
 			}
@@ -217,9 +218,10 @@ func (CommandExecutor) Cleanup(ctx context.Context, req Request) error {
 }
 
 func (CommandExecutor) Rollback(ctx context.Context, req Request, cause error) error {
+	liveRef := liveContainerRef(req)
 	// 1. Stop and Remove the "new" container if it exists
-	_ = exec.CommandContext(ctx, "docker", "stop", req.ContainerID).Run()
-	_ = exec.CommandContext(ctx, "docker", "rm", req.ContainerID).Run()
+	_ = exec.CommandContext(ctx, "docker", "stop", liveRef).Run()
+	_ = exec.CommandContext(ctx, "docker", "rm", liveRef).Run()
 
 	// 2. Find the most recent backup
 	findCmd := exec.CommandContext(ctx, "docker", "ps", "-a", "--filter", fmt.Sprintf("name=%s_backup_", req.ContainerID), "--format", "{{.Names}}")
@@ -235,7 +237,7 @@ func (CommandExecutor) Rollback(ctx context.Context, req Request, cause error) e
 	}
 
 	// 3. Restore backup
-	renameCmd := exec.CommandContext(ctx, "docker", "rename", latestBackup, req.ContainerID)
+	renameCmd := exec.CommandContext(ctx, "docker", "rename", latestBackup, liveRef)
 	if out, err := renameCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("rollback failed: could not rename backup: %w (%s)", err, truncate(string(out), 100))
 	}
@@ -246,6 +248,13 @@ func (CommandExecutor) Rollback(ctx context.Context, req Request, cause error) e
 	}
 
 	return nil
+}
+
+func liveContainerRef(req Request) string {
+	if name := strings.TrimSpace(req.ContainerName); name != "" {
+		return name
+	}
+	return strings.TrimSpace(req.ContainerID)
 }
 
 func truncate(s string, n int) string {

@@ -29,3 +29,17 @@ func TestNewestBackupName_FallsBackDeterministically(t *testing.T) {
 		t.Fatalf("expected deterministic fallback selection, got %q", got)
 	}
 }
+
+func TestLiveContainerRefPrefersContainerName(t *testing.T) {
+	got := liveContainerRef(Request{ContainerID: "id-123", ContainerName: "gluetun"})
+	if got != "gluetun" {
+		t.Fatalf("expected container name ref, got %q", got)
+	}
+}
+
+func TestLiveContainerRefFallsBackToContainerID(t *testing.T) {
+	got := liveContainerRef(Request{ContainerID: "id-123"})
+	if got != "id-123" {
+		t.Fatalf("expected container id fallback, got %q", got)
+	}
+}

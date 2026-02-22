@@ -27,6 +27,7 @@ func (s *Store) Init(ctx context.Context) error {
 CREATE TABLE IF NOT EXISTS update_runs (
   id TEXT PRIMARY KEY,
   container_id TEXT NOT NULL DEFAULT '',
+  container_name TEXT NOT NULL DEFAULT '',
   target_image TEXT NOT NULL,
   validate_url TEXT NOT NULL,
   status TEXT NOT NULL,
@@ -55,15 +56,25 @@ CREATE TABLE IF NOT EXISTS update_steps (
 	if err := s.ensureColumn(ctx, "update_runs", "container_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return fmt.Errorf("ensure update_runs.container_id: %w", err)
 	}
+	if err := s.ensureColumn(ctx, "update_runs", "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("ensure update_runs.container_name: %w", err)
+	}
 	if err := s.ensureColumn(ctx, "update_runs", "ai_analysis", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return fmt.Errorf("ensure update_runs.ai_analysis: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx, `
 CREATE INDEX IF NOT EXISTS idx_update_runs_container_updated ON update_runs(container_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_update_runs_container_name_updated ON update_runs(container_name, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_update_runs_status_created ON update_runs(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_update_steps_run_id_id ON update_steps(run_id, id);
 `); err != nil {
 		return fmt.Errorf("init update indexes: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_update_runs_one_running_per_container ON update_runs(container_id) WHERE status IN ('running','queued')`); err != nil {
+		// Existing installs may already contain duplicate "running" rows from past races. Do not block startup.
+		if !strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return fmt.Errorf("init unique update index: %w", err)
+		}
 	}
 	return nil
 }
@@ -89,11 +100,18 @@ func (s *Store) ensureColumn(ctx context.Context, table, column, ddl string) err
 }
 
 func (s *Store) CreateRun(ctx context.Context, run gen.UpdateJobStatus) error {
+	return s.CreateRunWithContainerName(ctx, run, "")
+}
+
+func (s *Store) CreateRunWithContainerName(ctx context.Context, run gen.UpdateJobStatus, containerName string) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO update_runs(id, container_id, target_image, validate_url, status, progress, created_at, updated_at, error)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, run.JobID, run.ContainerID, run.TargetImage, run.ValidateURL, run.Status, run.Progress, run.CreatedAt, run.UpdatedAt, run.Error)
+INSERT INTO update_runs(id, container_id, container_name, target_image, validate_url, status, progress, created_at, updated_at, error)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, run.JobID, strings.TrimSpace(run.ContainerID), strings.TrimSpace(containerName), run.TargetImage, run.ValidateURL, run.Status, run.Progress, run.CreatedAt, run.UpdatedAt, run.Error)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "idx_update_runs_one_running_per_container") || strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
+			return fmt.Errorf("create update run: container %s already has a running update job", strings.TrimSpace(run.ContainerID))
+		}
 		return fmt.Errorf("create update run: %w", err)
 	}
 	return nil
@@ -197,10 +215,10 @@ func (s *Store) ListRunsForContainer(ctx context.Context, containerID string, li
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, container_id, target_image, validate_url, status, progress, created_at, updated_at, error, ai_analysis
 FROM update_runs
-WHERE container_id = ?
+WHERE container_id = ? OR container_name = ?
 ORDER BY updated_at DESC
 LIMIT ?
-`, strings.TrimSpace(containerID), limit)
+`, strings.TrimSpace(containerID), strings.TrimSpace(containerID), limit)
 	if err != nil {
 		return nil, fmt.Errorf("list update runs: %w", err)
 	}

@@ -64,6 +64,7 @@ type Service struct {
 	portainer  PortainerClient
 	jobManager *jobs.Manager
 
+	startMu     sync.Mutex
 	mu          sync.RWMutex
 	subscribers map[string][]chan gen.UpdateStepEvent
 }
@@ -92,6 +93,8 @@ func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
 	if req.ContainerID == "" || req.TargetImage == "" {
 		return gen.UpdateStartResponse{}, errors.New("containerId and targetImage are required")
 	}
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
 	if (req.ValidateMode == "http" || req.ValidateMode == "both") && strings.TrimSpace(req.ValidateURL) == "" {
 		return gen.UpdateStartResponse{}, errors.New("validateUrl is required for http or both validation mode")
 	}
@@ -117,7 +120,7 @@ func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
 		UpdatedAt:   now,
 		Steps:       []gen.UpdateStepEvent{},
 	}
-	if err := s.store.CreateRun(context.Background(), run); err != nil {
+	if err := s.store.CreateRunWithContainerName(context.Background(), run, req.ContainerName); err != nil {
 		return gen.UpdateStartResponse{}, err
 	}
 	go s.execute(jobID, req)
