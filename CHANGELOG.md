@@ -2,6 +2,25 @@
 
 All notable changes to HarborWatch are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Container History & Setting Continuity (P0):**
+  - Overhauled database schema and service layers for **Rules**, **Container Intelligence**, **Malware Scanning**, and **Audit Logs** to support a "Stable Name" fallback.
+  - History, custom overrides, and automation rules now automatically persist across container recreates/upgrades that replace the Docker Container ID.
+- **Scheduler Cadence Consistency (P0):**
+  - Corrected default schedules for update checks and apply tasks to run **Daily** (at 00:00/00:10) instead of incorrectly defaulting to hourly.
+  - Implemented an automatic backend migration to detect and rewrite legacy hourly cron specs (`0 * * * * *`) to the intended daily cadence.
+
+### Added
+- **AI Security Redaction Layer:**
+  - Implemented a proactive redaction system in the AI Service to mask sensitive credentials (passwords, API keys, tokens) before payloads are sent to external LLM providers.
+  - Scans `docker-compose` audits and container log analysis payloads for sensitive keys and masks their values with `********`.
+
+### Changed
+- **Dashboard Accessibility:**
+  - Added descriptive ARIA titles to security risk buttons on the Dashboard to resolve Svelte accessibility warnings and improve screen-reader support.
+
 ## [0.8.3] - 2026-02-21
 
 ### Added
