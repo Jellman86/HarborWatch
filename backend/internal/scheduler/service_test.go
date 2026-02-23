@@ -20,7 +20,8 @@ func TestNormalizeCronSpec(t *testing.T) {
 	}{
 		{in: "* * * * *", out: "0 * * * * *"},
 		{in: "0 * * * * *", out: "0 * * * * *"},
-		{in: "0 0 * * * *", out: "0 0 * * * *"},
+		{in: "0 0 * * * *", out: "0 0 0 * * *"},
+		{in: "0 10 * * * *", out: "0 10 0 * * *"},
 	}
 	for _, tc := range cases {
 		got := normalizeCronSpec(tc.in)

@@ -173,6 +173,15 @@ func normalizeCronSpec(spec string) string {
 		// Existing installs may have persisted 5-field cron specs from pre-`cron.WithSeconds` versions.
 		return "0 " + strings.Join(fields, " ")
 	case 6:
+		// Fix known bad defaults from earlier versions that ran hourly instead of daily.
+		// "0 0 * * * *" -> "0 0 0 * * *"
+		// "0 10 * * * *" -> "0 10 0 * * *"
+		if spec == "0 0 * * * *" {
+			return "0 0 0 * * *"
+		}
+		if spec == "0 10 * * * *" {
+			return "0 10 0 * * *"
+		}
 		return strings.Join(fields, " ")
 	default:
 		return spec

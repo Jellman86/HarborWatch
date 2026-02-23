@@ -502,7 +502,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 					return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_check")
 				})
 			})
-			if err := schedSvc.AddTask("0 0 * * * *", dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
+			if err := schedSvc.AddTask("0 0 0 * * *", dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
 				return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_check")
 			}), true); err != nil && diagService != nil {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_check: %v", err))
@@ -529,7 +529,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 					refreshUpdateStatus,
 				)
 			})
-			if err := schedSvc.AddTask("0 10 * * * *", newAutomatedUpdateApplyTask(
+			if err := schedSvc.AddTask("0 10 0 * * *", newAutomatedUpdateApplyTask(
 				dockerClient,
 				portainerService,
 				updateService,
