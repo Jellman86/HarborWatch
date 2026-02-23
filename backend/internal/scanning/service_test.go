@@ -37,7 +37,7 @@ type fakeMalwareScanner struct{}
 func (fakeMalwareScanner) Name() string { return "fake-malware" }
 
 func (fakeMalwareScanner) ScanPath(ctx context.Context, path string) (MalwareResult, error) {
-	return MalwareResult{Target: path, Source: "fake-malware", ScannedAt: time.Now().UTC().Unix()}, nil
+	return MalwareResult{Target: path, Source: "fake-malware", ScannedAt: time.Now().UTC().Unix(), ContainerName: "fake-container"}, nil
 }
 
 type blockingScanner struct {

@@ -84,9 +84,14 @@ func buildUpdateRequestForContainer(
 		MaintenanceAutomation: true,
 		SecurityAutomation:    true,
 	}
+	name := "unknown"
+	if len(out.Summary.Names) > 0 {
+		name = strings.TrimPrefix(out.Summary.Names[0], "/")
+	}
+
 	if rulesService != nil {
 		rulesCtx, rulesCancel := context.WithTimeout(ctx, 3*time.Second)
-		if loaded, err := rulesService.Get(rulesCtx, containerID); err == nil {
+		if loaded, err := rulesService.Get(rulesCtx, containerID, name); err == nil {
 			effectiveRules = loaded
 		}
 		rulesCancel()
@@ -144,7 +149,7 @@ func buildUpdateRequestForContainer(
 	changelogURL := deriveChangelogURL(out.Summary, repoURL)
 	if intelService != nil {
 		intelCtx, intelCancel := context.WithTimeout(ctx, 3*time.Second)
-		if ov, err := intelService.Get(intelCtx, containerID); err == nil {
+		if ov, err := intelService.Get(intelCtx, containerID, name); err == nil {
 			merged := effectiveContainerIntel(out.Summary, ov, portainerService)
 			repoURL = firstNonEmpty(merged.EffectiveRepositoryURL, repoURL)
 			changelogURL = firstNonEmpty(merged.EffectiveChangelogURL, changelogURL)

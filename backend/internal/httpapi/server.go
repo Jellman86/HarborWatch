@@ -50,7 +50,7 @@ type DockerClient interface {
 type ScanService interface {
 	StartScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
-	StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
+	StartMalwareScanPath(targetLabel, containerName, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
 	CancelJob(ctx context.Context, jobID string) (gen.ScanJobStatus, error)
 	ClamAVSignatureStatus(ctx context.Context) (scanning.ClamAVSignatureStatus, error)
 	UpdateClamAVSignatures(ctx context.Context) (string, error)
@@ -61,9 +61,9 @@ type ScanService interface {
 	LatestSummaryForTarget(ctx context.Context, target string) (*gen.ScanSummary, error)
 	LatestDetailsForTarget(ctx context.Context, target string) (*gen.TrivyScanDetails, error)
 	MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error)
-	MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error)
+	MalwareSummariesForContainer(ctx context.Context, containerID, containerName string) ([]gen.MalwareScanSummary, error)
 	MalwareDetails(ctx context.Context, target, prefix string, limit int) ([]gen.MalwareScanDetail, error)
-	MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error)
+	MalwareDetailsForContainer(ctx context.Context, containerID, containerName string, limit int) ([]gen.MalwareScanDetail, error)
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 }
 
@@ -101,13 +101,13 @@ type SettingsService interface {
 }
 
 type RulesService interface {
-	Get(ctx context.Context, id string) (rules.ContainerRules, error)
+	Get(ctx context.Context, id, name string) (rules.ContainerRules, error)
 	Save(ctx context.Context, r rules.ContainerRules) error
 }
 
 type AuditService interface {
 	ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error)
-	ListAuditJobsForContainer(ctx context.Context, containerID string) ([]gen.AuditJobSummary, error)
+	ListAuditJobsForContainer(ctx context.Context, containerID, containerName string) ([]gen.AuditJobSummary, error)
 	GetAuditJobSteps(ctx context.Context, id string) ([]gen.UpdateStepEvent, error)
 }
 
@@ -135,7 +135,7 @@ type UpdateService interface {
 }
 
 type ContainerIntelService interface {
-	Get(ctx context.Context, id string) (containerintel.Override, error)
+	Get(ctx context.Context, id, name string) (containerintel.Override, error)
 	Save(ctx context.Context, ov containerintel.Override) error
 	List(ctx context.Context) ([]containerintel.Override, error)
 }
@@ -459,7 +459,15 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		}
 		rulesCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		rule, err := rulesStore.Get(rulesCtx, containerID)
+		containerName := "unknown"
+		if dockerClient != nil {
+			if c, err := dockerClient.GetContainer(rulesCtx, containerID); err == nil {
+				if len(c.Names) > 0 {
+					containerName = strings.TrimPrefix(c.Names[0], "/")
+				}
+			}
+		}
+		rule, err := rulesStore.Get(rulesCtx, containerID, containerName)
 		if err != nil {
 			return globalEnabled
 		}
@@ -876,6 +884,19 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 	r := chi.NewRouter()
 	currentPortainerService := portainerService
 
+	loadContainerSummary := func(ctx context.Context, id string) gen.ContainerSummary {
+		summary := gen.ContainerSummary{ID: id}
+		if dockerClient == nil {
+			return summary
+		}
+		inspectCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		if c, err := dockerClient.GetContainer(inspectCtx, id); err == nil {
+			summary = c
+		}
+		cancel()
+		return summary
+	}
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
@@ -1074,7 +1095,11 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					if vs, err := scanService.LatestSummaryForTarget(ctx, summary.Image); err == nil {
 						detail.VulnerabilitySummary = vs
 					}
-					if ms, err := scanService.MalwareSummariesForContainer(ctx, id); err == nil {
+					name := "unknown"
+					if len(summary.Names) > 0 {
+						name = strings.TrimPrefix(summary.Names[0], "/")
+					}
+					if ms, err := scanService.MalwareSummariesForContainer(ctx, id, name); err == nil {
 						detail.MalwareSummary = ms
 					} else {
 						detail.MalwareSummary = []gen.MalwareScanSummary{}
@@ -1100,7 +1125,11 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 
 				// Enrich with Audit History
 				if auditService != nil {
-					if ah, err := auditService.ListAuditJobsForContainer(ctx, id); err == nil {
+					name := "unknown"
+					if len(summary.Names) > 0 {
+						name = strings.TrimPrefix(summary.Names[0], "/")
+					}
+					if ah, err := auditService.ListAuditJobsForContainer(ctx, id, name); err == nil {
 						detail.ActionHistory = ah
 					} else {
 						detail.ActionHistory = []gen.AuditJobSummary{}
@@ -1109,7 +1138,11 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 
 				// Enrich with Rules
 				if rulesService != nil {
-					if r, err := rulesService.Get(ctx, id); err == nil {
+					name := "unknown"
+					if len(summary.Names) > 0 {
+						name = strings.TrimPrefix(summary.Names[0], "/")
+					}
+					if r, err := rulesService.Get(ctx, id, name); err == nil {
 						r = effectiveContainerRules(ctx, summary, r, settingsService, diagService)
 						detail.Rules = &gen.ContainerRules{
 							ContainerID:           r.ContainerID,
@@ -1167,19 +1200,6 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 				writeJSON(w, http.StatusOK, logs)
 			}
 
-			loadContainerSummary := func(ctx context.Context, id string) gen.ContainerSummary {
-				summary := gen.ContainerSummary{ID: id}
-				if dockerClient == nil {
-					return summary
-				}
-				inspectCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-				if c, err := dockerClient.GetContainer(inspectCtx, id); err == nil {
-					summary = c
-				}
-				cancel()
-				return summary
-			}
-
 			r.Get("/intel/overrides", func(w http.ResponseWriter, r *http.Request) {
 				if intelService == nil {
 					writeError(w, http.StatusServiceUnavailable, "intel_unavailable", "Container intelligence store unavailable")
@@ -1228,11 +1248,6 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 						return
 					}
 					id := chi.URLParam(r, "id")
-					res, err := rulesService.Get(r.Context(), id)
-					if err != nil {
-						writeError(w, http.StatusInternalServerError, "rules_get_failed", err.Error())
-						return
-					}
 					summary := gen.ContainerSummary{ID: id}
 					if dockerClient != nil {
 						ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
@@ -1240,6 +1255,15 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 							summary = c
 						}
 						cancel()
+					}
+					name := "unknown"
+					if len(summary.Names) > 0 {
+						name = strings.TrimPrefix(summary.Names[0], "/")
+					}
+					res, err := rulesService.Get(r.Context(), id, name)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "rules_get_failed", err.Error())
+						return
 					}
 					res = effectiveContainerRules(r.Context(), summary, res, settingsService, diagService)
 					writeJSON(w, http.StatusOK, res)
@@ -1295,12 +1319,16 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					}
 					ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 					defer cancel()
-					ov, err := intelService.Get(ctx, id)
+					summary := loadContainerSummary(ctx, id)
+					name := "unknown"
+					if len(summary.Names) > 0 {
+						name = strings.TrimPrefix(summary.Names[0], "/")
+					}
+					ov, err := intelService.Get(ctx, id, name)
 					if err != nil {
 						writeError(w, http.StatusInternalServerError, "intel_get_failed", err.Error())
 						return
 					}
-					summary := loadContainerSummary(ctx, id)
 					writeJSON(w, http.StatusOK, effectiveContainerIntel(summary, ov, currentPortainerService))
 				}
 
@@ -1324,8 +1352,14 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					}
 					ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 					defer cancel()
+					summary := loadContainerSummary(ctx, id)
+					name := "unknown"
+					if len(summary.Names) > 0 {
+						name = strings.TrimPrefix(summary.Names[0], "/")
+					}
 					err := intelService.Save(ctx, containerintel.Override{
 						ContainerID:   id,
+						ContainerName: name,
 						RepositoryURL: req.RepositoryURL,
 						ChangelogURL:  req.ChangelogURL,
 						UpdatedAt:     time.Now().UTC().Unix(),
@@ -1334,8 +1368,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 						writeError(w, http.StatusInternalServerError, "intel_save_failed", err.Error())
 						return
 					}
-					ov, _ := intelService.Get(ctx, id)
-					summary := loadContainerSummary(ctx, id)
+					ov, _ := intelService.Get(ctx, id, name)
 					writeJSON(w, http.StatusOK, effectiveContainerIntel(summary, ov, currentPortainerService))
 				}
 
@@ -1475,7 +1508,12 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 				}
 				ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 				defer cancel()
-				summaries, err := scanService.MalwareSummariesForContainer(ctx, containerID)
+				summary := loadContainerSummary(ctx, containerID)
+				name := "unknown"
+				if len(summary.Names) > 0 {
+					name = strings.TrimPrefix(summary.Names[0], "/")
+				}
+				summaries, err := scanService.MalwareSummariesForContainer(ctx, containerID, name)
 				if err != nil {
 					writeError(w, http.StatusBadGateway, "malware_scan_read_failed", err.Error())
 					return

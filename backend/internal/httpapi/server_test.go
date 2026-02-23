@@ -80,7 +80,7 @@ func (f fakeScanService) StartScan(target string) (gen.ScanStartResponse, error)
 func (f fakeScanService) StartMalwareScan(target string) (gen.ScanStartResponse, error) {
 	return f.startResp, nil
 }
-func (f fakeScanService) StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
+func (f fakeScanService) StartMalwareScanPath(targetLabel, containerName, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
 	return f.startResp, nil
 }
 func (f fakeScanService) CancelJob(ctx context.Context, jobID string) (gen.ScanJobStatus, error) {
@@ -130,13 +130,13 @@ func (f fakeScanService) LatestDetailsForTarget(ctx context.Context, target stri
 func (f fakeScanService) MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error) {
 	return nil, nil
 }
-func (f fakeScanService) MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error) {
+func (f fakeScanService) MalwareSummariesForContainer(ctx context.Context, containerID, containerName string) ([]gen.MalwareScanSummary, error) {
 	return nil, nil
 }
 func (f fakeScanService) MalwareDetails(ctx context.Context, target, prefix string, limit int) ([]gen.MalwareScanDetail, error) {
 	return nil, nil
 }
-func (f fakeScanService) MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error) {
+func (f fakeScanService) MalwareDetailsForContainer(ctx context.Context, containerID, containerName string, limit int) ([]gen.MalwareScanDetail, error) {
 	return nil, nil
 }
 func (f fakeScanService) ActiveJobs() []gen.JobProgress {
@@ -159,7 +159,7 @@ type fakeAuditService struct {
 func (f fakeAuditService) ListAuditJobs(ctx context.Context) ([]gen.AuditJobSummary, error) {
 	return f.jobs, nil
 }
-func (f fakeAuditService) ListAuditJobsForContainer(ctx context.Context, containerID string) ([]gen.AuditJobSummary, error) {
+func (f fakeAuditService) ListAuditJobsForContainer(ctx context.Context, containerID, containerName string) ([]gen.AuditJobSummary, error) {
 	return f.jobs, nil
 }
 func (f fakeAuditService) GetAuditJobSteps(ctx context.Context, id string) ([]gen.UpdateStepEvent, error) {
@@ -377,8 +377,8 @@ func (f fakeSettingsService) Save(ctx context.Context, s settings.Settings) erro
 
 type fakeRulesService struct{}
 
-func (f fakeRulesService) Get(ctx context.Context, id string) (rules.ContainerRules, error) {
-	return rules.ContainerRules{ContainerID: id, UpdatePolicy: "manual"}, nil
+func (f fakeRulesService) Get(ctx context.Context, id, name string) (rules.ContainerRules, error) {
+	return rules.ContainerRules{ContainerID: id, ContainerName: name, UpdatePolicy: "manual"}, nil
 }
 func (f fakeRulesService) Save(ctx context.Context, r rules.ContainerRules) error {
 	return nil
@@ -388,10 +388,13 @@ type staticRulesService struct {
 	rule rules.ContainerRules
 }
 
-func (f staticRulesService) Get(ctx context.Context, id string) (rules.ContainerRules, error) {
+func (f staticRulesService) Get(ctx context.Context, id, name string) (rules.ContainerRules, error) {
 	out := f.rule
 	if out.ContainerID == "" {
 		out.ContainerID = id
+	}
+	if out.ContainerName == "" {
+		out.ContainerName = name
 	}
 	return out, nil
 }

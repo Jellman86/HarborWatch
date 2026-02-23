@@ -96,7 +96,7 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 		return gen.ScanStartResponse{}, fmt.Errorf("%w for target %s (job=%s)", ErrDuplicateActiveScan, target, existingID)
 	}
 
-	_ = s.store.CreateJob(context.Background(), job, "vulnerability")
+	_ = s.store.CreateJob(context.Background(), job, "vulnerability", "")
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("trivy scan queued job=%s target=%s", jobID, target))
 	}
@@ -107,7 +107,7 @@ func (s *Service) StartScan(target string) (gen.ScanStartResponse, error) {
 }
 
 func (s *Service) StartMalwareScan(target string) (gen.ScanStartResponse, error) {
-	return s.StartMalwareScanPath(target, target, false)
+	return s.StartMalwareScanPath(target, "", target, false)
 }
 
 func (s *Service) ClamAVSignatureStatus(ctx context.Context) (ClamAVSignatureStatus, error) {
@@ -142,8 +142,9 @@ func (s *Service) UpdateClamAVSignatures(ctx context.Context) (string, error) {
 	return summary, nil
 }
 
-func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
+func (s *Service) StartMalwareScanPath(targetLabel, containerName, scanPath string, cleanup bool) (gen.ScanStartResponse, error) {
 	targetLabel = strings.TrimSpace(targetLabel)
+	containerName = strings.TrimSpace(containerName)
 	scanPath = strings.TrimSpace(scanPath)
 	if targetLabel == "" {
 		return gen.ScanStartResponse{}, errors.New("target is required")
@@ -191,7 +192,7 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 		return gen.ScanStartResponse{}, fmt.Errorf("%w for target %s (job=%s)", ErrDuplicateActiveScan, targetLabel, existingID)
 	}
 
-	_ = s.store.CreateJob(context.Background(), job, "malware")
+	_ = s.store.CreateJob(context.Background(), job, "malware", containerName)
 	if s.diag != nil {
 		s.diag.Log("INFO", "Scanner", fmt.Sprintf("clamav scan queued job=%s target=%s path=%s", jobID, targetLabel, scanPath))
 	}
@@ -200,7 +201,7 @@ func (s *Service) StartMalwareScanPath(targetLabel, scanPath string, cleanup boo
 	if cleanup {
 		cleanupPath = scanPath
 	}
-	go s.runMalware(jobID, targetLabel, scanPath, cleanupPath, runCtx)
+	go s.runMalware(jobID, targetLabel, containerName, scanPath, cleanupPath, runCtx)
 
 	return gen.ScanStartResponse{JobID: jobID, Status: "queued"}, nil
 }
@@ -265,7 +266,7 @@ func (s *Service) run(jobID, target string, runCtx context.Context) {
 	}
 }
 
-func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, runCtx context.Context) {
+func (s *Service) runMalware(jobID, targetLabel, containerName, scanPath, cleanupPath string, runCtx context.Context) {
 	if cleanupPath != "" {
 		defer func() { _ = os.RemoveAll(cleanupPath) }()
 	}
@@ -323,6 +324,7 @@ func (s *Service) runMalware(jobID, targetLabel, scanPath, cleanupPath string, r
 		return
 	}
 	result.Target = targetLabel
+	result.ContainerName = containerName
 
 	s.setJobProgressWithMessage(jobID, 88, "Persisting results")
 	if err := s.store.SaveMalwareResult(ctx, result); err != nil {
@@ -555,16 +557,16 @@ func (s *Service) MalwareSummaries(ctx context.Context, target string) ([]gen.Ma
 	return s.store.MalwareSummaries(ctx, target)
 }
 
-func (s *Service) MalwareSummariesForContainer(ctx context.Context, containerID string) ([]gen.MalwareScanSummary, error) {
-	return s.store.MalwareSummariesByPrefix(ctx, "container:"+containerID)
+func (s *Service) MalwareSummariesForContainer(ctx context.Context, containerID, containerName string) ([]gen.MalwareScanSummary, error) {
+	return s.store.MalwareSummariesByContainer(ctx, containerID, containerName)
 }
 
 func (s *Service) MalwareDetails(ctx context.Context, target, prefix string, limit int) ([]gen.MalwareScanDetail, error) {
 	return s.store.MalwareDetails(ctx, target, prefix, limit)
 }
 
-func (s *Service) MalwareDetailsForContainer(ctx context.Context, containerID string, limit int) ([]gen.MalwareScanDetail, error) {
-	return s.store.MalwareDetails(ctx, "", "container:"+containerID, limit)
+func (s *Service) MalwareDetailsForContainer(ctx context.Context, containerID, containerName string, limit int) ([]gen.MalwareScanDetail, error) {
+	return s.store.MalwareDetailsForContainer(ctx, containerID, containerName, limit)
 }
 
 func (s *Service) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {

@@ -11,6 +11,7 @@ import (
 
 type ContainerRules struct {
 	ContainerID           string `json:"containerId"`
+	ContainerName         string `json:"containerName"`
 	UpdatePolicy          string `json:"updatePolicy"` // auto, manual, locked
 	ValidateURL           string `json:"validateUrl"`
 	ValidateMode          string `json:"validateMode"` // http, docker, both
@@ -42,6 +43,7 @@ func (s *Store) Init(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS container_rules (
     container_id TEXT PRIMARY KEY,
+    container_name TEXT NOT NULL DEFAULT '',
     update_policy TEXT DEFAULT 'manual',
     validate_url TEXT DEFAULT '',
     validate_mode TEXT DEFAULT 'both',
@@ -60,6 +62,9 @@ CREATE TABLE IF NOT EXISTS container_rules (
 );
 `)
 	if err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "validate_mode", "TEXT DEFAULT 'both'"); err != nil {
@@ -101,19 +106,22 @@ CREATE TABLE IF NOT EXISTS container_rules (
 	return nil
 }
 
-func (s *Store) Get(ctx context.Context, id string) (ContainerRules, error) {
+func (s *Store) Get(ctx context.Context, id, name string) (ContainerRules, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, bypass_ai, skip_health_check, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation, restart_on_unhealthy, unhealthy_restart_cooldown_sec
-FROM container_rules WHERE container_id = ?
-`, id)
+SELECT container_id, container_name, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, bypass_ai, skip_health_check, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation, restart_on_unhealthy, unhealthy_restart_cooldown_sec
+FROM container_rules WHERE container_id = ? OR (container_name = ? AND container_name != '')
+ORDER BY rowid DESC
+LIMIT 1
+`, id, name)
 
 	var r ContainerRules
 	var rollback, aiValidateLogs, bypassAI, skipHealthCheck int
 	var inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation, restartOnUnhealthy int
-	if err := row.Scan(&r.ContainerID, &r.UpdatePolicy, &r.ValidateURL, &r.ValidateMode, &r.ValidateTimeoutSec, &r.ValidateIntervalSec, &bypassAI, &skipHealthCheck, &aiValidateLogs, &rollback, &inheritAutomation, &upgradesAutomation, &maintenanceAutomation, &securityAutomation, &restartOnUnhealthy, &r.UnhealthyRestartCooldownSec); err != nil {
+	if err := row.Scan(&r.ContainerID, &r.ContainerName, &r.UpdatePolicy, &r.ValidateURL, &r.ValidateMode, &r.ValidateTimeoutSec, &r.ValidateIntervalSec, &bypassAI, &skipHealthCheck, &aiValidateLogs, &rollback, &inheritAutomation, &upgradesAutomation, &maintenanceAutomation, &securityAutomation, &restartOnUnhealthy, &r.UnhealthyRestartCooldownSec); err != nil {
 		if err == sql.ErrNoRows {
 			return ContainerRules{
 				ContainerID:           id,
+				ContainerName:         name,
 				UpdatePolicy:          "manual",
 				ValidateMode:          "both",
 				ValidateTimeoutSec:    45,
@@ -200,9 +208,10 @@ func (s *Store) Save(ctx context.Context, r ContainerRules) error {
 		restartOnUnhealthy = 1
 	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO container_rules (container_id, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, bypass_ai, skip_health_check, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation, restart_on_unhealthy, unhealthy_restart_cooldown_sec)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO container_rules (container_id, container_name, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, bypass_ai, skip_health_check, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation, restart_on_unhealthy, unhealthy_restart_cooldown_sec)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(container_id) DO UPDATE SET
+    container_name = excluded.container_name,
     update_policy = excluded.update_policy,
     validate_url = excluded.validate_url,
     validate_mode = excluded.validate_mode,
@@ -218,7 +227,7 @@ ON CONFLICT(container_id) DO UPDATE SET
     security_automation = excluded.security_automation,
     restart_on_unhealthy = excluded.restart_on_unhealthy,
     unhealthy_restart_cooldown_sec = excluded.unhealthy_restart_cooldown_sec
-`, r.ContainerID, r.UpdatePolicy, r.ValidateURL, r.ValidateMode, r.ValidateTimeoutSec, r.ValidateIntervalSec, bypassAI, skipHealthCheck, aiValidateLogs, rollback, inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation, restartOnUnhealthy, r.UnhealthyRestartCooldownSec)
+`, r.ContainerID, r.ContainerName, r.UpdatePolicy, r.ValidateURL, r.ValidateMode, r.ValidateTimeoutSec, r.ValidateIntervalSec, bypassAI, skipHealthCheck, aiValidateLogs, rollback, inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation, restartOnUnhealthy, r.UnhealthyRestartCooldownSec)
 	return err
 }
 

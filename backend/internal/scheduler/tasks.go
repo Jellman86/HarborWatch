@@ -17,7 +17,7 @@ import (
 type ScannerService interface {
 	StartScan(target string) (gen.ScanStartResponse, error)
 	StartMalwareScan(target string) (gen.ScanStartResponse, error)
-	StartMalwareScanPath(targetLabel, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
+	StartMalwareScanPath(targetLabel, containerName, scanPath string, cleanup bool) (gen.ScanStartResponse, error)
 	UpdateClamAVSignatures(ctx context.Context) (string, error)
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 }
@@ -265,6 +265,7 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 	type scanTarget struct {
 		label string
 		source string
+		containerName string
 	}
 	// Deduplicate by host source path to avoid redundant scans
 	uniqueSources := make(map[string]scanTarget)
@@ -279,6 +280,8 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 			t.log("WARN", fmt.Sprintf("Skipping ClamAV sweep for %s: inspect failed: %v", c.ID, err))
 			continue
 		}
+
+		containerName := strings.TrimPrefix(inspect.Name, "/")
 
 		for _, m := range inspect.Mounts {
 			source := strings.TrimSpace(m.Source)
@@ -297,14 +300,14 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 			// We use the first container/mount we find as the primary label for this source path
 			if _, exists := uniqueSources[source]; !exists {
 				targetLabel := fmt.Sprintf("container:%s:mount:%s", strings.TrimSpace(c.ID), dest)
-				uniqueSources[source] = scanTarget{label: targetLabel, source: source}
+				uniqueSources[source] = scanTarget{label: targetLabel, source: source, containerName: containerName}
 			}
 		}
 	}
 
 	for _, target := range uniqueSources {
 		t.log("INFO", fmt.Sprintf("Queueing ClamAV scan for %s (source=%s)", target.label, target.source))
-		if _, err := t.scanner.StartMalwareScanPath(target.label, target.source, false); err != nil {
+		if _, err := t.scanner.StartMalwareScanPath(target.label, target.containerName, target.source, false); err != nil {
 			queueErrors++
 			t.log("ERROR", fmt.Sprintf("Failed to queue ClamAV scan for %s: %v", target.label, err))
 			continue

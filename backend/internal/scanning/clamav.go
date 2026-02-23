@@ -15,12 +15,13 @@ var ErrClamAVUnavailable = errors.New("clamscan is not installed or not on PATH"
 
 // MalwareResult represents the result of a malware scan.
 type MalwareResult struct {
-	Target       string
-	Source       string
-	Infected     bool
-	FoundThreats []string
-	RawOutput    string
-	ScannedAt    int64
+	ContainerName string
+	Target        string
+	Source        string
+	Infected      bool
+	FoundThreats  []string
+	RawOutput     string
+	ScannedAt     int64
 }
 
 // MalwareScanner defines the interface for filesystem malware scanning.

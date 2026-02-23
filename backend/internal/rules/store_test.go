@@ -25,7 +25,7 @@ func newRulesTestStore(t *testing.T) *Store {
 
 func TestGetDefaultsSkipHealthCheckFalse(t *testing.T) {
 	store := newRulesTestStore(t)
-	got, err := store.Get(context.Background(), "c1")
+	got, err := store.Get(context.Background(), "c1", "container1")
 	if err != nil {
 		t.Fatalf("get rules: %v", err)
 	}
@@ -38,6 +38,7 @@ func TestSavePersistsSkipHealthCheck(t *testing.T) {
 	store := newRulesTestStore(t)
 	if err := store.Save(context.Background(), ContainerRules{
 		ContainerID:     "c1",
+		ContainerName:   "container1",
 		UpdatePolicy:    "auto",
 		ValidateURL:     "http://localhost:8080/health",
 		SkipHealthCheck: true,
@@ -45,7 +46,7 @@ func TestSavePersistsSkipHealthCheck(t *testing.T) {
 		t.Fatalf("save rules: %v", err)
 	}
 
-	got, err := store.Get(context.Background(), "c1")
+	got, err := store.Get(context.Background(), "c1", "container1")
 	if err != nil {
 		t.Fatalf("get rules: %v", err)
 	}

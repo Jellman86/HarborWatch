@@ -98,10 +98,13 @@ type testRulesService struct {
 	rule rules.ContainerRules
 }
 
-func (s testRulesService) Get(ctx context.Context, id string) (rules.ContainerRules, error) {
+func (s testRulesService) Get(ctx context.Context, id, name string) (rules.ContainerRules, error) {
 	out := s.rule
 	if out.ContainerID == "" {
 		out.ContainerID = id
+	}
+	if out.ContainerName == "" {
+		out.ContainerName = name
 	}
 	return out, nil
 }

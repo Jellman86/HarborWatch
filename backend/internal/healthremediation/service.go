@@ -143,7 +143,7 @@ func (s *Service) handleUnhealthy(ctx context.Context, containerID, containerNam
 		return
 	}
 
-	rules, err := s.rulesStore.Get(ctx, containerID)
+	rules, err := s.rulesStore.Get(ctx, containerID, containerName)
 	if err != nil {
 		return
 	}

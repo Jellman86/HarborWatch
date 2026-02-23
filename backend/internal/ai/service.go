@@ -193,12 +193,13 @@ func (s *Service) AnalyzeFleet(ctx context.Context, inventory string) (string, e
 	if provider == nil {
 		return "", errors.New("no AI provider configured")
 	}
-	res, err := provider.AnalyzeFleet(ctx, inventory)
+	redacted := RedactSecrets(inventory)
+	res, err := provider.AnalyzeFleet(ctx, redacted)
 	if err == nil {
 		s.recordConversation(ConversationRecord{
 			Provider: provider.Name(),
 			Feature:  "fleet_advice",
-			Prompt:   inventory,
+			Prompt:   redacted,
 			Response: res,
 		})
 	}
@@ -217,12 +218,13 @@ func (s *Service) AuditCompose(ctx context.Context, yamlStr string) (string, err
 		return "", fmt.Errorf("invalid YAML syntax: %w", err)
 	}
 
-	res, err := provider.AuditCompose(ctx, yamlStr)
+	redacted := RedactSecrets(yamlStr)
+	res, err := provider.AuditCompose(ctx, redacted)
 	if err == nil {
 		s.recordConversation(ConversationRecord{
 			Provider: provider.Name(),
 			Feature:  "compose_audit",
-			Prompt:   yamlStr,
+			Prompt:   redacted,
 			Response: res,
 		})
 	}
@@ -236,11 +238,12 @@ func (s *Service) AnalyzeMetrics(ctx context.Context, id string, metrics []any) 
 	}
 	res, err := provider.AnalyzeMetrics(ctx, id, metrics)
 	if err == nil {
-		prompt := fmt.Sprintf("Metrics for %s: %v", id, metrics)
+		rawPrompt := fmt.Sprintf("Metrics for %s: %v", id, metrics)
+		redacted := RedactSecrets(rawPrompt)
 		s.recordConversation(ConversationRecord{
 			Provider: provider.Name(),
 			Feature:  "metrics_analysis",
-			Prompt:   prompt,
+			Prompt:   redacted,
 			Response: res,
 		})
 	}
@@ -252,13 +255,14 @@ func (s *Service) AnalyzeHealthLogs(ctx context.Context, containerID string, log
 	if provider == nil {
 		return HealthAssessment{}, errors.New("no AI provider configured")
 	}
-	res, err := provider.AnalyzeHealthLogs(ctx, containerID, logs)
+	redacted := RedactSecrets(logs)
+	res, err := provider.AnalyzeHealthLogs(ctx, containerID, redacted)
 	if err == nil {
 		respBytes, _ := json.Marshal(res)
 		s.recordConversation(ConversationRecord{
 			Provider: provider.Name(),
 			Feature:  "health_log_analysis",
-			Prompt:   fmt.Sprintf("Logs for %s:\n%s", containerID, logs),
+			Prompt:   fmt.Sprintf("Logs for %s:\n%s", containerID, redacted),
 			Response: string(respBytes),
 		})
 	}
@@ -366,4 +370,29 @@ func (s *Service) recordConversation(rec ConversationRecord) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_ = store.RecordConversation(ctx, rec)
+}
+
+func RedactSecrets(input string) string {
+	sensitiveKeys := []string{
+		"pass", "password", "key", "secret", "token", "auth_token", "api_key", "credential",
+	}
+
+	lines := strings.Split(input, "\n")
+	for i, line := range lines {
+		lowerLine := strings.ToLower(line)
+		for _, key := range sensitiveKeys {
+			if strings.Contains(lowerLine, key) {
+				// Handle YAML/Env style: KEY=VALUE or KEY: VALUE
+				if idx := strings.Index(line, "="); idx != -1 {
+					lines[i] = line[:idx+1] + "********"
+				} else if idx := strings.Index(line, ":"); idx != -1 {
+					lines[i] = line[:idx+1] + " ********"
+				} else {
+					lines[i] = "********"
+				}
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	_ "modernc.org/sqlite"
@@ -51,25 +52,28 @@ LIMIT 100
 	return jobs, nil
 }
 
-func (s *Service) ListAuditJobsForContainer(ctx context.Context, containerID string) ([]gen.AuditJobSummary, error) {
+func (s *Service) ListAuditJobsForContainer(ctx context.Context, containerID, containerName string) ([]gen.AuditJobSummary, error) {
+	containerID = strings.TrimSpace(containerID)
+	containerName = strings.TrimSpace(containerName)
+
 	query := `
 SELECT id, 'Update' as type, target_image as target, container_id, status, progress, error, created_at as started_at, updated_at as completed_at
 FROM update_runs
-WHERE container_id = ?
+WHERE container_id = ? OR (container_name = ? AND container_name != '')
 UNION ALL
 SELECT job_id as id, type, target, '' as container_id, status, progress, error, started_at, completed_at
 FROM scan_jobs
-WHERE target = ? OR target = (
-	SELECT target_image FROM update_runs WHERE container_id = ? ORDER BY created_at DESC LIMIT 1
+WHERE target = ? OR target LIKE ? OR (container_name = ? AND container_name != '') OR target = (
+	SELECT target_image FROM update_runs WHERE container_id = ? OR (container_name = ? AND container_name != '') ORDER BY created_at DESC LIMIT 1
 )
 UNION ALL
 SELECT id, 'Remediation' as type, container_name as target, container_id, status, 100 as progress, error, started_at, completed_at
 FROM remediation_runs
-WHERE container_id = ?
+WHERE container_id = ? OR (container_name = ? AND container_name != '')
 ORDER BY started_at DESC
 LIMIT 50
 `
-	rows, err := s.db.QueryContext(ctx, query, containerID, containerID, containerID, containerID)
+	rows, err := s.db.QueryContext(ctx, query, containerID, containerName, "container:"+containerID, "container:"+containerID+":%", containerName, containerID, containerName, containerID, containerName)
 	if err != nil {
 		return nil, fmt.Errorf("query container audit jobs: %w", err)
 	}

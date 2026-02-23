@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS scan_results (
 	_, err = s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS malware_scan_results (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  container_name TEXT NOT NULL DEFAULT '',
   target TEXT NOT NULL,
   source TEXT NOT NULL,
   scanned_at INTEGER NOT NULL,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS malware_scan_results (
 	_, err = s.db.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS scan_jobs (
   job_id TEXT PRIMARY KEY,
+  container_name TEXT NOT NULL DEFAULT '',
   target TEXT NOT NULL,
   type TEXT NOT NULL,
   status TEXT NOT NULL,
@@ -77,12 +79,19 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
 		return fmt.Errorf("create scan_jobs table: %w", err)
 	}
 
+	if err := s.ensureColumn(ctx, "malware_scan_results", "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("ensure malware_scan_results.container_name: %w", err)
+	}
+	if err := s.ensureColumn(ctx, "scan_jobs", "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("ensure scan_jobs.container_name: %w", err)
+	}
 	if err := s.ensureColumn(ctx, "scan_jobs", "progress", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return fmt.Errorf("ensure scan_jobs.progress: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx, `
 CREATE INDEX IF NOT EXISTS idx_scan_results_target_scanned ON scan_results(target, scanned_at DESC);
 CREATE INDEX IF NOT EXISTS idx_malware_results_target_scanned ON malware_scan_results(target, scanned_at DESC);
+CREATE INDEX IF NOT EXISTS idx_malware_results_container_scanned ON malware_scan_results(container_name, scanned_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scan_jobs_type_started ON scan_jobs(type, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scan_jobs_status_started ON scan_jobs(status, started_at DESC);
 `); err != nil {
@@ -130,9 +139,9 @@ func (s *Store) SaveMalwareResult(ctx context.Context, r MalwareResult) error {
 		infected = 1
 	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO malware_scan_results(target, source, scanned_at, infected, threats_found, raw_output)
-VALUES(?, ?, ?, ?, ?, ?)
-`, r.Target, r.Source, r.ScannedAt, infected, string(threats), r.RawOutput)
+INSERT INTO malware_scan_results(container_name, target, source, scanned_at, infected, threats_found, raw_output)
+VALUES(?, ?, ?, ?, ?, ?, ?)
+`, r.ContainerName, r.Target, r.Source, r.ScannedAt, infected, string(threats), r.RawOutput)
 	if err != nil {
 		return fmt.Errorf("insert malware scan result: %w", err)
 	}
@@ -217,8 +226,14 @@ func (s *Store) MalwareDetails(ctx context.Context, target, prefix string, limit
 		args = append(args, target)
 	}
 	if prefix != "" {
-		clauses = append(clauses, "(target = ? OR target LIKE ? OR target LIKE ?)")
-		args = append(args, prefix, prefix+":%", prefix+"%:%")
+		if strings.HasPrefix(prefix, "container:") {
+			containerID := strings.TrimPrefix(prefix, "container:")
+			clauses = append(clauses, "(target = ? OR target LIKE ? OR target LIKE ? OR (container_name = ? AND container_name != ''))")
+			args = append(args, prefix, prefix+":%", prefix+"%:%", containerID)
+		} else {
+			clauses = append(clauses, "(target = ? OR target LIKE ? OR target LIKE ?)")
+			args = append(args, prefix, prefix+":%", prefix+"%:%")
+		}
 	}
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")
@@ -266,11 +281,88 @@ func (s *Store) MalwareDetails(ctx context.Context, target, prefix string, limit
 	return details, nil
 }
 
-func (s *Store) CreateJob(ctx context.Context, job gen.ScanJobStatus, scanType string) error {
+func (s *Store) MalwareSummariesByContainer(ctx context.Context, id, name string) ([]gen.MalwareScanSummary, error) {
+	id = strings.TrimSpace(id)
+	name = strings.TrimSpace(name)
+	prefix := "container:" + id
+	query := `SELECT target, source, scanned_at, infected, threats_found
+FROM malware_scan_results
+WHERE target = ? OR target LIKE ? OR target LIKE ? OR (container_name = ? AND container_name != '')
+ORDER BY scanned_at DESC`
+	rows, err := s.db.QueryContext(ctx, query, prefix, prefix+":%", prefix+"%:%", name)
+	if err != nil {
+		return nil, fmt.Errorf("query malware summaries by container: %w", err)
+	}
+	defer rows.Close()
+
+	var summaries []gen.MalwareScanSummary
+	for rows.Next() {
+		var sm gen.MalwareScanSummary
+		var infected int
+		var threatsRaw string
+		if err := rows.Scan(&sm.Target, &sm.Source, &sm.ScannedAt, &infected, &threatsRaw); err != nil {
+			return nil, fmt.Errorf("scan malware summary: %w", err)
+		}
+		sm.Infected = infected == 1
+		_ = json.Unmarshal([]byte(threatsRaw), &sm.ThreatsFound)
+		summaries = append(summaries, sm)
+	}
+	return summaries, nil
+}
+
+func (s *Store) MalwareDetailsForContainer(ctx context.Context, id, name string, limit int) ([]gen.MalwareScanDetail, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	id = strings.TrimSpace(id)
+	name = strings.TrimSpace(name)
+	prefix := "container:" + id
+
+	query := `SELECT target, source, scanned_at, infected, threats_found, raw_output 
+FROM malware_scan_results
+WHERE target = ? OR target LIKE ? OR target LIKE ? OR (container_name = ? AND container_name != '')
+ORDER BY scanned_at DESC, id DESC LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, query, prefix, prefix+":%", prefix+"%:%", name, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query malware details for container: %w", err)
+	}
+	defer rows.Close()
+
+	details := make([]gen.MalwareScanDetail, 0, limit)
+	for rows.Next() {
+		var (
+			detail     gen.MalwareScanDetail
+			infected   int
+			threatsRaw string
+			rawOutput  string
+		)
+		if err := rows.Scan(&detail.Target, &detail.Source, &detail.ScannedAt, &infected, &threatsRaw, &rawOutput); err != nil {
+			return nil, fmt.Errorf("scan malware detail: %w", err)
+		}
+		detail.Infected = infected == 1
+		detail.RawOutput = rawOutput
+		if strings.TrimSpace(threatsRaw) != "" {
+			_ = json.Unmarshal([]byte(threatsRaw), &detail.ThreatsFound)
+		}
+		matches := parseClamThreatDetails(rawOutput)
+		detail.ThreatDetails = make([]gen.MalwareThreatDetail, 0, len(matches))
+		for _, m := range matches {
+			detail.ThreatDetails = append(detail.ThreatDetails, gen.MalwareThreatDetail{
+				Path:      m.Path,
+				Signature: m.Signature,
+			})
+		}
+		details = append(details, detail)
+	}
+	return details, nil
+}
+
+func (s *Store) CreateJob(ctx context.Context, job gen.ScanJobStatus, scanType, containerName string) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO scan_jobs(job_id, target, type, status, source, started_at)
-VALUES(?, ?, ?, ?, ?, ?)
-`, job.JobID, job.Target, scanType, job.Status, job.Source, job.StartedAt)
+INSERT INTO scan_jobs(job_id, container_name, target, type, status, source, started_at)
+VALUES(?, ?, ?, ?, ?, ?, ?)
+`, job.JobID, containerName, job.Target, scanType, job.Status, job.Source, job.StartedAt)
 	if err != nil {
 		return fmt.Errorf("create scan job: %w", err)
 	}
@@ -338,8 +430,14 @@ FROM scan_jobs
 		args = append(args, t)
 	}
 	if p := strings.TrimSpace(targetPrefix); p != "" {
-		clauses = append(clauses, "target LIKE ?")
-		args = append(args, p+"%")
+		if strings.HasPrefix(p, "container:") {
+			containerID := strings.TrimPrefix(p, "container:")
+			clauses = append(clauses, "(target LIKE ? OR container_name LIKE ?)")
+			args = append(args, p+"%", containerID+"%")
+		} else {
+			clauses = append(clauses, "target LIKE ?")
+			args = append(args, p+"%")
+		}
 	}
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")
