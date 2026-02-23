@@ -205,7 +205,7 @@
                                     <div class="flex items-center gap-2 ml-4">
                                         <span class="px-2 py-0.5 rounded-lg bg-rose-100 text-rose-700 text-[10px] font-black">{risk.vulnerabilityCritical || 0} Critical</span>
                                         {#if risk.containerId}
-                                            <button onclick={() => onNavigate('container-detail', { id: risk.containerId, tab: 'security' })} class="p-1.5 text-slate-400 hover:text-brand-600">
+                                            <button title="View Security Details" onclick={() => onNavigate('container-detail', { id: risk.containerId, tab: 'security' })} class="p-1.5 text-slate-400 hover:text-brand-600">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                             </button>
                                         {/if}
