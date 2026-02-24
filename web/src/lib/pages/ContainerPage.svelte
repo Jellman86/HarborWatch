@@ -84,6 +84,8 @@
     let validateIntervalSec = $state(2);
     let restartOnUnhealthy = $state(false);
     let unhealthyRestartCooldownSec = $state(300);
+    let restartDependentsAfterUpgrade = $state(false);
+    let dependentRestartDelaySec = $state(20);
     let updateHistory = $state<UpdateJobStatus[]>([]);
     let loadingUpdateHistory = $state(false);
     let vulnerabilityDetails = $state<TrivyScanDetails | null>(null);
@@ -339,6 +341,8 @@
         validateIntervalSec = Number(detail?.rules?.validateIntervalSec || 2);
         restartOnUnhealthy = !!detail?.rules?.restartOnUnhealthy;
         unhealthyRestartCooldownSec = detail?.rules?.unhealthyRestartCooldownSec ?? 300;
+        restartDependentsAfterUpgrade = !!(detail?.rules as any)?.restartDependentsAfterUpgrade;
+        dependentRestartDelaySec = Number((detail?.rules as any)?.dependentRestartDelaySec ?? 20);
     }
 
     function applyLifecycleModeToRules(mode: "global" | "manual") {
@@ -373,6 +377,8 @@
         detail.rules.validateIntervalSec = Math.max(1, Number(validateIntervalSec || 2));
         detail.rules.restartOnUnhealthy = restartOnUnhealthy;
         detail.rules.unhealthyRestartCooldownSec = Number(unhealthyRestartCooldownSec);
+        (detail.rules as any).restartDependentsAfterUpgrade = !!restartDependentsAfterUpgrade;
+        (detail.rules as any).dependentRestartDelaySec = Math.max(0, Number(dependentRestartDelaySec ?? 20));
         
         lifecycleMessage = "";
         savingRules = true;
@@ -1147,6 +1153,38 @@
                                                     <span class="text-[10px] font-bold text-slate-400 uppercase">{Math.round(unhealthyRestartCooldownSec / 60)} min</span>
                                                 </div>
                                                 <p class="text-[10px] text-slate-500">Wait this long between consecutive auto-restarts. Set to 0 to use global default.</p>
+                                            </div>
+                                        {/if}
+
+                                        <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                            <div>
+                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Restart Dependents After Upgrade</p>
+                                                <p class="text-[11px] text-slate-500">After a successful upgrade/validation, restart containers that depend on this container (useful for VPN gateways like Gluetun).</p>
+                                            </div>
+                                            <button
+                                                onclick={() => restartDependentsAfterUpgrade = !restartDependentsAfterUpgrade}
+                                                class="w-10 h-5 rounded-full transition-colors relative {restartDependentsAfterUpgrade ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                aria-label="Toggle Restart Dependents After Upgrade"
+                                            >
+                                                <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {restartDependentsAfterUpgrade ? 'translate-x-5' : ''}"></div>
+                                            </button>
+                                        </div>
+
+                                        {#if restartDependentsAfterUpgrade}
+                                            <div class="flex flex-col gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                                <label for="dependent-restart-delay" class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Dependent Restart Delay (seconds)</label>
+                                                <div class="flex items-center gap-3">
+                                                    <input
+                                                        id="dependent-restart-delay"
+                                                        type="number"
+                                                        min="0"
+                                                        max="3600"
+                                                        bind:value={dependentRestartDelaySec}
+                                                        class="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                    />
+                                                    <span class="text-[10px] font-bold text-slate-400 uppercase">{Math.round((dependentRestartDelaySec || 0) / 60)} min</span>
+                                                </div>
+                                                <p class="text-[10px] text-slate-500">Wait before restarting dependents so shared services (for example VPN tunnels) are fully stable.</p>
                                             </div>
                                         {/if}
                                     </div>

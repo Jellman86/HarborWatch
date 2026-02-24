@@ -135,6 +135,8 @@ func TestRunCreatesSettingsAndRulesTables(t *testing.T) {
 		"security_automation",
 		"restart_on_unhealthy",
 		"unhealthy_restart_cooldown_sec",
+		"restart_dependents_after_upgrade",
+		"dependent_restart_delay_sec",
 	}
 	for _, col := range requiredRulesColumns {
 		if !hasColumn(t, db, "container_rules", col) {

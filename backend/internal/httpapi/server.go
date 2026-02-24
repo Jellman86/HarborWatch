@@ -1151,20 +1151,24 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					if r, err := rulesService.Get(ctx, id, name); err == nil {
 						r = effectiveContainerRules(ctx, summary, r, settingsService, diagService)
 						detail.Rules = &gen.ContainerRules{
-							ContainerID:           r.ContainerID,
-							UpdatePolicy:          r.UpdatePolicy,
-							ValidateURL:           r.ValidateURL,
-							ValidateMode:          r.ValidateMode,
-							ValidateTimeoutSec:    r.ValidateTimeoutSec,
-							ValidateIntervalSec:   r.ValidateIntervalSec,
-							BypassAI:              r.BypassAI,
-							SkipHealthCheck:       r.SkipHealthCheck,
-							AIValidateLogs:        r.AIValidateLogs,
-							AutoRollback:          r.AutoRollback,
-							InheritAutomation:     r.InheritAutomation,
-							UpgradesAutomation:    r.UpgradesAutomation,
-							MaintenanceAutomation: r.MaintenanceAutomation,
-							SecurityAutomation:    r.SecurityAutomation,
+							ContainerID:                   r.ContainerID,
+							UpdatePolicy:                  r.UpdatePolicy,
+							ValidateURL:                   r.ValidateURL,
+							ValidateMode:                  r.ValidateMode,
+							ValidateTimeoutSec:            r.ValidateTimeoutSec,
+							ValidateIntervalSec:           r.ValidateIntervalSec,
+							BypassAI:                      r.BypassAI,
+							SkipHealthCheck:               r.SkipHealthCheck,
+							AIValidateLogs:                r.AIValidateLogs,
+							AutoRollback:                  r.AutoRollback,
+							RestartOnUnhealthy:            r.RestartOnUnhealthy,
+							UnhealthyRestartCooldownSec:   r.UnhealthyRestartCooldownSec,
+							RestartDependentsAfterUpgrade: r.RestartDependentsAfterUpgrade,
+							DependentRestartDelaySec:      r.DependentRestartDelaySec,
+							InheritAutomation:             r.InheritAutomation,
+							UpgradesAutomation:            r.UpgradesAutomation,
+							MaintenanceAutomation:         r.MaintenanceAutomation,
+							SecurityAutomation:            r.SecurityAutomation,
 						}
 					}
 				}
@@ -1364,6 +1368,12 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					}
 					if _, ok := raw["unhealthyRestartCooldownSec"]; ok {
 						req.UnhealthyRestartCooldownSec = incoming.UnhealthyRestartCooldownSec
+					}
+					if _, ok := raw["restartDependentsAfterUpgrade"]; ok {
+						req.RestartDependentsAfterUpgrade = incoming.RestartDependentsAfterUpgrade
+					}
+					if _, ok := raw["dependentRestartDelaySec"]; ok {
+						req.DependentRestartDelaySec = incoming.DependentRestartDelaySec
 					}
 					req.UpdatePolicy = normalizeUpdatePolicy(req.UpdatePolicy)
 					req = effectiveContainerRules(r.Context(), summary, req, settingsService, diagService)

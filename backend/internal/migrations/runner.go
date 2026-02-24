@@ -222,6 +222,22 @@ func migrateContainerRulesColumns(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+func migrateContainerRulesDependentRestartColumns(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		ddl  string
+	}{
+		{"restart_dependents_after_upgrade", "INTEGER DEFAULT 0"},
+		{"dependent_restart_delay_sec", "INTEGER DEFAULT 20"},
+	}
+	for _, c := range columns {
+		if err := ensureColumnTx(ctx, tx, "container_rules", c.name, c.ddl); err != nil {
+			return fmt.Errorf("ensure container_rules.%s: %w", c.name, err)
+		}
+	}
+	return nil
+}
+
 func migrateUpdateRunsColumnsAndIndexes(ctx context.Context, tx *sql.Tx) error {
 	columns := []struct {
 		name string

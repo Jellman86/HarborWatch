@@ -16,6 +16,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
+	"github.com/docker/docker/api/types/container"
 	_ "modernc.org/sqlite"
 )
 
@@ -242,6 +243,31 @@ func TestUpdatePipelineRollback(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("timeout waiting for rolled_back")
+}
+
+func TestIsDependentOnTarget_MatchesSharedContainerNetworkMode(t *testing.T) {
+	inspect := container.InspectResponse{
+		ContainerJSONBase: &container.ContainerJSONBase{
+			HostConfig: &container.HostConfig{NetworkMode: container.NetworkMode("container:gluetun")},
+		},
+	}
+	if !isDependentOnTarget(inspect, "abc123", "gluetun", "", "") {
+		t.Fatalf("expected shared network mode to be detected as dependent")
+	}
+}
+
+func TestIsDependentOnTarget_MatchesComposeDependsOnLabel(t *testing.T) {
+	inspect := container.InspectResponse{
+		Config: &container.Config{
+			Labels: map[string]string{
+				"com.docker.compose.project":    "media",
+				"com.docker.compose.depends_on": "gluetun:service_healthy:false",
+			},
+		},
+	}
+	if !isDependentOnTarget(inspect, "", "", "media", "gluetun") {
+		t.Fatalf("expected compose depends_on label to be detected as dependent")
+	}
 }
 
 func TestUpdatePipelineFailsOnHighAIRisk(t *testing.T) {

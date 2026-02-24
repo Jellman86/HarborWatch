@@ -52,6 +52,33 @@ func TestGetDefaultsSkipHealthCheckFalse(t *testing.T) {
 	}
 }
 
+func TestSaveAndGetDependentRestartSettings(t *testing.T) {
+	store := newRulesTestStore(t)
+	in := ContainerRules{
+		ContainerID:                   "c1",
+		ContainerName:                 "gluetun",
+		UpdatePolicy:                  "manual",
+		ValidateMode:                  "docker",
+		ValidateTimeoutSec:            120,
+		ValidateIntervalSec:           5,
+		RestartDependentsAfterUpgrade: true,
+		DependentRestartDelaySec:      45,
+	}
+	if err := store.Save(context.Background(), in); err != nil {
+		t.Fatalf("save rules: %v", err)
+	}
+	got, err := store.Get(context.Background(), "c1", "gluetun")
+	if err != nil {
+		t.Fatalf("get rules: %v", err)
+	}
+	if !got.RestartDependentsAfterUpgrade {
+		t.Fatalf("expected RestartDependentsAfterUpgrade=true")
+	}
+	if got.DependentRestartDelaySec != 45 {
+		t.Fatalf("expected DependentRestartDelaySec=45, got %d", got.DependentRestartDelaySec)
+	}
+}
+
 func TestSavePersistsSkipHealthCheck(t *testing.T) {
 	store := newRulesTestStore(t)
 	if err := store.Save(context.Background(), ContainerRules{

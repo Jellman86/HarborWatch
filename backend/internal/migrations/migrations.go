@@ -112,5 +112,10 @@ func defaultMigrations() []Migration {
 			Name:    "create_compose_audit_history_table",
 			SQL:     mustReadSQL("sql/0017_create_compose_audit_history_table.sql"),
 		},
+		{
+			Version: 18,
+			Name:    "upgrade_container_rules_dependent_restart_columns",
+			ApplyTx: migrateContainerRulesDependentRestartColumns,
+		},
 	}
 }

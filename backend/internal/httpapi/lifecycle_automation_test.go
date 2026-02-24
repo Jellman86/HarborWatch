@@ -93,3 +93,42 @@ func TestBuildUpdateRequestForContainer_UsesGlobalValidationDefaultsWhenNoRulesS
 		t.Fatalf("expected interval 4, got %d", res.Request.ValidateIntervalSec)
 	}
 }
+
+func TestBuildUpdateRequestForContainer_PropagatesDependentRestartRuleFields(t *testing.T) {
+	res, err := buildUpdateRequestForContainer(
+		context.Background(),
+		"abc123",
+		"ghcr.io/example/app:latest",
+		"http://localhost:8080/health",
+		"",
+		0,
+		0,
+		false,
+		false,
+		nil,
+		nil,
+		staticRulesService{rule: rules.ContainerRules{
+			Exists:                        true,
+			UpdatePolicy:                  "manual",
+			ValidateMode:                  "both",
+			ValidateTimeoutSec:            45,
+			ValidateIntervalSec:           2,
+			RestartDependentsAfterUpgrade: true,
+			DependentRestartDelaySec:      30,
+		}},
+		nil,
+		nil,
+		nil,
+		nil,
+		updateRequestBuildOptions{},
+	)
+	if err != nil {
+		t.Fatalf("build update request: %v", err)
+	}
+	if !res.Request.RestartDependentsAfterUpgrade {
+		t.Fatalf("expected RestartDependentsAfterUpgrade=true")
+	}
+	if res.Request.DependentRestartDelaySec != 30 {
+		t.Fatalf("expected DependentRestartDelaySec=30, got %d", res.Request.DependentRestartDelaySec)
+	}
+}

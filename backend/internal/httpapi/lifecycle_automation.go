@@ -54,6 +54,9 @@ func effectiveContainerRules(ctx context.Context, summary gen.ContainerSummary, 
 	if out.UnhealthyRestartCooldownSec <= 0 {
 		out.UnhealthyRestartCooldownSec = defaults.UnhealthyRestartCooldownSec
 	}
+	if out.DependentRestartDelaySec <= 0 {
+		out.DependentRestartDelaySec = 20
+	}
 	if out.InheritAutomation {
 		out.UpgradesAutomation = true
 		out.MaintenanceAutomation = true

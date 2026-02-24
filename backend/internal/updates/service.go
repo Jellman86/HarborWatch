@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,25 +20,28 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
+	"github.com/docker/docker/api/types/container"
 )
 
 type Request struct {
-	ContainerID          string
-	TargetImage          string
-	ValidateURL          string
-	CurrentImage         string
-	ContainerName        string
-	Labels               map[string]string
-	RepositoryURL        string
-	ChangelogURL         string
-	ReleaseContext       string
-	ValidateMode         string
-	ValidateTimeoutSec   int
-	ValidateIntervalSec  int
-	AIValidateLogs       bool
-	AIBlockRiskThreshold int
-	BypassAI             bool
-	SkipHealthCheck      bool
+	ContainerID                   string
+	TargetImage                   string
+	ValidateURL                   string
+	CurrentImage                  string
+	ContainerName                 string
+	Labels                        map[string]string
+	RepositoryURL                 string
+	ChangelogURL                  string
+	ReleaseContext                string
+	ValidateMode                  string
+	ValidateTimeoutSec            int
+	ValidateIntervalSec           int
+	AIValidateLogs                bool
+	AIBlockRiskThreshold          int
+	BypassAI                      bool
+	SkipHealthCheck               bool
+	RestartDependentsAfterUpgrade bool
+	DependentRestartDelaySec      int
 
 	// Portainer support
 	IsPortainerManaged  bool
@@ -318,6 +322,10 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 			return
 		}
 	}
+	if req.RestartDependentsAfterUpgrade {
+		s.setRunProgress(jobID, "running", 97)
+		s.restartDependentsBestEffort(ctx, jobID, req)
+	}
 
 	s.setRunProgress(jobID, "completed", 100)
 	if s.notif != nil {
@@ -460,6 +468,10 @@ func (s *Service) executePortainer(ctx context.Context, jobID string, req Reques
 			return
 		}
 	}
+	if req.RestartDependentsAfterUpgrade {
+		s.setRunProgress(jobID, "running", 97)
+		s.restartDependentsBestEffort(ctx, jobID, req)
+	}
 
 	s.setRunProgress(jobID, "completed", 100)
 	s.clearCachedUpdateAvailability(req)
@@ -519,6 +531,195 @@ func (s *Service) emit(jobID string, e gen.UpdateStepEvent) {
 		default:
 		}
 	}
+}
+
+type dependentRestartTarget struct {
+	ID   string
+	Name string
+}
+
+func (s *Service) restartDependentsBestEffort(ctx context.Context, jobID string, req Request) {
+	startTs := time.Now().UTC().Unix()
+	s.emit(jobID, gen.UpdateStepEvent{
+		JobID:     jobID,
+		Step:      "restart_dependents",
+		Status:    "running",
+		Message:   "Discovering dependent containers",
+		Timestamp: startTs,
+	})
+
+	delaySec := req.DependentRestartDelaySec
+	if delaySec < 0 {
+		delaySec = 0
+	}
+	if delaySec > 3600 {
+		delaySec = 3600
+	}
+	if delaySec > 0 {
+		msg := fmt.Sprintf("Waiting %ds before restarting dependents", delaySec)
+		s.jobManager.UpdateJob(jobID, -1, "running", msg)
+		timer := time.NewTimer(time.Duration(delaySec) * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: "Skipped: update context cancelled before dependent restarts", Timestamp: time.Now().UTC().Unix()})
+			return
+		case <-timer.C:
+		}
+	}
+
+	targets, err := discoverDependentRestartTargets(ctx, req)
+	if err != nil {
+		msg := "Dependent restart discovery failed: " + err.Error()
+		if s.diag != nil {
+			s.diag.Log("WARN", "UpdateEngine", msg)
+		}
+		s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: msg, Timestamp: time.Now().UTC().Unix()})
+		return
+	}
+	if len(targets) == 0 {
+		s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: "No dependent containers detected", Timestamp: time.Now().UTC().Unix()})
+		return
+	}
+
+	cli, err := dockerengine.NewRawClient()
+	if err != nil || cli == nil {
+		msg := "Docker client unavailable for dependent restarts"
+		if err != nil {
+			msg += ": " + err.Error()
+		}
+		if s.diag != nil {
+			s.diag.Log("WARN", "UpdateEngine", msg)
+		}
+		s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: msg, Timestamp: time.Now().UTC().Unix()})
+		return
+	}
+	defer cli.Close()
+
+	restarted := 0
+	failures := make([]string, 0)
+	for _, dep := range targets {
+		name := strings.TrimSpace(dep.Name)
+		if name == "" {
+			name = dep.ID
+		}
+		s.jobManager.UpdateJob(jobID, -1, "running", "Restarting dependent: "+name)
+		restartCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		err := cli.ContainerRestart(restartCtx, dep.ID, container.StopOptions{})
+		cancel()
+		if err != nil {
+			failures = append(failures, name)
+			if s.diag != nil {
+				s.diag.Log("WARN", "UpdateEngine", fmt.Sprintf("Dependent restart failed for %s (parent=%s): %v", name, req.ContainerName, err))
+			}
+			continue
+		}
+		restarted++
+	}
+
+	msg := fmt.Sprintf("Dependent restarts complete: restarted=%d", restarted)
+	if len(failures) > 0 {
+		msg += fmt.Sprintf(", failed=%d (%s)", len(failures), strings.Join(failures, ", "))
+	}
+	s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: msg, Timestamp: time.Now().UTC().Unix()})
+}
+
+func discoverDependentRestartTargets(ctx context.Context, req Request) ([]dependentRestartTarget, error) {
+	cli, err := dockerengine.NewRawClient()
+	if err != nil {
+		return nil, err
+	}
+	if cli == nil {
+		return nil, errors.New("docker client unavailable")
+	}
+	defer cli.Close()
+
+	liveRef := liveContainerRef(req)
+	targetInspect, err := cli.ContainerInspect(ctx, liveRef)
+	if err != nil {
+		return nil, fmt.Errorf("inspect target container: %w", err)
+	}
+	targetID := strings.TrimSpace(targetInspect.ID)
+	targetName := strings.TrimSpace(strings.TrimPrefix(targetInspect.Name, "/"))
+	targetProject := ""
+	targetService := ""
+	if targetInspect.Config != nil && targetInspect.Config.Labels != nil {
+		targetProject = strings.TrimSpace(targetInspect.Config.Labels["com.docker.compose.project"])
+		targetService = strings.TrimSpace(targetInspect.Config.Labels["com.docker.compose.service"])
+	}
+
+	list, err := cli.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list containers: %w", err)
+	}
+
+	out := make([]dependentRestartTarget, 0)
+	seen := map[string]struct{}{}
+	for _, c := range list {
+		cid := strings.TrimSpace(c.ID)
+		if cid == "" || cid == targetID {
+			continue
+		}
+		inspect, err := cli.ContainerInspect(ctx, cid)
+		if err != nil {
+			continue
+		}
+		if isDependentOnTarget(inspect, targetID, targetName, targetProject, targetService) {
+			name := strings.TrimSpace(strings.TrimPrefix(inspect.Name, "/"))
+			if name == "" && len(c.Names) > 0 {
+				name = strings.TrimSpace(strings.TrimPrefix(c.Names[0], "/"))
+			}
+			if _, ok := seen[cid]; ok {
+				continue
+			}
+			seen[cid] = struct{}{}
+			out = append(out, dependentRestartTarget{ID: cid, Name: name})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func isDependentOnTarget(inspect container.InspectResponse, targetID, targetName, targetProject, targetService string) bool {
+	if inspect.ContainerJSONBase != nil && inspect.ContainerJSONBase.HostConfig != nil {
+		networkMode := strings.TrimSpace(string(inspect.ContainerJSONBase.HostConfig.NetworkMode))
+		if strings.HasPrefix(networkMode, "container:") {
+			ref := strings.TrimSpace(strings.TrimPrefix(networkMode, "container:"))
+			if ref != "" {
+				if strings.EqualFold(ref, targetID) || strings.EqualFold(ref, targetName) {
+					return true
+				}
+				if len(targetID) >= 12 && strings.EqualFold(ref, targetID[:12]) {
+					return true
+				}
+			}
+		}
+	}
+	if inspect.Config == nil || inspect.Config.Labels == nil {
+		return false
+	}
+	if targetProject == "" || targetService == "" {
+		return false
+	}
+	labels := inspect.Config.Labels
+	if strings.TrimSpace(labels["com.docker.compose.project"]) != targetProject {
+		return false
+	}
+	dependsRaw := strings.TrimSpace(labels["com.docker.compose.depends_on"])
+	if dependsRaw == "" {
+		return false
+	}
+	normalized := strings.ToLower(dependsRaw)
+	service := strings.ToLower(strings.TrimSpace(targetService))
+	if service == "" {
+		return false
+	}
+	return strings.Contains(normalized, service+":") || strings.Contains(normalized, "\""+service+"\"") || strings.Contains(normalized, service+",") || strings.Contains(normalized, service+" ")
 }
 
 func (s *Service) clearCachedUpdateAvailability(req Request) {
