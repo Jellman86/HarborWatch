@@ -1473,34 +1473,6 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 			writeJSON(w, http.StatusOK, summary)
 		})
 
-		r.Route("/audit", func(r chi.Router) {
-			r.Get("/jobs", func(w http.ResponseWriter, r *http.Request) {
-				if auditService == nil {
-					writeError(w, http.StatusServiceUnavailable, "audit_service_unavailable", "Audit service not initialized")
-					return
-				}
-				jobs, err := auditService.ListAuditJobs(r.Context())
-				if err != nil {
-					writeError(w, http.StatusInternalServerError, "audit_query_failed", err.Error())
-					return
-				}
-				writeJSON(w, http.StatusOK, jobs)
-			})
-
-			r.Get("/jobs/{id}/steps", func(w http.ResponseWriter, r *http.Request) {
-				if auditService == nil {
-					writeError(w, http.StatusServiceUnavailable, "audit_service_unavailable", "Audit service not initialized")
-					return
-				}
-				steps, err := auditService.GetAuditJobSteps(r.Context(), chi.URLParam(r, "id"))
-				if err != nil {
-					writeError(w, http.StatusInternalServerError, "audit_steps_query_failed", err.Error())
-					return
-				}
-				writeJSON(w, http.StatusOK, steps)
-			})
-		})
-
 		r.Route("/ai", func(r chi.Router) {
 			r.Post("/fleet-advice", func(w http.ResponseWriter, r *http.Request) {
 				var containers []gen.ContainerSummary
@@ -1946,6 +1918,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 		registerSettingsRoutes(r, adminDeps)
 		registerScanRoutes(r, adminDeps)
 		registerUpdateRoutes(r, adminDeps)
+		registerAuditRoutes(r, adminDeps)
 		registerPortainerRoutes(r, adminDeps)
 	})
 
