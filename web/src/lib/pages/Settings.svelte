@@ -2316,8 +2316,7 @@
     }
 
     .settings-topbar {
-        position: sticky;
-        top: 0.5rem;
+        position: static;
         z-index: 30;
         padding: 0.9rem 1rem;
         border-radius: 1rem;
@@ -2331,15 +2330,13 @@
     }
 
     .settings-tab-strip {
-        position: sticky;
-        top: 7.1rem;
+        position: static;
         z-index: 25;
         box-shadow: 0 8px 24px -22px rgb(15 23 42 / 0.4);
     }
 
     .settings-subtab-strip {
-        position: sticky;
-        top: 10.7rem;
+        position: static;
         z-index: 15;
         box-shadow: 0 8px 24px -24px rgb(15 23 42 / 0.35);
     }
@@ -2402,5 +2399,22 @@
         background-image:
             linear-gradient(rgb(148 163 184 / 0.05) 1px, transparent 1px),
             linear-gradient(90deg, rgb(148 163 184 / 0.05) 1px, transparent 1px);
+    }
+
+    @media (min-width: 768px) {
+        .settings-topbar {
+            position: sticky;
+            top: 0.5rem;
+        }
+
+        .settings-tab-strip {
+            position: sticky;
+            top: 7.1rem;
+        }
+
+        .settings-subtab-strip {
+            position: sticky;
+            top: 10.7rem;
+        }
     }
 </style>
