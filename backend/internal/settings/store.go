@@ -65,12 +65,19 @@ type Settings struct {
 	PortainerTestingPassed             bool   `json:"portainerTestingPassed"`
 
 	// Metadata (read-only info for UI)
-	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
+	DashboardLastUpdateDetectedCount int             `json:"dashboardLastUpdateDetectedCount"`
+	DashboardLastUpdateCheckAt       int64           `json:"dashboardLastUpdateCheckAt"`
+	EnvironmentOverrides             map[string]bool `json:"environmentOverrides"`
 }
 
 type Store struct {
 	db *sql.DB
 }
+
+const (
+	dashboardUpdateDetectedCountKey = "dashboard_update_detected_count"
+	dashboardUpdateCheckedAtKey     = "dashboard_update_checked_at"
+)
 
 func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
@@ -230,6 +237,10 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.AITestingPassed = parseStoredBool(value, st.AITestingPassed)
 		case "portainer_testing_passed":
 			st.PortainerTestingPassed = parseStoredBool(value, st.PortainerTestingPassed)
+		case dashboardUpdateDetectedCountKey:
+			st.DashboardLastUpdateDetectedCount = parseStoredInt(value, 0, 0, 1000000)
+		case dashboardUpdateCheckedAtKey:
+			st.DashboardLastUpdateCheckAt = parseStoredInt64(value, 0, 0, 1<<62)
 		}
 	}
 
@@ -477,6 +488,35 @@ INSERT INTO app_settings(key, value) VALUES(?, ?)
 ON CONFLICT(key) DO UPDATE SET value=excluded.value
 `, dbKey, val)
 		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (s *Store) SetDashboardUpdateCheckSnapshot(ctx context.Context, detectedCount int, checkedAt int64) error {
+	if detectedCount < 0 {
+		detectedCount = 0
+	}
+	if checkedAt < 0 {
+		checkedAt = 0
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for key, val := range map[string]string{
+		dashboardUpdateDetectedCountKey: intString(detectedCount),
+		dashboardUpdateCheckedAtKey:     int64String(checkedAt),
+	} {
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO app_settings(key, value) VALUES(?, ?)
+ON CONFLICT(key) DO UPDATE SET value=excluded.value
+`, key, val); err != nil {
 			return err
 		}
 	}

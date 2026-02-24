@@ -210,3 +210,21 @@ func TestSaveAndGetLifecycleDefaultPolicySettings(t *testing.T) {
 		t.Fatalf("expected DefaultRestartOnUnhealthy=true")
 	}
 }
+
+func TestSetDashboardUpdateCheckSnapshotPersistsReadOnlyFields(t *testing.T) {
+	store := newTestStore(t)
+	if err := store.SetDashboardUpdateCheckSnapshot(context.Background(), 14, 1700000123); err != nil {
+		t.Fatalf("set dashboard update snapshot: %v", err)
+	}
+
+	got, err := store.Get(context.Background())
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if got.DashboardLastUpdateDetectedCount != 14 {
+		t.Fatalf("expected DashboardLastUpdateDetectedCount=14, got %d", got.DashboardLastUpdateDetectedCount)
+	}
+	if got.DashboardLastUpdateCheckAt != 1700000123 {
+		t.Fatalf("expected DashboardLastUpdateCheckAt=1700000123, got %d", got.DashboardLastUpdateCheckAt)
+	}
+}

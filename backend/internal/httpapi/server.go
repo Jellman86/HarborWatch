@@ -511,20 +511,28 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task docker_system_prune: %v", err))
 			}
 
-			schedSvc.RegisterTask("container_update_check", func() scheduler.Task {
-				return dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
+			newUpdateCheckTask := func() *dockerengine.UpdateCheckTask {
+				task := dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
 					return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_check")
 				})
+				if settingsStore != nil {
+					task = task.WithCompletionCallback(func(ctx context.Context, summary dockerengine.UpdateCheckSummary) {
+						if err := settingsStore.SetDashboardUpdateCheckSnapshot(ctx, summary.AvailableCount, summary.CheckedAt); err != nil && diagService != nil {
+							diagService.Log("WARN", "Scheduler", fmt.Sprintf("Failed to persist update check dashboard snapshot: %v", err))
+						}
+					})
+				}
+				return task
+			}
+
+			schedSvc.RegisterTask("container_update_check", func() scheduler.Task {
+				return newUpdateCheckTask()
 			})
-			if err := schedSvc.AddTask("0 0 0 * * *", dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
-				return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_check")
-			}), true); err != nil && diagService != nil {
+			if err := schedSvc.AddTask("0 0 0 * * *", newUpdateCheckTask(), true); err != nil && diagService != nil {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_check: %v", err))
 			}
 			refreshUpdateStatus := func(ctx context.Context) error {
-				return dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
-					return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_check")
-				}).Run(ctx)
+				return newUpdateCheckTask().Run(ctx)
 			}
 
 			schedSvc.RegisterTask("container_update_apply", func() scheduler.Task {

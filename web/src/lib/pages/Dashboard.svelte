@@ -18,6 +18,8 @@
     let schedules = $state<any[]>([]);
     let recentScanJobs = $state<ScanJobStatus[]>([]);
     let fleetAdviceExpanded = $state(false);
+    let fleetCriticalVulnerabilityCount = $state(0);
+    let fleetRiskSummaryLoaded = $state(false);
 
     async function loadData() {
         try {
@@ -75,6 +77,13 @@
     let safeContainers = $derived(containers || []);
     let runningCount = $derived(safeContainers.filter((c: ContainerSummary) => c.state === 'running').length);
     let updateCount = $derived(safeContainers.filter((c: ContainerSummary) => c.updateAvailable).length);
+    let persistedUpdateCount = $derived(Math.max(0, configStore.settings?.dashboardLastUpdateDetectedCount || 0));
+    let persistedUpdateCheckedAt = $derived(Math.max(0, configStore.settings?.dashboardLastUpdateCheckAt || 0));
+    let displayedUpdateCount = $derived(updateCount > 0 ? updateCount : persistedUpdateCount);
+    let showingPersistedUpdateCount = $derived(updateCount === 0 && persistedUpdateCount > 0);
+    let displayedCriticalVulnerabilityCount = $derived(
+        fleetRiskSummaryLoaded ? fleetCriticalVulnerabilityCount : (scanSummary?.critical || 0)
+    );
     let recentSecurityScanCount = $derived(
         (recentScanJobs || []).filter((j: ScanJobStatus) =>
             (j.source === "trivy" || j.source === "clamav") &&
@@ -112,7 +121,12 @@
             const res = await fetch("/api/docker/images/intelligence");
             if (res.ok) {
                 const data = await res.json();
-                return (Array.isArray(data) ? data : [])
+                const rows = Array.isArray(data) ? data : [];
+                fleetCriticalVulnerabilityCount = rows
+                    .filter(img => !!img.inUse)
+                    .reduce((sum, img) => sum + (img.vulnerabilityCritical || 0), 0);
+                fleetRiskSummaryLoaded = true;
+                return rows
                     .filter(img => (img.vulnerabilityCritical || 0) > 0 || (img.vulnerabilityHigh || 0) > 0)
                     .map(img => {
                         // Find a container using this image to provide a link
@@ -167,7 +181,12 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Updates Detected</p>
-            <p class="text-3xl font-black {updateCount > 0 ? 'text-amber-500' : 'text-slate-900 dark:text-white'} tracking-tighter">{updateCount}</p>
+            <p class="text-3xl font-black {displayedUpdateCount > 0 ? 'text-amber-500' : 'text-slate-900 dark:text-white'} tracking-tighter">{displayedUpdateCount}</p>
+            {#if showingPersistedUpdateCount}
+                <p class="text-[9px] text-slate-400 mt-1 font-medium">
+                    Last update check snapshot{#if persistedUpdateCheckedAt > 0}: {new Date(persistedUpdateCheckedAt * 1000).toLocaleString()}{/if}
+                </p>
+            {/if}
         </button>
 
         <button 
@@ -178,7 +197,8 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vulnerabilities</p>
-            <p class="text-3xl font-black {(scanSummary?.critical || 0) > 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'} tracking-tighter">{scanSummary?.critical || 0}</p>
+            <p class="text-3xl font-black {displayedCriticalVulnerabilityCount > 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'} tracking-tighter">{displayedCriticalVulnerabilityCount}</p>
+            <p class="text-[9px] text-slate-400 mt-1 font-medium">Fleet critical findings (persisted image intelligence)</p>
         </button>
 
         <button 

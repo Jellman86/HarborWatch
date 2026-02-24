@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/moby/moby/client"
@@ -133,6 +134,13 @@ func byteIndex(s string, b byte) int {
 type UpdateCheckTask struct {
 	docker *client.Client
 	allow  func(ctx context.Context, containerID string) bool
+	onDone func(ctx context.Context, summary UpdateCheckSummary)
+}
+
+type UpdateCheckSummary struct {
+	UniqueImages   int
+	AvailableCount int
+	CheckedAt      int64
 }
 
 func NewUpdateCheckTask(cli *client.Client, allow ...func(ctx context.Context, containerID string) bool) *UpdateCheckTask {
@@ -141,6 +149,11 @@ func NewUpdateCheckTask(cli *client.Client, allow ...func(ctx context.Context, c
 		task.allow = allow[0]
 	}
 	return task
+}
+
+func (t *UpdateCheckTask) WithCompletionCallback(fn func(ctx context.Context, summary UpdateCheckSummary)) *UpdateCheckTask {
+	t.onDone = fn
+	return t
 }
 
 func (t *UpdateCheckTask) Name() string { return "container_update_check" }
@@ -168,5 +181,18 @@ func (t *UpdateCheckTask) Run(ctx context.Context) error {
 	}
 
 	RefreshUpdateStatus(ctx, t.docker, uniqueImages)
+	if t.onDone != nil {
+		availableCount := 0
+		for _, img := range uniqueImages {
+			if globalUpdateStore.Get(img) {
+				availableCount++
+			}
+		}
+		t.onDone(ctx, UpdateCheckSummary{
+			UniqueImages:   len(uniqueImages),
+			AvailableCount: availableCount,
+			CheckedAt:      time.Now().UTC().Unix(),
+		})
+	}
 	return nil
 }
