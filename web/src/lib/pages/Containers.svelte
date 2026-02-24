@@ -21,6 +21,8 @@
     let lastRiskKey = $state("");
     let aiBlockedByContainer = $state<Record<string, AIBlockedSignal>>({});
     let lastAIBlockedKey = $state("");
+    let rulesSummaryByContainer = $state<Record<string, FleetRulesSummary>>({});
+    let lastRulesSummaryKey = $state("");
     let searchQuery = $state("");
     let showIgnored = $state(false);
     let sortBy = $state<"name" | "state" | "memory" | "cpu">("name");
@@ -79,6 +81,14 @@
         updatedAt?: number;
     }
 
+    interface FleetRulesSummary {
+        containerId: string;
+        containerName?: string;
+        updatePolicy?: string;
+        inheritAutomation?: boolean;
+        upgradesAutomation?: boolean;
+    }
+
     const formatId = (id: string) => (id.length > 12 ? id.slice(0, 12) : id);
 
     const stateColor = (state: string) => {
@@ -107,10 +117,43 @@
         }
     };
 
-    const getPolicy = (labels: Record<string, string>) => {
-        if (!labels) return null;
-        return labels["harborwatch.update.policy"] || (labels["harborwatch.enable"] === "true" ? "auto" : null);
-    };
+    function lookupRulesSummary(summary: ContainerSummary): FleetRulesSummary | null {
+        const id = String(summary.id || "").trim();
+        if (!id) return null;
+        if (rulesSummaryByContainer[id]) return rulesSummaryByContainer[id];
+        for (const [key, value] of Object.entries(rulesSummaryByContainer)) {
+            if (!key) continue;
+            if (id.startsWith(key) || key.startsWith(id)) return value;
+        }
+        return null;
+    }
+
+    function automationPolicyBadge(summary: ContainerSummary): { label: string; tone: "auto" | "manual" | "locked"; title: string } {
+        const rule = lookupRulesSummary(summary);
+        const policy = String(rule?.updatePolicy || "").trim().toLowerCase();
+        if (policy === "locked") {
+            return { label: "Locked", tone: "locked", title: "Automation policy is locked" };
+        }
+        const inherits = rule?.inheritAutomation !== false;
+        const upgradesEnabled = rule?.upgradesAutomation !== false;
+        if (policy === "auto" || (inherits && upgradesEnabled)) {
+            return { label: "Automatic", tone: "auto", title: inherits ? "Automatic (Follows global policy)" : "Automatic" };
+        }
+        if (policy === "manual") {
+            return { label: "Manual", tone: "manual", title: "Manual Control Only" };
+        }
+
+        // Legacy label-based fallback for old deployments or partial API failures.
+        const labels = summary.labels || {};
+        const legacy = labels["harborwatch.update.policy"] || (labels["harborwatch.enable"] === "true" ? "auto" : "");
+        if (legacy.toLowerCase() === "auto") {
+            return { label: "Automatic", tone: "auto", title: "Automatic (Legacy label policy)" };
+        }
+        if (legacy.toLowerCase() === "locked") {
+            return { label: "Locked", tone: "locked", title: "Automation policy is locked (Legacy label policy)" };
+        }
+        return { label: "Manual", tone: "manual", title: "Manual Control Only" };
+    }
 
     const getIntelURL = (labels: Record<string, string>) => {
         if (!labels) return null;
@@ -389,6 +432,29 @@
         }
     }
 
+    async function loadRulesSummaries() {
+        try {
+            const res = await fetch("/api/docker/containers/rules-summary");
+            if (!res.ok) return;
+            const rows = await res.json();
+            const map: Record<string, FleetRulesSummary> = {};
+            for (const row of Array.isArray(rows) ? rows : []) {
+                const id = String(row?.containerId || "").trim();
+                if (!id) continue;
+                map[id] = {
+                    containerId: id,
+                    containerName: String(row?.containerName || "").trim(),
+                    updatePolicy: String(row?.updatePolicy || "").trim(),
+                    inheritAutomation: !!row?.inheritAutomation,
+                    upgradesAutomation: !!row?.upgradesAutomation,
+                };
+            }
+            rulesSummaryByContainer = map;
+        } catch {
+            // Non-fatal: fleet cards can still fall back to legacy labels.
+        }
+    }
+
     async function loadIntelReadiness() {
         loadingIntelReadiness = true;
         try {
@@ -507,6 +573,17 @@
     });
 
     $effect(() => {
+        const key = (safeContainers || [])
+            .map((c) => String(c.id || "").trim())
+            .filter(Boolean)
+            .sort()
+            .join("|");
+        if (!key || key === lastRulesSummaryKey) return;
+        lastRulesSummaryKey = key;
+        loadRulesSummaries();
+    });
+
+    $effect(() => {
         if (pageIndex > totalContainerPages - 1) {
             pageIndex = Math.max(0, totalContainerPages - 1);
         }
@@ -514,6 +591,7 @@
 
     onMount(() => {
         loadIgnoredContainerTokens();
+        loadRulesSummaries();
     });
 </script>
 
@@ -725,19 +803,26 @@
 
                     <div class="flex items-center justify-between text-[10px] pt-1">
                         <span class="text-slate-500 uppercase tracking-widest font-black">Automation Policy</span>
-                        {#if getPolicy(c.labels)}
-                            <div class="flex items-center gap-1.5 px-2 py-0.5 bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 rounded-md" title={`Policy: ${getPolicy(c.labels)}`}>
+                        {#if automationPolicyBadge(c).tone === "auto"}
+                            <div class="flex items-center gap-1.5 px-2 py-0.5 bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400 rounded-md" title={automationPolicyBadge(c).title}>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                     <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14H8a2 2 0 002 2 2 2 0 002-2z" />
                                 </svg>
-                                <span class="text-[9px] font-black uppercase tracking-tighter">{getPolicy(c.labels)}</span>
+                                <span class="text-[9px] font-black uppercase tracking-tighter">{automationPolicyBadge(c).label}</span>
+                            </div>
+                        {:else if automationPolicyBadge(c).tone === "locked"}
+                            <div class="flex items-center gap-1.5 px-2 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-md" title={automationPolicyBadge(c).title}>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4z" clip-rule="evenodd" />
+                                </svg>
+                                <span class="text-[9px] font-black uppercase tracking-tighter">{automationPolicyBadge(c).label}</span>
                             </div>
                         {:else}
-                            <div class="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 rounded-md" title="Manual Control Only">
+                            <div class="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 rounded-md" title={automationPolicyBadge(c).title}>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd" />
                                 </svg>
-                                <span class="text-[9px] font-black uppercase tracking-tighter">Manual</span>
+                                <span class="text-[9px] font-black uppercase tracking-tighter">{automationPolicyBadge(c).label}</span>
                             </div>
                         {/if}
                     </div>

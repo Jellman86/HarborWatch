@@ -502,6 +502,41 @@ func TestDockerContainersEndpoint(t *testing.T) {
 	}
 }
 
+func TestDockerContainerRulesSummaryEndpoint(t *testing.T) {
+	rulesSvc := staticRulesService{
+		rule: rules.ContainerRules{
+			UpdatePolicy:       "auto",
+			InheritAutomation:  true,
+			UpgradesAutomation: true,
+		},
+	}
+	docker := fakeDockerClient{
+		containers: []gen.ContainerSummary{
+			{ID: "c1", Names: []string{"/web"}, Image: "nginx:latest", State: "running", Labels: map[string]string{}},
+			{ID: "c2", Names: []string{"/db"}, Image: "postgres:16", State: "running", Labels: map[string]string{}},
+		},
+	}
+	mux := NewMuxWithDeps(nil, docker, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, rulesSvc, nil, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers/rules-summary", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got []map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&got); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(got))
+	}
+	if got[0]["containerId"] == nil {
+		t.Fatalf("expected containerId field in row")
+	}
+	if got[0]["updatePolicy"] != "auto" {
+		t.Fatalf("expected updatePolicy=auto, got %#v", got[0]["updatePolicy"])
+	}
+}
+
 func TestContainerDetailIncludesLifecycleFlags(t *testing.T) {
 	rulesSvc := staticRulesService{
 		rule: rules.ContainerRules{

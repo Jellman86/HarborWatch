@@ -923,6 +923,52 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 
 	r.Route("/api", func(r chi.Router) {
 		r.Route("/docker", func(r chi.Router) {
+			r.Get("/containers/rules-summary", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				if rulesService == nil {
+					writeError(w, http.StatusServiceUnavailable, "rules_unavailable", "Rules service not initialized")
+					return
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+				defer cancel()
+				containers, err := dockerClient.ListContainers(ctx)
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "docker_error", err.Error())
+					return
+				}
+				type ruleSummaryRow struct {
+					ContainerID        string `json:"containerId"`
+					ContainerName      string `json:"containerName,omitempty"`
+					UpdatePolicy       string `json:"updatePolicy"`
+					InheritAutomation  bool   `json:"inheritAutomation"`
+					UpgradesAutomation bool   `json:"upgradesAutomation"`
+				}
+				rows := make([]ruleSummaryRow, 0, len(containers))
+				for _, summary := range containers {
+					id := strings.TrimSpace(summary.ID)
+					if id == "" {
+						continue
+					}
+					name := strings.TrimSpace(trimContainerName(summary.Names))
+					rule, err := rulesService.Get(ctx, id, name)
+					if err != nil {
+						continue
+					}
+					rule = effectiveContainerRules(ctx, summary, rule, settingsService, diagService)
+					rows = append(rows, ruleSummaryRow{
+						ContainerID:        id,
+						ContainerName:      name,
+						UpdatePolicy:       normalizeUpdatePolicy(rule.UpdatePolicy),
+						InheritAutomation:  rule.InheritAutomation,
+						UpgradesAutomation: rule.UpgradesAutomation,
+					})
+				}
+				writeJSON(w, http.StatusOK, rows)
+			})
+
 			r.Get("/containers", func(w http.ResponseWriter, r *http.Request) {
 				if dockerClient == nil {
 					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
