@@ -1795,18 +1795,20 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 				writeJSON(w, http.StatusOK, history)
 			})
 
-			r.Get("/audit-compose/{id}", func(w http.ResponseWriter, r *http.Request) {
-				if aiService == nil || !aiService.HasProvider() {
-					writeError(w, http.StatusServiceUnavailable, "ai_unavailable", "AI provider not configured")
-					return
-				}
+			r.Get("/audit-compose/{id}/config", func(w http.ResponseWriter, r *http.Request) {
 				if dockerClient == nil {
 					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
 					return
 				}
 				id := chi.URLParam(r, "id")
-				ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+				scope := normalizeComposeConfigScope(r.URL.Query().Get("scope"))
+				ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 				defer cancel()
+
+				summary := gen.ContainerSummary{ID: id}
+				if s, err := dockerClient.GetContainer(ctx, id); err == nil {
+					summary = s
+				}
 
 				var pc *portainer.Client
 				if currentPortainerService != nil {
@@ -1821,7 +1823,52 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					return
 				}
 
-				analysis, err := aiService.AuditCompose(ctx, config)
+				view := buildComposeConfigView(config, summary, scope)
+				writeJSON(w, http.StatusOK, composeConfigPreviewResponse{
+					Config:               view.Config,
+					ConfigRequestedScope: view.RequestedScope,
+					ConfigAppliedScope:   view.AppliedScope,
+					ConfigMode:           view.Mode,
+					ComposeProject:       view.ComposeProject,
+					ComposeService:       view.ComposeService,
+					ConfigNote:           view.Note,
+				})
+			})
+
+			r.Get("/audit-compose/{id}", func(w http.ResponseWriter, r *http.Request) {
+				if aiService == nil || !aiService.HasProvider() {
+					writeError(w, http.StatusServiceUnavailable, "ai_unavailable", "AI provider not configured")
+					return
+				}
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				id := chi.URLParam(r, "id")
+				scope := normalizeComposeConfigScope(r.URL.Query().Get("scope"))
+				ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+				defer cancel()
+
+				summary := gen.ContainerSummary{ID: id}
+				if s, err := dockerClient.GetContainer(ctx, id); err == nil {
+					summary = s
+				}
+
+				var pc *portainer.Client
+				if currentPortainerService != nil {
+					if c, ok := currentPortainerService.(*portainer.Client); ok {
+						pc = c
+					}
+				}
+
+				config, err := dockerClient.GetContainerComposeConfig(ctx, id, pc)
+				if err != nil {
+					writeError(w, http.StatusNotFound, "config_not_found", err.Error())
+					return
+				}
+
+				view := buildComposeConfigView(config, summary, scope)
+				analysis, err := aiService.AuditCompose(ctx, view.Config)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, "ai_error", err.Error())
 					return
@@ -1840,21 +1887,23 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					}
 				}
 				containerName := id
-				if dockerClient != nil {
-					if summary, err := dockerClient.GetContainer(ctx, id); err == nil {
-						if name := containerDisplayName(summary); name != "" {
-							containerName = name
-						}
-					}
+				if name := containerDisplayName(summary); name != "" {
+					containerName = name
 				}
 
 				resp := composeAuditResponse{
-					Config:           config,
-					Analysis:         markdown,
-					AnalysisMarkdown: markdown,
-					AnalysisHTML:     rendered,
-					Provider:         provider,
-					Model:            model,
+					Config:               view.Config,
+					ConfigRequestedScope: view.RequestedScope,
+					ConfigAppliedScope:   view.AppliedScope,
+					ConfigMode:           view.Mode,
+					ComposeProject:       view.ComposeProject,
+					ComposeService:       view.ComposeService,
+					ConfigNote:           view.Note,
+					Analysis:             markdown,
+					AnalysisMarkdown:     markdown,
+					AnalysisHTML:         rendered,
+					Provider:             provider,
+					Model:                model,
 				}
 				if composeAuditStore == nil {
 					resp.Persisted = false
@@ -1868,7 +1917,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					ContainerName:    containerName,
 					Provider:         provider,
 					Model:            model,
-					ComposeConfig:    config,
+					ComposeConfig:    view.Config,
 					AnalysisMarkdown: markdown,
 					AnalysisHTML:     rendered,
 				})

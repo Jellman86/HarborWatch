@@ -43,6 +43,16 @@
         updatedAt?: number;
     }
 
+    interface ComposeConfigPreview {
+        config: string;
+        configRequestedScope?: "service" | "full";
+        configAppliedScope?: "service" | "full";
+        configMode?: "compose" | "classic-docker";
+        composeProject?: string;
+        composeService?: string;
+        configNote?: string;
+    }
+
     let { id, params, onNavigate } = $props<{
         id: string;
         params?: { tab?: string };
@@ -56,6 +66,13 @@
     let composeAuditHistory = $state<ComposeAuditRecordSummary[]>([]);
     let loadingComposeAuditHistory = $state(false);
     let selectedComposeAuditId = $state("");
+    let loadingComposeConfig = $state(false);
+    let composeAuditScope = $state<"service" | "full">("service");
+    let composeConfigAppliedScope = $state<"service" | "full">("full");
+    let composeConfigMode = $state<"compose" | "classic-docker">("classic-docker");
+    let composeConfigNote = $state("");
+    let composeConfigProject = $state("");
+    let composeConfigService = $state("");
     let loading = $state(true);
     let auditing = $state(false);
     let savingRules = $state(false);
@@ -128,7 +145,8 @@
                     loadMalwareJobsForContainer(),
                     loadUpdateHistory(),
                     loadContainerIntel(),
-                    loadComposeAuditHistory()
+                    loadComposeAuditHistory(),
+                    loadComposeConfigPreview()
                 ]);
             } else {
                 const body = await res.json().catch(() => ({}));
@@ -145,6 +163,9 @@
                 aiAuditMarkdown = "";
                 aiAuditHtml = "";
                 configYaml = "";
+                composeConfigNote = "";
+                composeConfigProject = "";
+                composeConfigService = "";
             }
         } catch (e) {
             if (!silent) {
@@ -160,10 +181,49 @@
             aiAuditMarkdown = "";
             aiAuditHtml = "";
             configYaml = "";
+            composeConfigNote = "";
+            composeConfigProject = "";
+            composeConfigService = "";
         } finally {
             if (!silent) {
                 loading = false;
             }
+        }
+    }
+
+    async function loadComposeConfigPreview() {
+        const containerId = activeContainerId();
+        if (!containerId) {
+            configYaml = "";
+            composeConfigNote = "";
+            composeConfigProject = "";
+            composeConfigService = "";
+            return;
+        }
+        loadingComposeConfig = true;
+        try {
+            const res = await fetch(`/api/ai/audit-compose/${encodeURIComponent(containerId)}/config?scope=${encodeURIComponent(composeAuditScope)}`);
+            if (!res.ok) {
+                if (res.status === 404) {
+                    configYaml = "# Configuration source not found for this container.";
+                    composeConfigNote = "No compose file could be discovered. This may be a classic Docker container or an ephemeral runtime-only container.";
+                    composeConfigProject = "";
+                    composeConfigService = "";
+                    composeConfigMode = "classic-docker";
+                }
+                return;
+            }
+            const data: ComposeConfigPreview = await res.json();
+            configYaml = data.config || "";
+            composeConfigAppliedScope = (data.configAppliedScope === "service" ? "service" : "full");
+            composeConfigMode = (data.configMode === "compose" ? "compose" : "classic-docker");
+            composeConfigNote = data.configNote || "";
+            composeConfigProject = data.composeProject || "";
+            composeConfigService = data.composeService || "";
+        } catch {
+            // Leave previous preview intact if refresh fails.
+        } finally {
+            loadingComposeConfig = false;
         }
     }
 
@@ -412,10 +472,15 @@
         aiAuditMarkdown = "";
         aiAuditHtml = "";
         try {
-            const res = await fetch(`/api/ai/audit-compose/${encodeURIComponent(containerId)}`);
+            const res = await fetch(`/api/ai/audit-compose/${encodeURIComponent(containerId)}?scope=${encodeURIComponent(composeAuditScope)}`);
             if (res.ok) {
                 const data = await res.json();
                 configYaml = data.config;
+                composeConfigAppliedScope = data.configAppliedScope === "service" ? "service" : "full";
+                composeConfigMode = data.configMode === "compose" ? "compose" : "classic-docker";
+                composeConfigNote = data.configNote || composeConfigNote;
+                composeConfigProject = data.composeProject || composeConfigProject;
+                composeConfigService = data.composeService || composeConfigService;
                 aiAuditMarkdown = data.analysisMarkdown || data.analysis || "";
                 aiAuditHtml = data.analysisHtml || "";
                 selectedComposeAuditId = data.recordId || "";
@@ -1454,16 +1519,59 @@
 
                     <div class="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
                         <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
-                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Effective Compose Config</span>
-                            {#if configStore.aiActive}
-                                <button 
-                                    onclick={runAudit}
-                                    disabled={auditing}
-                                    class="px-4 py-1.5 bg-brand-600 text-white rounded-lg font-black uppercase text-[9px] tracking-widest hover:bg-brand-700 transition-all disabled:opacity-50"
+                            <div class="min-w-0">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Effective Compose Config</span>
+                                <div class="mt-1 flex flex-wrap items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest {composeConfigMode === 'compose' ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30' : 'bg-slate-700 text-slate-300 border border-slate-600'}">
+                                        {composeConfigMode === 'compose' ? 'Compose / Stack' : 'Classic Docker'}
+                                    </span>
+                                    <span class="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest {composeConfigAppliedScope === 'service' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'}">
+                                        Showing {composeConfigAppliedScope === 'service' ? 'Service Section' : 'Full Config'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label for="compose-audit-scope" class="text-[9px] font-black uppercase tracking-widest text-slate-400">AI Scope</label>
+                                <select
+                                    id="compose-audit-scope"
+                                    bind:value={composeAuditScope}
+                                    onchange={() => loadComposeConfigPreview()}
+                                    class="px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 text-[10px] font-semibold"
                                 >
-                                    {auditing ? 'Analyzing...' : 'Audit with AI'}
+                                    <option value="service">Service Only</option>
+                                    <option value="full">Full Compose</option>
+                                </select>
+                                <button
+                                    type="button"
+                                    onclick={loadComposeConfigPreview}
+                                    disabled={loadingComposeConfig}
+                                    class="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 font-black uppercase text-[9px] tracking-widest hover:bg-slate-800 disabled:opacity-50"
+                                >
+                                    {loadingComposeConfig ? 'Loading...' : 'Refresh'}
                                 </button>
+                                {#if configStore.aiActive}
+                                    <button 
+                                        onclick={runAudit}
+                                        disabled={auditing}
+                                        class="px-4 py-1.5 bg-brand-600 text-white rounded-lg font-black uppercase text-[9px] tracking-widest hover:bg-brand-700 transition-all disabled:opacity-50"
+                                    >
+                                        {auditing ? 'Analyzing...' : 'Audit with AI'}
+                                    </button>
+                                {/if}
+                            </div>
+                        </div>
+                        <div class="px-4 py-3 border-b border-slate-800/80 bg-slate-950/40 space-y-1">
+                            {#if composeConfigMode === 'compose' && composeConfigService}
+                                <p class="text-[10px] text-slate-300">
+                                    Service: <span class="font-semibold text-white">{composeConfigService}</span>
+                                    {#if composeConfigProject}
+                                        <span class="text-slate-500"> | </span>Project: <span class="font-semibold text-slate-100">{composeConfigProject}</span>
+                                    {/if}
+                                </p>
                             {/if}
+                            <p class="text-[10px] text-slate-400">
+                                {composeConfigNote || "Showing the configuration HarborWatch will send to the AI when you run a compose audit."}
+                            </p>
                         </div>
                         <pre class="p-8 text-emerald-500 font-mono text-xs overflow-x-auto leading-relaxed"><code>{configYaml || (configStore.aiActive ? '# Automated discovery pending. Click "Audit with AI" to retrieve, analyze, and persist.' : '# Automated discovery pending.')}</code></pre>
                     </div>
