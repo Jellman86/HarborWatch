@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	_ "modernc.org/sqlite"
 )
 
@@ -17,11 +18,28 @@ func newTestStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init store: %v", err)
 	}
 	return store
+}
+
+func TestInitRequiresMigratedSchema(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err == nil {
+		t.Fatalf("expected init to fail when app_settings table is missing")
+	}
 }
 
 func TestGetDefaultsPrepopulateHarborWatchIgnore(t *testing.T) {

@@ -40,17 +40,15 @@ func NewService(db *sql.DB) *Service {
 }
 
 func (s *Service) Init(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS internal_logs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  timestamp INTEGER NOT NULL,
-  level TEXT NOT NULL,
-  message TEXT NOT NULL,
-  source TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_logs_ts ON internal_logs(timestamp);
-`)
-	return err
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name='internal_logs' LIMIT 1`).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("internal_logs table missing; run schema migrations before diag service init")
+	}
+	if err != nil {
+		return fmt.Errorf("verify internal_logs table: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) GetSystemStatus() SystemStatus {

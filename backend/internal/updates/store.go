@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,79 +21,15 @@ func NewStore(db *sql.DB) *Store {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Init(ctx context.Context) error {
-	// 1. Initial table creation
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS update_runs (
-  id TEXT PRIMARY KEY,
-  container_id TEXT NOT NULL DEFAULT '',
-  container_name TEXT NOT NULL DEFAULT '',
-  target_image TEXT NOT NULL,
-  validate_url TEXT NOT NULL,
-  status TEXT NOT NULL,
-  progress INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  error TEXT NOT NULL DEFAULT '',
-  ai_analysis TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS update_steps (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  run_id TEXT NOT NULL,
-  step TEXT NOT NULL,
-  status TEXT NOT NULL,
-  message TEXT NOT NULL,
-  ts INTEGER NOT NULL
-);
-`)
-	if err != nil {
-		return fmt.Errorf("init update tables: %w", err)
-	}
-
-	if err := s.ensureColumn(ctx, "update_runs", "progress", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("ensure update_runs.progress: %w", err)
-	}
-	if err := s.ensureColumn(ctx, "update_runs", "container_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
-		return fmt.Errorf("ensure update_runs.container_id: %w", err)
-	}
-	if err := s.ensureColumn(ctx, "update_runs", "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
-		return fmt.Errorf("ensure update_runs.container_name: %w", err)
-	}
-	if err := s.ensureColumn(ctx, "update_runs", "ai_analysis", "TEXT NOT NULL DEFAULT ''"); err != nil {
-		return fmt.Errorf("ensure update_runs.ai_analysis: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `
-CREATE INDEX IF NOT EXISTS idx_update_runs_container_updated ON update_runs(container_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_update_runs_container_name_updated ON update_runs(container_name, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_update_runs_status_created ON update_runs(status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_update_steps_run_id_id ON update_steps(run_id, id);
-`); err != nil {
-		return fmt.Errorf("init update indexes: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_update_runs_one_running_per_container ON update_runs(container_id) WHERE status IN ('running','queued')`); err != nil {
-		// Existing installs may already contain duplicate "running" rows from past races. Do not block startup.
-		if !strings.Contains(strings.ToLower(err.Error()), "unique") {
-			return fmt.Errorf("init unique update index: %w", err)
+	for _, table := range []string{"update_runs", "update_steps"} {
+		var exists int
+		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1`, table).Scan(&exists)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("%s table missing; run schema migrations before updates store init", table)
 		}
-	}
-	return nil
-}
-
-func (s *Store) ensureColumn(ctx context.Context, table, column, ddl string) error {
-	query := fmt.Sprintf("SELECT 1 FROM pragma_table_info('%s') WHERE name=? LIMIT 1", table)
-	var exists int
-	err := s.db.QueryRowContext(ctx, query, column).Scan(&exists)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, ddl)
-	if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-			return nil
+		if err != nil {
+			return fmt.Errorf("verify %s table: %w", table, err)
 		}
-		return err
 	}
 	return nil
 }

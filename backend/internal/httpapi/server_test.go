@@ -1042,6 +1042,10 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 	if _, err := migrations.Run(context.Background(), db); err != nil {
 		t.Fatalf("migrations.Run failed: %v", err)
 	}
+	expectedSchemaVersion, err := migrations.CurrentVersion(context.Background(), db)
+	if err != nil {
+		t.Fatalf("migrations.CurrentVersion failed: %v", err)
+	}
 
 	diagSvc := fakeDiagService{
 		logs: []diag.LogEntry{
@@ -1069,8 +1073,8 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 	if payload["components"] == nil {
 		t.Fatalf("expected components in diagnostics snapshot")
 	}
-	if got := asInt(payload["schemaVersion"]); got != 1 {
-		t.Fatalf("expected schemaVersion=1 in diagnostics snapshot, got %v", payload["schemaVersion"])
+	if got := asInt(payload["schemaVersion"]); got != expectedSchemaVersion {
+		t.Fatalf("expected schemaVersion=%d in diagnostics snapshot, got %v", expectedSchemaVersion, payload["schemaVersion"])
 	}
 }
 

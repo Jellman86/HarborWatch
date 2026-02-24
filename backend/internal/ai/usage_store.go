@@ -16,37 +16,17 @@ func NewUsageSQLiteStore(db *sql.DB) *UsageSQLiteStore {
 }
 
 func (s *UsageSQLiteStore) Init(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS ai_usage_events (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	ts INTEGER NOT NULL,
-	provider TEXT NOT NULL,
-	model TEXT NOT NULL,
-	feature TEXT NOT NULL,
-	input_tokens INTEGER NOT NULL DEFAULT 0,
-	output_tokens INTEGER NOT NULL DEFAULT 0,
-	total_tokens INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS ai_conversations (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	ts INTEGER NOT NULL,
-	provider TEXT NOT NULL,
-	model TEXT NOT NULL,
-	feature TEXT NOT NULL,
-	prompt TEXT NOT NULL,
-	response TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS ai_fleet_advice (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	ts INTEGER NOT NULL,
-	inventory TEXT NOT NULL,
-	advice TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_ai_usage_ts ON ai_usage_events(ts);
-CREATE INDEX IF NOT EXISTS idx_ai_usage_provider_model ON ai_usage_events(provider, model);
-CREATE INDEX IF NOT EXISTS idx_ai_conv_ts ON ai_conversations(ts);
-`)
-	return err
+	for _, table := range []string{"ai_usage_events", "ai_conversations", "ai_fleet_advice"} {
+		var exists int
+		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1`, table).Scan(&exists)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("%s table missing; run schema migrations before ai usage store init", table)
+		}
+		if err != nil {
+			return fmt.Errorf("verify %s table: %w", table, err)
+		}
+	}
+	return nil
 }
 
 func (s *UsageSQLiteStore) RecordUsage(ctx context.Context, rec UsageRecord) error {

@@ -48,21 +48,15 @@ func NewService(db *sql.DB, docker *dockerengine.Client, rs *rules.Store, ss *se
 }
 
 func (s *Service) Init(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS remediation_runs (
-    id TEXT PRIMARY KEY,
-    container_id TEXT NOT NULL,
-    container_name TEXT NOT NULL,
-    type TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    status TEXT NOT NULL,
-    error TEXT NOT NULL DEFAULT '',
-    started_at INTEGER NOT NULL,
-    completed_at INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_remediation_runs_container ON remediation_runs(container_id, started_at DESC);
-`)
-	return err
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name='remediation_runs' LIMIT 1`).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("remediation_runs table missing; run schema migrations before health remediation init")
+	}
+	if err != nil {
+		return fmt.Errorf("verify remediation_runs table: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) Start(ctx context.Context) {
@@ -167,7 +161,7 @@ func (s *Service) handleUnhealthy(ctx context.Context, containerID, containerNam
 		cooldown = time.Duration(st.UnhealthyRestartCooldownSecDefault) * time.Second
 	}
 	if time.Since(stats.LastAttemptAt) < cooldown {
-		s.diagService.Log("INFO", "HealthRemediation", fmt.Sprintf("Suppressed restart for %s: cooldown active (%s remaining)", containerName, (cooldown - time.Since(stats.LastAttemptAt)).Round(time.Second)))
+		s.diagService.Log("INFO", "HealthRemediation", fmt.Sprintf("Suppressed restart for %s: cooldown active (%s remaining)", containerName, (cooldown-time.Since(stats.LastAttemptAt)).Round(time.Second)))
 		return
 	}
 
@@ -213,7 +207,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)
 
 	// 6. Perform Restart
 	s.diagService.Log("INFO", "HealthRemediation", fmt.Sprintf("Auto-restarting unhealthy container: %s", containerName))
-	
+
 	stats.Attempts++
 	stats.LastAttemptAt = time.Now()
 

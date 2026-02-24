@@ -10,23 +10,23 @@ import (
 )
 
 type ContainerRules struct {
-	ContainerID           string `json:"containerId"`
-	ContainerName         string `json:"containerName"`
-	UpdatePolicy          string `json:"updatePolicy"` // auto, manual, locked
-	ValidateURL           string `json:"validateUrl"`
-	ValidateMode          string `json:"validateMode"` // http, docker, both
-	ValidateTimeoutSec    int    `json:"validateTimeoutSec"`
-	ValidateIntervalSec   int    `json:"validateIntervalSec"`
-	BypassAI              bool   `json:"bypassAi"`
-	SkipHealthCheck       bool   `json:"skipHealthCheck"`
-	AIValidateLogs        bool   `json:"aiValidateLogs"`
-	AutoRollback          bool   `json:"autoRollback"`
-	InheritAutomation     bool   `json:"inheritAutomation"`
-	UpgradesAutomation    bool   `json:"upgradesAutomation"`
-	MaintenanceAutomation bool   `json:"maintenanceAutomation"`
-	SecurityAutomation    bool   `json:"securityAutomation"`
-	RestartOnUnhealthy    bool   `json:"restartOnUnhealthy"`
-	UnhealthyRestartCooldownSec int `json:"unhealthyRestartCooldownSec"`
+	ContainerID                 string `json:"containerId"`
+	ContainerName               string `json:"containerName"`
+	UpdatePolicy                string `json:"updatePolicy"` // auto, manual, locked
+	ValidateURL                 string `json:"validateUrl"`
+	ValidateMode                string `json:"validateMode"` // http, docker, both
+	ValidateTimeoutSec          int    `json:"validateTimeoutSec"`
+	ValidateIntervalSec         int    `json:"validateIntervalSec"`
+	BypassAI                    bool   `json:"bypassAi"`
+	SkipHealthCheck             bool   `json:"skipHealthCheck"`
+	AIValidateLogs              bool   `json:"aiValidateLogs"`
+	AutoRollback                bool   `json:"autoRollback"`
+	InheritAutomation           bool   `json:"inheritAutomation"`
+	UpgradesAutomation          bool   `json:"upgradesAutomation"`
+	MaintenanceAutomation       bool   `json:"maintenanceAutomation"`
+	SecurityAutomation          bool   `json:"securityAutomation"`
+	RestartOnUnhealthy          bool   `json:"restartOnUnhealthy"`
+	UnhealthyRestartCooldownSec int    `json:"unhealthyRestartCooldownSec"`
 }
 
 type Store struct {
@@ -40,68 +40,13 @@ func NewStore(db *sql.DB) *Store {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Init(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS container_rules (
-    container_id TEXT PRIMARY KEY,
-    container_name TEXT NOT NULL DEFAULT '',
-    update_policy TEXT DEFAULT 'manual',
-    validate_url TEXT DEFAULT '',
-    validate_mode TEXT DEFAULT 'both',
-    validate_timeout_sec INTEGER DEFAULT 45,
-    validate_interval_sec INTEGER DEFAULT 2,
-    bypass_ai INTEGER DEFAULT 0,
-    skip_health_check INTEGER DEFAULT 0,
-    ai_validate_logs INTEGER DEFAULT 0,
-    auto_rollback INTEGER DEFAULT 1,
-    inherit_automation INTEGER DEFAULT 1,
-    upgrades_automation INTEGER DEFAULT 1,
-    maintenance_automation INTEGER DEFAULT 1,
-    security_automation INTEGER DEFAULT 1,
-    restart_on_unhealthy INTEGER DEFAULT 0,
-    unhealthy_restart_cooldown_sec INTEGER DEFAULT 0
-);
-`)
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name='container_rules' LIMIT 1`).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("container_rules table missing; run schema migrations before rules store init")
+	}
 	if err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "validate_mode", "TEXT DEFAULT 'both'"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "validate_timeout_sec", "INTEGER DEFAULT 45"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "validate_interval_sec", "INTEGER DEFAULT 2"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "ai_validate_logs", "INTEGER DEFAULT 0"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "bypass_ai", "INTEGER DEFAULT 0"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "skip_health_check", "INTEGER DEFAULT 0"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "inherit_automation", "INTEGER DEFAULT 1"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "upgrades_automation", "INTEGER DEFAULT 1"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "maintenance_automation", "INTEGER DEFAULT 1"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "security_automation", "INTEGER DEFAULT 1"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "restart_on_unhealthy", "INTEGER DEFAULT 0"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn(ctx, "unhealthy_restart_cooldown_sec", "INTEGER DEFAULT 0"); err != nil {
-		return err
+		return fmt.Errorf("verify container_rules table: %w", err)
 	}
 	return nil
 }
@@ -243,33 +188,4 @@ func normalizeAutomationDefaults(r *ContainerRules) {
 			r.SecurityAutomation = true
 		}
 	}
-}
-
-func (s *Store) ensureColumn(ctx context.Context, columnName, columnDDL string) error {
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(container_rules)`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var cid int
-		var name string
-		var ctype string
-		var notnull int
-		var dflt sql.NullString
-		var pk int
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return err
-		}
-		if strings.EqualFold(name, columnName) {
-			return nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	_, err = s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE container_rules ADD COLUMN %s %s", columnName, columnDDL))
-	return err
 }

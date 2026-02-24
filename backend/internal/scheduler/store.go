@@ -26,19 +26,14 @@ func NewStore(db *sql.DB) *Store {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Init(ctx context.Context) error {
-	// 1. Initial table creation
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS schedules (
-  id TEXT PRIMARY KEY,
-  cron_spec TEXT NOT NULL,
-  enabled INTEGER NOT NULL DEFAULT 0,
-  last_run INTEGER NOT NULL DEFAULT 0
-);
-`)
-	if err != nil {
-		return fmt.Errorf("init scheduler tables: %w", err)
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name='schedules' LIMIT 1`).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("schedules table missing; run schema migrations before scheduler store init")
 	}
-
+	if err != nil {
+		return fmt.Errorf("verify schedules table: %w", err)
+	}
 	return nil
 }
 

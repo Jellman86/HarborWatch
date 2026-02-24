@@ -6,8 +6,22 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	_ "modernc.org/sqlite"
 )
+
+func TestComposeAuditSQLiteStoreInitRequiresMigratedSchema(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "compose_audit_missing.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	store := NewComposeAuditSQLiteStore(db)
+	if err := store.Init(context.Background()); err == nil {
+		t.Fatalf("expected init to fail when compose audit schema is missing")
+	}
+}
 
 func TestComposeAuditSQLiteStore_SaveListGet(t *testing.T) {
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "compose_audit.db"))
@@ -15,6 +29,9 @@ func TestComposeAuditSQLiteStore_SaveListGet(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer db.Close()
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
 
 	store := NewComposeAuditSQLiteStore(db)
 	if err := store.Init(context.Background()); err != nil {

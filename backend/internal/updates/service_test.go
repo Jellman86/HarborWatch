@@ -14,6 +14,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	_ "modernc.org/sqlite"
 )
@@ -144,6 +145,9 @@ func newTestService(t *testing.T, failStep string) *Service {
 	}
 	db.SetMaxOpenConns(1)
 	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
 
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
@@ -247,6 +251,9 @@ func TestUpdatePipelineFailsOnHighAIRisk(t *testing.T) {
 	}
 	db.SetMaxOpenConns(1)
 	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
@@ -300,6 +307,9 @@ func TestUpdatePipelineFailsOnAIBreakingChanges(t *testing.T) {
 	}
 	db.SetMaxOpenConns(1)
 	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
@@ -347,6 +357,9 @@ func TestUpdatePipelineFailsOnAIActionRequired(t *testing.T) {
 	}
 	db.SetMaxOpenConns(1)
 	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
@@ -394,6 +407,9 @@ func TestPortainerUpdateHonorsBypassAndSkipHealthFlags(t *testing.T) {
 	}
 	db.SetMaxOpenConns(1)
 	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
@@ -458,6 +474,9 @@ func TestPortainerUpdateFailsWhenAIHealthAssessmentUnhealthy(t *testing.T) {
 	}
 	db.SetMaxOpenConns(1)
 	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)

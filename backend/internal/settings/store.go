@@ -3,6 +3,7 @@ package settings
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -31,31 +32,31 @@ type Settings struct {
 	AIPricingJSON        string `json:"aiPricingJson"`
 
 	// System
-	InstanceURL                 string `json:"instanceUrl"`
-	ValidateURLPattern          string `json:"validateUrlPattern"`
-	UIAnimationsEnabled         bool   `json:"uiAnimationsEnabled"`
-	AutomationIgnoredContainers string `json:"automationIgnoredContainers"`
-	MalwareIgnoredMounts        string `json:"malwareIgnoredMounts"`
-	AutoUpgradeMaxConcurrency   int    `json:"autoUpgradeMaxConcurrency"`
-	AutoUpgradeMinRetryMinutes  int    `json:"autoUpgradeMinRetryMinutes"`
-	TrivySweepMode              string `json:"trivySweepMode"`
-	ClamAVSnapshotMaxBytes      int64  `json:"clamavSnapshotMaxBytes"`
-	DataRetentionDays           int    `json:"dataRetentionDays"`
-	RetentionLogsDays           int    `json:"retentionLogsDays"`
-	RetentionMetricsDays        int    `json:"retentionMetricsDays"`
-	RetentionScanResultsDays    int    `json:"retentionScanResultsDays"`
-	RetentionScanJobsDays       int    `json:"retentionScanJobsDays"`
-	RetentionUpdateRunsDays     int    `json:"retentionUpdateRunsDays"`
-	RetentionComposeAuditDays   int    `json:"retentionComposeAuditDays"`
-	RetentionAIUsageDays        int    `json:"retentionAIUsageDays"`
-	MetricsNormalized           bool   `json:"metricsNormalized"`
-	GlobalBypassAI              bool   `json:"globalBypassAi"`
-	GlobalSkipHealthCheck       bool   `json:"globalSkipHealthCheck"`
-	UnhealthyAutoRemediationEnabled     bool   `json:"unhealthyAutoRemediationEnabled"`
-	UnhealthyRestartCooldownSecDefault  int    `json:"unhealthyRestartCooldownSecDefault"`
-	MaxRestartsPerWindow                int    `json:"maxRestartsPerWindow"`
-	AITestingPassed             bool   `json:"aiTestingPassed"`
-	PortainerTestingPassed      bool   `json:"portainerTestingPassed"`
+	InstanceURL                        string `json:"instanceUrl"`
+	ValidateURLPattern                 string `json:"validateUrlPattern"`
+	UIAnimationsEnabled                bool   `json:"uiAnimationsEnabled"`
+	AutomationIgnoredContainers        string `json:"automationIgnoredContainers"`
+	MalwareIgnoredMounts               string `json:"malwareIgnoredMounts"`
+	AutoUpgradeMaxConcurrency          int    `json:"autoUpgradeMaxConcurrency"`
+	AutoUpgradeMinRetryMinutes         int    `json:"autoUpgradeMinRetryMinutes"`
+	TrivySweepMode                     string `json:"trivySweepMode"`
+	ClamAVSnapshotMaxBytes             int64  `json:"clamavSnapshotMaxBytes"`
+	DataRetentionDays                  int    `json:"dataRetentionDays"`
+	RetentionLogsDays                  int    `json:"retentionLogsDays"`
+	RetentionMetricsDays               int    `json:"retentionMetricsDays"`
+	RetentionScanResultsDays           int    `json:"retentionScanResultsDays"`
+	RetentionScanJobsDays              int    `json:"retentionScanJobsDays"`
+	RetentionUpdateRunsDays            int    `json:"retentionUpdateRunsDays"`
+	RetentionComposeAuditDays          int    `json:"retentionComposeAuditDays"`
+	RetentionAIUsageDays               int    `json:"retentionAIUsageDays"`
+	MetricsNormalized                  bool   `json:"metricsNormalized"`
+	GlobalBypassAI                     bool   `json:"globalBypassAi"`
+	GlobalSkipHealthCheck              bool   `json:"globalSkipHealthCheck"`
+	UnhealthyAutoRemediationEnabled    bool   `json:"unhealthyAutoRemediationEnabled"`
+	UnhealthyRestartCooldownSecDefault int    `json:"unhealthyRestartCooldownSecDefault"`
+	MaxRestartsPerWindow               int    `json:"maxRestartsPerWindow"`
+	AITestingPassed                    bool   `json:"aiTestingPassed"`
+	PortainerTestingPassed             bool   `json:"portainerTestingPassed"`
 
 	// Metadata (read-only info for UI)
 	EnvironmentOverrides map[string]bool `json:"environmentOverrides"`
@@ -74,40 +75,42 @@ func (s *Store) Close() error { return s.db.Close() }
 func (s *Store) GetDB() *sql.DB { return s.db }
 
 func (s *Store) Init(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS app_settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-`)
-	return err
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_settings' LIMIT 1`).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("app_settings table missing; run schema migrations before settings store init")
+	}
+	if err != nil {
+		return fmt.Errorf("verify app_settings table: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) Get(ctx context.Context) (Settings, error) {
 	st := Settings{
-		AIEnabled:                   true,
-		AIBlockRiskThreshold:        80,
-		DiscordEnabled:              true,
-		PortainerEnabled:            true,
-		UIAnimationsEnabled:         true,
-		AutomationIgnoredContainers: "harborwatch",
-		AutoUpgradeMaxConcurrency:   1,
-		AutoUpgradeMinRetryMinutes:  60,
-		TrivySweepMode:              "running-only",
-		ClamAVSnapshotMaxBytes:      2 << 30,
-		DataRetentionDays:           30,
-		RetentionLogsDays:           30,
-		RetentionMetricsDays:        14,
-		RetentionScanResultsDays:    30,
-		RetentionScanJobsDays:       30,
-		RetentionUpdateRunsDays:     90,
-		RetentionComposeAuditDays:   90,
-		RetentionAIUsageDays:        180,
-		UnhealthyAutoRemediationEnabled:     true,
-		UnhealthyRestartCooldownSecDefault:  300,
-		MaxRestartsPerWindow:                3,
-		MetricsNormalized:           true,
-		EnvironmentOverrides:        make(map[string]bool),
+		AIEnabled:                          true,
+		AIBlockRiskThreshold:               80,
+		DiscordEnabled:                     true,
+		PortainerEnabled:                   true,
+		UIAnimationsEnabled:                true,
+		AutomationIgnoredContainers:        "harborwatch",
+		AutoUpgradeMaxConcurrency:          1,
+		AutoUpgradeMinRetryMinutes:         60,
+		TrivySweepMode:                     "running-only",
+		ClamAVSnapshotMaxBytes:             2 << 30,
+		DataRetentionDays:                  30,
+		RetentionLogsDays:                  30,
+		RetentionMetricsDays:               14,
+		RetentionScanResultsDays:           30,
+		RetentionScanJobsDays:              30,
+		RetentionUpdateRunsDays:            90,
+		RetentionComposeAuditDays:          90,
+		RetentionAIUsageDays:               180,
+		UnhealthyAutoRemediationEnabled:    true,
+		UnhealthyRestartCooldownSecDefault: 300,
+		MaxRestartsPerWindow:               3,
+		MetricsNormalized:                  true,
+		EnvironmentOverrides:               make(map[string]bool),
 	}
 
 	// 1. Load from Database
@@ -335,89 +338,89 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	defer tx.Rollback()
 
 	keys := map[string]string{
-		"discord_webhook_url":            st.DiscordWebhookURL,
-		"discord_enabled":                boolString(st.DiscordEnabled),
-		"portainer_url":                  st.PortainerURL,
-		"portainer_api_key":              st.PortainerApiKey,
-		"portainer_enabled":              boolString(st.PortainerEnabled),
-		"ai_enabled":                     boolString(st.AIEnabled),
-		"ai_provider":                    st.AIProvider,
-		"ai_block_risk_threshold":        intString(st.AIBlockRiskThreshold),
-		"openai_key":                     st.OpenAIKey,
-		"openai_model":                   st.OpenAIModel,
-		"anthropic_key":                  st.AnthropicKey,
-		"anthropic_model":                st.AnthropicModel,
-		"gemini_key":                     st.GeminiKey,
-		"gemini_model":                   st.GeminiModel,
-		"ai_pricing_json":                st.AIPricingJSON,
-		"instance_url":                   st.InstanceURL,
-		"validate_url_pattern":           st.ValidateURLPattern,
-		"ui_animations_enabled":          boolString(st.UIAnimationsEnabled),
-		"automation_ignored_containers":  st.AutomationIgnoredContainers,
-		"malware_ignored_mounts":         st.MalwareIgnoredMounts,
-		"auto_upgrade_max_concurrency":   intString(st.AutoUpgradeMaxConcurrency),
-		"auto_upgrade_min_retry_minutes": intString(st.AutoUpgradeMinRetryMinutes),
-		"trivy_sweep_mode":               st.TrivySweepMode,
-		"clamav_snapshot_max_bytes":      int64String(st.ClamAVSnapshotMaxBytes),
-		"data_retention_days":            intString(st.DataRetentionDays),
-		"retention_logs_days":            intString(st.RetentionLogsDays),
-		"retention_metrics_days":         intString(st.RetentionMetricsDays),
-		"retention_scan_results_days":    intString(st.RetentionScanResultsDays),
-		"retention_scan_jobs_days":       intString(st.RetentionScanJobsDays),
-		"retention_update_runs_days":     intString(st.RetentionUpdateRunsDays),
-		"retention_compose_audit_days":   intString(st.RetentionComposeAuditDays),
-		"retention_ai_usage_days":        intString(st.RetentionAIUsageDays),
-		"metrics_normalized":             boolString(st.MetricsNormalized),
-		"global_bypass_ai":               boolString(st.GlobalBypassAI),
-		"global_skip_health_check":       boolString(st.GlobalSkipHealthCheck),
-		"unhealthy_auto_remediation_enabled": boolString(st.UnhealthyAutoRemediationEnabled),
+		"discord_webhook_url":                    st.DiscordWebhookURL,
+		"discord_enabled":                        boolString(st.DiscordEnabled),
+		"portainer_url":                          st.PortainerURL,
+		"portainer_api_key":                      st.PortainerApiKey,
+		"portainer_enabled":                      boolString(st.PortainerEnabled),
+		"ai_enabled":                             boolString(st.AIEnabled),
+		"ai_provider":                            st.AIProvider,
+		"ai_block_risk_threshold":                intString(st.AIBlockRiskThreshold),
+		"openai_key":                             st.OpenAIKey,
+		"openai_model":                           st.OpenAIModel,
+		"anthropic_key":                          st.AnthropicKey,
+		"anthropic_model":                        st.AnthropicModel,
+		"gemini_key":                             st.GeminiKey,
+		"gemini_model":                           st.GeminiModel,
+		"ai_pricing_json":                        st.AIPricingJSON,
+		"instance_url":                           st.InstanceURL,
+		"validate_url_pattern":                   st.ValidateURLPattern,
+		"ui_animations_enabled":                  boolString(st.UIAnimationsEnabled),
+		"automation_ignored_containers":          st.AutomationIgnoredContainers,
+		"malware_ignored_mounts":                 st.MalwareIgnoredMounts,
+		"auto_upgrade_max_concurrency":           intString(st.AutoUpgradeMaxConcurrency),
+		"auto_upgrade_min_retry_minutes":         intString(st.AutoUpgradeMinRetryMinutes),
+		"trivy_sweep_mode":                       st.TrivySweepMode,
+		"clamav_snapshot_max_bytes":              int64String(st.ClamAVSnapshotMaxBytes),
+		"data_retention_days":                    intString(st.DataRetentionDays),
+		"retention_logs_days":                    intString(st.RetentionLogsDays),
+		"retention_metrics_days":                 intString(st.RetentionMetricsDays),
+		"retention_scan_results_days":            intString(st.RetentionScanResultsDays),
+		"retention_scan_jobs_days":               intString(st.RetentionScanJobsDays),
+		"retention_update_runs_days":             intString(st.RetentionUpdateRunsDays),
+		"retention_compose_audit_days":           intString(st.RetentionComposeAuditDays),
+		"retention_ai_usage_days":                intString(st.RetentionAIUsageDays),
+		"metrics_normalized":                     boolString(st.MetricsNormalized),
+		"global_bypass_ai":                       boolString(st.GlobalBypassAI),
+		"global_skip_health_check":               boolString(st.GlobalSkipHealthCheck),
+		"unhealthy_auto_remediation_enabled":     boolString(st.UnhealthyAutoRemediationEnabled),
 		"unhealthy_restart_cooldown_sec_default": intString(st.UnhealthyRestartCooldownSecDefault),
-		"max_restarts_per_window":        intString(st.MaxRestartsPerWindow),
-		"ai_testing_passed":              boolString(st.AITestingPassed),
-		"portainer_testing_passed":       boolString(st.PortainerTestingPassed),
+		"max_restarts_per_window":                intString(st.MaxRestartsPerWindow),
+		"ai_testing_passed":                      boolString(st.AITestingPassed),
+		"portainer_testing_passed":               boolString(st.PortainerTestingPassed),
 	}
 
 	jsonToDbKey := map[string]string{
-		"discordWebhookUrl":           "discord_webhook_url",
-		"discordEnabled":              "discord_enabled",
-		"portainerUrl":                "portainer_url",
-		"portainerApiKey":             "portainer_api_key",
-		"portainerEnabled":            "portainer_enabled",
-		"aiEnabled":                   "ai_enabled",
-		"aiProvider":                  "ai_provider",
-		"aiBlockRiskThreshold":        "ai_block_risk_threshold",
-		"openaiKey":                   "openai_key",
-		"openaiModel":                 "openai_model",
-		"anthropicKey":                "anthropic_key",
-		"anthropicModel":              "anthropic_model",
-		"geminiKey":                   "gemini_key",
-		"geminiModel":                 "gemini_model",
-		"aiPricingJson":               "ai_pricing_json",
-		"instanceUrl":                 "instance_url",
-		"validateUrlPattern":          "validate_url_pattern",
-		"uiAnimationsEnabled":         "ui_animations_enabled",
-		"automationIgnoredContainers": "automation_ignored_containers",
-		"malwareIgnoredMounts":        "malware_ignored_mounts",
-		"autoUpgradeMaxConcurrency":   "auto_upgrade_max_concurrency",
-		"autoUpgradeMinRetryMinutes":  "auto_upgrade_min_retry_minutes",
-		"trivySweepMode":              "trivy_sweep_mode",
-		"clamavSnapshotMaxBytes":      "clamav_snapshot_max_bytes",
-		"dataRetentionDays":           "data_retention_days",
-		"retentionLogsDays":           "retention_logs_days",
-		"retentionMetricsDays":        "retention_metrics_days",
-		"retentionScanResultsDays":    "retention_scan_results_days",
-		"retentionScanJobsDays":       "retention_scan_jobs_days",
-		"retentionUpdateRunsDays":     "retention_update_runs_days",
-		"retentionComposeAuditDays":   "retention_compose_audit_days",
-		"retentionAIUsageDays":        "retention_ai_usage_days",
-		"metricsNormalized":           "metrics_normalized",
-		"globalBypassAi":              "global_bypass_ai",
-		"globalSkipHealthCheck":       "global_skip_health_check",
-		"unhealthyAutoRemediationEnabled": "unhealthy_auto_remediation_enabled",
+		"discordWebhookUrl":                  "discord_webhook_url",
+		"discordEnabled":                     "discord_enabled",
+		"portainerUrl":                       "portainer_url",
+		"portainerApiKey":                    "portainer_api_key",
+		"portainerEnabled":                   "portainer_enabled",
+		"aiEnabled":                          "ai_enabled",
+		"aiProvider":                         "ai_provider",
+		"aiBlockRiskThreshold":               "ai_block_risk_threshold",
+		"openaiKey":                          "openai_key",
+		"openaiModel":                        "openai_model",
+		"anthropicKey":                       "anthropic_key",
+		"anthropicModel":                     "anthropic_model",
+		"geminiKey":                          "gemini_key",
+		"geminiModel":                        "gemini_model",
+		"aiPricingJson":                      "ai_pricing_json",
+		"instanceUrl":                        "instance_url",
+		"validateUrlPattern":                 "validate_url_pattern",
+		"uiAnimationsEnabled":                "ui_animations_enabled",
+		"automationIgnoredContainers":        "automation_ignored_containers",
+		"malwareIgnoredMounts":               "malware_ignored_mounts",
+		"autoUpgradeMaxConcurrency":          "auto_upgrade_max_concurrency",
+		"autoUpgradeMinRetryMinutes":         "auto_upgrade_min_retry_minutes",
+		"trivySweepMode":                     "trivy_sweep_mode",
+		"clamavSnapshotMaxBytes":             "clamav_snapshot_max_bytes",
+		"dataRetentionDays":                  "data_retention_days",
+		"retentionLogsDays":                  "retention_logs_days",
+		"retentionMetricsDays":               "retention_metrics_days",
+		"retentionScanResultsDays":           "retention_scan_results_days",
+		"retentionScanJobsDays":              "retention_scan_jobs_days",
+		"retentionUpdateRunsDays":            "retention_update_runs_days",
+		"retentionComposeAuditDays":          "retention_compose_audit_days",
+		"retentionAIUsageDays":               "retention_ai_usage_days",
+		"metricsNormalized":                  "metrics_normalized",
+		"globalBypassAi":                     "global_bypass_ai",
+		"globalSkipHealthCheck":              "global_skip_health_check",
+		"unhealthyAutoRemediationEnabled":    "unhealthy_auto_remediation_enabled",
 		"unhealthyRestartCooldownSecDefault": "unhealthy_restart_cooldown_sec_default",
-		"maxRestartsPerWindow":        "max_restarts_per_window",
-		"aiTestingPassed":             "ai_testing_passed",
-		"portainerTestingPassed":      "portainer_testing_passed",
+		"maxRestartsPerWindow":               "max_restarts_per_window",
+		"aiTestingPassed":                    "ai_testing_passed",
+		"portainerTestingPassed":             "portainer_testing_passed",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {

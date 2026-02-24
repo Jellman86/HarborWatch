@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	_ "modernc.org/sqlite"
 )
 
@@ -64,6 +65,9 @@ func newTestStore(t *testing.T) *Store {
 	}
 	db.SetMaxOpenConns(1)
 	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
 
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {

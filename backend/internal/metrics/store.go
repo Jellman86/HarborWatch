@@ -28,20 +28,13 @@ func NewStore(db *sql.DB) *Store {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Init(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS container_metrics (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  container_id TEXT NOT NULL,
-  timestamp INTEGER NOT NULL,
-  cpu_percent REAL NOT NULL,
-  memory_usage INTEGER NOT NULL,
-  memory_limit INTEGER NOT NULL,
-  pids INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_metrics_container_ts ON container_metrics(container_id, timestamp);
-`)
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name='container_metrics' LIMIT 1`).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("container_metrics table missing; run schema migrations before metrics store init")
+	}
 	if err != nil {
-		return fmt.Errorf("init metrics tables: %w", err)
+		return fmt.Errorf("verify container_metrics table: %w", err)
 	}
 	return nil
 }

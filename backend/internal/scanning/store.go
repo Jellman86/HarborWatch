@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -24,99 +23,15 @@ func NewStore(db *sql.DB) *Store {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Init(ctx context.Context) error {
-	// 1. Scan Results table
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS scan_results (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  target TEXT NOT NULL,
-  source TEXT NOT NULL,
-  scanned_at INTEGER NOT NULL,
-  critical INTEGER NOT NULL,
-  high INTEGER NOT NULL,
-  medium INTEGER NOT NULL,
-  low INTEGER NOT NULL,
-  unknown INTEGER NOT NULL,
-  raw_json TEXT NOT NULL
-);
-`)
-	if err != nil {
-		return fmt.Errorf("create scan_results table: %w", err)
-	}
-
-	// 2. Malware results table (v0.5.0)
-	_, err = s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS malware_scan_results (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  container_name TEXT NOT NULL DEFAULT '',
-  target TEXT NOT NULL,
-  source TEXT NOT NULL,
-  scanned_at INTEGER NOT NULL,
-  infected INTEGER NOT NULL,
-  threats_found TEXT NOT NULL,
-  raw_output TEXT NOT NULL
-);
-`)
-	if err != nil {
-		return fmt.Errorf("create malware_scan_results table: %w", err)
-	}
-
-	// 3. Scan jobs table (v0.5.0)
-	_, err = s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS scan_jobs (
-  job_id TEXT PRIMARY KEY,
-  container_name TEXT NOT NULL DEFAULT '',
-  target TEXT NOT NULL,
-  type TEXT NOT NULL,
-  status TEXT NOT NULL,
-  source TEXT NOT NULL,
-  progress INTEGER NOT NULL DEFAULT 0,
-  error TEXT NOT NULL DEFAULT '',
-  started_at INTEGER NOT NULL,
-  completed_at INTEGER NOT NULL DEFAULT 0
-);
-`)
-	if err != nil {
-		return fmt.Errorf("create scan_jobs table: %w", err)
-	}
-
-	if err := s.ensureColumn(ctx, "malware_scan_results", "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
-		return fmt.Errorf("ensure malware_scan_results.container_name: %w", err)
-	}
-	if err := s.ensureColumn(ctx, "scan_jobs", "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
-		return fmt.Errorf("ensure scan_jobs.container_name: %w", err)
-	}
-	if err := s.ensureColumn(ctx, "scan_jobs", "progress", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("ensure scan_jobs.progress: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `
-CREATE INDEX IF NOT EXISTS idx_scan_results_target_scanned ON scan_results(target, scanned_at DESC);
-CREATE INDEX IF NOT EXISTS idx_malware_results_target_scanned ON malware_scan_results(target, scanned_at DESC);
-CREATE INDEX IF NOT EXISTS idx_malware_results_container_scanned ON malware_scan_results(container_name, scanned_at DESC);
-CREATE INDEX IF NOT EXISTS idx_scan_jobs_type_started ON scan_jobs(type, started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_scan_jobs_status_started ON scan_jobs(status, started_at DESC);
-`); err != nil {
-		return fmt.Errorf("init scanning indexes: %w", err)
-	}
-
-	return nil
-}
-
-func (s *Store) ensureColumn(ctx context.Context, table, column, ddl string) error {
-	query := fmt.Sprintf("SELECT 1 FROM pragma_table_info('%s') WHERE name=? LIMIT 1", table)
-	var exists int
-	err := s.db.QueryRowContext(ctx, query, column).Scan(&exists)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, ddl)
-	if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-			return nil
+	for _, table := range []string{"scan_results", "malware_scan_results", "scan_jobs"} {
+		var exists int
+		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1`, table).Scan(&exists)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("%s table missing; run schema migrations before scanning store init", table)
 		}
-		return err
+		if err != nil {
+			return fmt.Errorf("verify %s table: %w", table, err)
+		}
 	}
 	return nil
 }

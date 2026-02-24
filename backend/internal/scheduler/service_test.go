@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	_ "modernc.org/sqlite"
 )
 
@@ -39,6 +40,9 @@ func TestAddTaskUpgradesLegacyCronSpec(t *testing.T) {
 	defer db.Close()
 
 	store := NewStore(db)
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -72,6 +76,9 @@ func TestUpdateTaskSchedulePersistsAndNormalizes(t *testing.T) {
 	defer db.Close()
 
 	store := NewStore(db)
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -107,6 +114,9 @@ func TestUpdateTaskScheduleRebindsEnabledTask(t *testing.T) {
 	defer db.Close()
 
 	store := NewStore(db)
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init store: %v", err)
 	}

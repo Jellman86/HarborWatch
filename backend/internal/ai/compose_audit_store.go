@@ -51,23 +51,15 @@ func NewComposeAuditSQLiteStore(db *sql.DB) *ComposeAuditSQLiteStore {
 }
 
 func (s *ComposeAuditSQLiteStore) Init(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS compose_audit_history (
-	id TEXT PRIMARY KEY,
-	container_id TEXT NOT NULL,
-	container_name TEXT NOT NULL DEFAULT '',
-	provider TEXT NOT NULL DEFAULT '',
-	model TEXT NOT NULL DEFAULT '',
-	headline TEXT NOT NULL DEFAULT '',
-	compose_config TEXT NOT NULL,
-	analysis_markdown TEXT NOT NULL,
-	analysis_html TEXT NOT NULL,
-	created_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_compose_audit_container_created ON compose_audit_history(container_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_compose_audit_created ON compose_audit_history(created_at DESC);
-`)
-	return err
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name='compose_audit_history' LIMIT 1`).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("compose_audit_history table missing; run schema migrations before compose audit store init")
+	}
+	if err != nil {
+		return fmt.Errorf("verify compose_audit_history table: %w", err)
+	}
+	return nil
 }
 
 func (s *ComposeAuditSQLiteStore) SaveComposeAudit(ctx context.Context, rec ComposeAuditRecord) (ComposeAuditRecord, error) {

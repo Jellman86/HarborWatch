@@ -94,6 +94,9 @@ func validateMigrations(migs []Migration) error {
 		if strings.TrimSpace(m.Name) == "" {
 			return fmt.Errorf("empty migration name for version %d", m.Version)
 		}
+		if strings.TrimSpace(m.SQL) == "" && m.ApplyTx == nil {
+			return fmt.Errorf("migration %d (%s) has no SQL or ApplyTx", m.Version, m.Name)
+		}
 		if _, ok := seen[m.Version]; ok {
 			return fmt.Errorf("duplicate migration version %d", m.Version)
 		}
@@ -139,6 +142,11 @@ func applyOne(ctx context.Context, db *sql.DB, m Migration) error {
 			return fmt.Errorf("execute migration %d (%s): %w", m.Version, m.Name, err)
 		}
 	}
+	if m.ApplyTx != nil {
+		if err := m.ApplyTx(ctx, tx); err != nil {
+			return fmt.Errorf("apply migration %d (%s): %w", m.Version, m.Name, err)
+		}
+	}
 
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO schema_migrations(version, name, applied_at)
@@ -149,6 +157,148 @@ VALUES(?, ?, ?)
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration %d (%s): %w", m.Version, m.Name, err)
+	}
+	return nil
+}
+
+func hasColumnTx(ctx context.Context, tx *sql.Tx, table, column string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if strings.EqualFold(name, column) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func ensureColumnTx(ctx context.Context, tx *sql.Tx, table, column, ddl string) error {
+	ok, err := hasColumnTx(ctx, tx, table, column)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, ddl))
+	return err
+}
+
+func migrateContainerRulesColumns(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		ddl  string
+	}{
+		{"container_name", "TEXT NOT NULL DEFAULT ''"},
+		{"validate_mode", "TEXT DEFAULT 'both'"},
+		{"validate_timeout_sec", "INTEGER DEFAULT 45"},
+		{"validate_interval_sec", "INTEGER DEFAULT 2"},
+		{"ai_validate_logs", "INTEGER DEFAULT 0"},
+		{"bypass_ai", "INTEGER DEFAULT 0"},
+		{"skip_health_check", "INTEGER DEFAULT 0"},
+		{"inherit_automation", "INTEGER DEFAULT 1"},
+		{"upgrades_automation", "INTEGER DEFAULT 1"},
+		{"maintenance_automation", "INTEGER DEFAULT 1"},
+		{"security_automation", "INTEGER DEFAULT 1"},
+		{"restart_on_unhealthy", "INTEGER DEFAULT 0"},
+		{"unhealthy_restart_cooldown_sec", "INTEGER DEFAULT 0"},
+	}
+	for _, c := range columns {
+		if err := ensureColumnTx(ctx, tx, "container_rules", c.name, c.ddl); err != nil {
+			return fmt.Errorf("ensure container_rules.%s: %w", c.name, err)
+		}
+	}
+	return nil
+}
+
+func migrateUpdateRunsColumnsAndIndexes(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		ddl  string
+	}{
+		{"progress", "INTEGER NOT NULL DEFAULT 0"},
+		{"container_id", "TEXT NOT NULL DEFAULT ''"},
+		{"container_name", "TEXT NOT NULL DEFAULT ''"},
+		{"ai_analysis", "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, c := range columns {
+		if err := ensureColumnTx(ctx, tx, "update_runs", c.name, c.ddl); err != nil {
+			return fmt.Errorf("ensure update_runs.%s: %w", c.name, err)
+		}
+	}
+
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_update_runs_container_updated ON update_runs(container_id, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_update_runs_container_name_updated ON update_runs(container_name, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_update_runs_status_created ON update_runs(status, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_update_steps_run_id_id ON update_steps(run_id, id)`,
+	}
+	for _, stmt := range indexes {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateUniqueActiveUpdateIndexBestEffort(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_update_runs_one_running_per_container ON update_runs(container_id) WHERE status IN ('running','queued')`)
+	if err != nil {
+		// Existing installs may contain duplicate active rows. Keep startup/migrations non-blocking,
+		// matching previous store.Init best-effort behavior.
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func migrateScanningColumnsAndIndexes(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		table string
+		name  string
+		ddl   string
+	}{
+		{"malware_scan_results", "container_name", "TEXT NOT NULL DEFAULT ''"},
+		{"scan_jobs", "container_name", "TEXT NOT NULL DEFAULT ''"},
+		{"scan_jobs", "progress", "INTEGER NOT NULL DEFAULT 0"},
+	}
+	for _, c := range columns {
+		if err := ensureColumnTx(ctx, tx, c.table, c.name, c.ddl); err != nil {
+			return fmt.Errorf("ensure %s.%s: %w", c.table, c.name, err)
+		}
+	}
+
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_scan_results_target_scanned ON scan_results(target, scanned_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_malware_results_target_scanned ON malware_scan_results(target, scanned_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_malware_results_container_scanned ON malware_scan_results(container_name, scanned_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_scan_jobs_type_started ON scan_jobs(type, started_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_scan_jobs_status_started ON scan_jobs(status, started_at DESC)`,
+	}
+	for _, stmt := range indexes {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateContainerIntelColumns(ctx context.Context, tx *sql.Tx) error {
+	if err := ensureColumnTx(ctx, tx, "container_intel_overrides", "container_name", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("ensure container_intel_overrides.container_name: %w", err)
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package containerintel
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -25,48 +26,15 @@ func NewStore(db *sql.DB) *Store {
 }
 
 func (s *Store) Init(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `
-CREATE TABLE IF NOT EXISTS container_intel_overrides (
-	container_id TEXT PRIMARY KEY,
-	container_name TEXT NOT NULL DEFAULT '',
-	repository_url TEXT NOT NULL DEFAULT '',
-	changelog_url TEXT NOT NULL DEFAULT '',
-	updated_at INTEGER NOT NULL DEFAULT 0
-);
-`)
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name='container_intel_overrides' LIMIT 1`).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("container_intel_overrides table missing; run schema migrations before container intel store init")
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("verify container_intel_overrides table: %w", err)
 	}
-	return s.ensureColumn(ctx, "container_name", "TEXT NOT NULL DEFAULT ''")
-}
-
-func (s *Store) ensureColumn(ctx context.Context, columnName, columnDDL string) error {
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(container_intel_overrides)`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var cid int
-		var name string
-		var ctype string
-		var notnull int
-		var dflt sql.NullString
-		var pk int
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return err
-		}
-		if strings.EqualFold(name, columnName) {
-			return nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	_, err = s.db.ExecContext(ctx, "ALTER TABLE container_intel_overrides ADD COLUMN "+columnName+" "+columnDDL)
-	return err
+	return nil
 }
 
 func (s *Store) Get(ctx context.Context, id, name string) (Override, error) {

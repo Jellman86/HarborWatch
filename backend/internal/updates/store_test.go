@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	_ "modernc.org/sqlite"
 )
 
@@ -19,11 +20,28 @@ func newUpdateStoreTest(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+
 	store := NewStore(db)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init store: %v", err)
 	}
 	return store
+}
+
+func TestInitRequiresMigratedSchema(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates-missing-schema.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err == nil {
+		t.Fatalf("expected init to fail when update tables are missing")
+	}
 }
 
 func TestListRunsForContainerMatchesStoredContainerName(t *testing.T) {

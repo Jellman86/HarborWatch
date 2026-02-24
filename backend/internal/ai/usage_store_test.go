@@ -7,8 +7,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	_ "modernc.org/sqlite"
 )
+
+func TestUsageSQLiteStoreInitRequiresMigratedSchema(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "usage-missing.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = db.Close() })
+
+	store := NewUsageSQLiteStore(db)
+	if err := store.Init(context.Background()); err == nil {
+		t.Fatalf("expected init to fail when ai usage schema is missing")
+	}
+}
 
 func TestUsageSQLiteStoreSummary(t *testing.T) {
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "usage.db"))
@@ -17,6 +32,9 @@ func TestUsageSQLiteStoreSummary(t *testing.T) {
 	}
 	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
 
 	store := NewUsageSQLiteStore(db)
 	if err := store.Init(context.Background()); err != nil {

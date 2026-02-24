@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS schedules (
+  id TEXT PRIMARY KEY,
+  cron_spec TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  last_run INTEGER NOT NULL DEFAULT 0
+);
