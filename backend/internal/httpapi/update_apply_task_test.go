@@ -311,3 +311,86 @@ func TestAutomatedUpdateApplyTask_UsesRuleBypassAIAndSkipHealth(t *testing.T) {
 		t.Fatalf("expected SkipHealthCheck=true from container rules")
 	}
 }
+
+func TestAutomatedUpdateApplyTask_SkipsWhenPortainerComposeSourceDriftDetected(t *testing.T) {
+	container := gen.ContainerSummary{
+		ID:    "c-portainer-drift",
+		Names: []string{"/gluetun"},
+		Image: "qmcgaw/gluetun:v3.39.0",
+		Labels: map[string]string{
+			"io.portainer.stack_id":          "12",
+			"io.portainer.endpoint_id":       "1",
+			"com.docker.compose.service":     "gluetun",
+			"com.docker.compose.project":     "media",
+			"com.docker.compose.project.working_dir": "/data/compose/12",
+		},
+		UpdateAvailable: true,
+	}
+	dockerClient := autoTaskDockerClient{
+		containers: []gen.ContainerSummary{container},
+		byID:       map[string]gen.ContainerSummary{container.ID: container},
+	}
+	updateSvc := &recordingUpdateService{}
+	task := newAutomatedUpdateApplyTask(
+		dockerClient,
+		fakePortainerClient{yaml: "services:\n  gluetun:\n    image: qmcgaw/gluetun:v3.38.0\n"},
+		updateSvc,
+		testRulesService{rule: rules.ContainerRules{
+			UpdatePolicy: "auto",
+			ValidateURL:  "http://localhost:8080/health",
+		}},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run task: %v", err)
+	}
+	if len(updateSvc.started) != 0 {
+		t.Fatalf("expected drifted compose-managed container to be skipped, got %d starts", len(updateSvc.started))
+	}
+}
+
+func TestAutomatedUpdateApplyTask_SkipsComposeManagedWhenSourceCannotBeVerified(t *testing.T) {
+	container := gen.ContainerSummary{
+		ID:    "c-compose-local",
+		Names: []string{"/app"},
+		Image: "ghcr.io/acme/app:1.2.3",
+		Labels: map[string]string{
+			"com.docker.compose.project": "app",
+			"com.docker.compose.service": "web",
+		},
+		UpdateAvailable: true,
+	}
+	dockerClient := autoTaskDockerClient{
+		containers: []gen.ContainerSummary{container},
+		byID:       map[string]gen.ContainerSummary{container.ID: container},
+	}
+	updateSvc := &recordingUpdateService{}
+	task := newAutomatedUpdateApplyTask(
+		dockerClient,
+		fakePortainerClient{},
+		updateSvc,
+		testRulesService{rule: rules.ContainerRules{
+			UpdatePolicy: "auto",
+			ValidateURL:  "http://localhost:8080/health",
+		}},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run task: %v", err)
+	}
+	if len(updateSvc.started) != 0 {
+		t.Fatalf("expected compose-managed container without source verification to be skipped, got %d starts", len(updateSvc.started))
+	}
+}

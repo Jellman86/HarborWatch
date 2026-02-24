@@ -218,6 +218,12 @@ func buildUpdateRequestForContainer(
 		}
 	}
 
+	if opts.RequireAutoPolicy {
+		if err := enforceComposeSourceAuthorityForAuto(ctx, out.Summary, targetImage, portainerService); err != nil {
+			return out, err
+		}
+	}
+
 	out.Request = updates.Request{
 		ContainerID:                   containerID,
 		TargetImage:                   targetImage,

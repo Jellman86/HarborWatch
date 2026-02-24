@@ -134,6 +134,21 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 				}
 				t.log("INFO", fmt.Sprintf("Auto-apply skipped for %s: %v", containerLabel(summary), err))
 				continue
+			case errors.Is(err, ErrComposeSourceVerificationUnavailable):
+				skipped++
+				skipReasons["compose_source_unverified"]++
+				t.log("INFO", fmt.Sprintf("Auto-apply skipped for %s: %v", containerLabel(summary), err))
+				continue
+			case errors.Is(err, ErrComposeSourceDriftDetected):
+				skipped++
+				skipReasons["compose_source_drift"]++
+				t.log("INFO", fmt.Sprintf("Auto-apply skipped for %s: %v", containerLabel(summary), err))
+				continue
+			case errors.Is(err, ErrComposeTargetDivergesFromSource):
+				skipped++
+				skipReasons["compose_target_diverges"]++
+				t.log("INFO", fmt.Sprintf("Auto-apply skipped for %s: %v", containerLabel(summary), err))
+				continue
 			default:
 				skipped++
 				skipReasons["request_build_failed"]++
