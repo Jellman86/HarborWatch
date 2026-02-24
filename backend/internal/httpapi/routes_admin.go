@@ -26,6 +26,7 @@ type adminRouteDeps struct {
 	db                    *sql.DB
 	dockerClient          DockerClient
 	scanService           ScanService
+	releaseService        ReleaseService
 	updateService         UpdateService
 	auditService          AuditService
 	schedSvc              SchedulerService
@@ -34,6 +35,8 @@ type adminRouteDeps struct {
 	settingsService       SettingsService
 	notificationService   NotificationService
 	aiService             AIService
+	rulesService          RulesService
+	intelService          ContainerIntelService
 	jobManager            *jobs.Manager
 	currentPortainerState *PortainerClient
 	loadContainerSummary  func(context.Context, string) gen.ContainerSummary
