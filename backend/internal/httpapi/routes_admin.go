@@ -36,6 +36,7 @@ type adminRouteDeps struct {
 	aiService             AIService
 	jobManager            *jobs.Manager
 	currentPortainerState *PortainerClient
+	loadContainerSummary  func(context.Context, string) gen.ContainerSummary
 }
 
 func registerSystemRoutes(r chi.Router, deps adminRouteDeps) {
