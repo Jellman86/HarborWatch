@@ -39,6 +39,7 @@ All notable changes to HarborWatch are documented in this file.
   - Improved logo rendering quality across the app using responsive assets.
   - Normalized Settings single-card header styling and improved global progress labeling/tags.
   - Reworked Settings page hierarchy with sticky navigation rails, stronger visual shell styling, and tab-level hero headers to improve section discoverability.
+  - Disabled Settings sticky navigation rails on mobile to prevent Automations UI chrome from overlapping when headers wrap on narrow screens.
 
 ### Fixed
 - **Container History & Setting Continuity (P0):**
