@@ -25,6 +25,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/healthremediation"
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	"github.com/Jellman86/HarborWatch/backend/internal/releases"
@@ -168,6 +169,11 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;`); err != nil {
 		log.Printf("Warning: failed to set db pragmas: %v", err)
+	}
+	if migrationResult, err := migrations.Run(context.Background(), db); err != nil {
+		return nil, nil, fmt.Errorf("run schema migrations: %w", err)
+	} else {
+		log.Printf("schema migrations initialized: version=%d applied=%d", migrationResult.CurrentVersion, migrationResult.AppliedCount)
 	}
 
 	// 1. Diagnostics Setup
@@ -2644,6 +2650,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 				snapshot, err := collectDiagnosticsSnapshot(
 					r.Context(),
 					diagnosticsDeps{
+						db:            db,
 						dockerClient:  dockerClient,
 						scanService:   scanService,
 						updateService: updateService,

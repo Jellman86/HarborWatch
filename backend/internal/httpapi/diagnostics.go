@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,11 +12,13 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
 type diagnosticsDeps struct {
+	db            *sql.DB
 	dockerClient  DockerClient
 	scanService   ScanService
 	updateService UpdateService
@@ -41,6 +44,7 @@ type diagnosticsFleetStats struct {
 
 type diagnosticsSnapshot struct {
 	GeneratedAt        int64                       `json:"generatedAt"`
+	SchemaVersion      int                         `json:"schemaVersion,omitempty"`
 	Components         map[string]string           `json:"components"`
 	Errors             []string                    `json:"errors,omitempty"`
 	SystemStatus       *diag.SystemStatus          `json:"systemStatus,omitempty"`
@@ -105,6 +109,15 @@ func collectDiagnosticsSnapshot(ctx context.Context, deps diagnosticsDeps, opts 
 			"scheduler": componentStatus(deps.schedSvc != nil),
 			"diag":      componentStatus(deps.diagService != nil),
 		},
+	}
+
+	if deps.db != nil {
+		version, err := migrations.CurrentVersion(ctx, deps.db)
+		if err != nil {
+			snapshot.Errors = append(snapshot.Errors, fmt.Sprintf("schema version: %v", err))
+		} else {
+			snapshot.SchemaVersion = version
+		}
 	}
 
 	if deps.diagService != nil {

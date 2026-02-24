@@ -3,11 +3,13 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
+	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
 	"github.com/Jellman86/HarborWatch/backend/internal/rules"
@@ -24,6 +27,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
+	_ "modernc.org/sqlite"
 )
 
 type fakeDockerClient struct {
@@ -1030,6 +1034,15 @@ func TestSystemLogsFilters(t *testing.T) {
 }
 
 func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "diag.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatalf("migrations.Run failed: %v", err)
+	}
+
 	diagSvc := fakeDiagService{
 		logs: []diag.LogEntry{
 			{Timestamp: 300, Level: "ERROR", Source: "Scanner", Message: "failed"},
@@ -1040,7 +1053,7 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 		images:     []gen.ImageSummary{{ID: "img1", RepoTags: []string{"nginx:latest"}}},
 		logs:       dockerengine.ContainerLogs{Combined: "x"},
 	}
-	mux := NewMuxWithDeps(nil, docker, fakeScanService{}, nil, nil, fakeAuditService{}, nil, fakeSchedulerService{}, nil, diagSvc, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
+	mux := NewMuxWithDeps(db, docker, fakeScanService{}, nil, nil, fakeAuditService{}, nil, fakeSchedulerService{}, nil, diagSvc, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/diagnostics/snapshot?containerId=c1&includeFleet=1", nil))
 	if rec.Code != http.StatusOK {
@@ -1056,6 +1069,9 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 	if payload["components"] == nil {
 		t.Fatalf("expected components in diagnostics snapshot")
 	}
+	if got := asInt(payload["schemaVersion"]); got != 1 {
+		t.Fatalf("expected schemaVersion=1 in diagnostics snapshot, got %v", payload["schemaVersion"])
+	}
 }
 
 func TestDiagnosticsSnapshotDedupesActiveJobsByID(t *testing.T) {
@@ -1064,6 +1080,7 @@ func TestDiagnosticsSnapshotDedupesActiveJobsByID(t *testing.T) {
 		{ID: "j2", Type: "scan:clamav", Target: "/mnt/media", Status: "running", Progress: 25, StartedAt: 2},
 	}
 	snapshot, err := collectDiagnosticsSnapshot(context.Background(), diagnosticsDeps{
+		db:            nil,
 		scanService:   fakeScanService{activeJobs: sharedJobs},
 		updateService: fakeUpdateService{activeJobs: sharedJobs},
 	}, diagnosticsSnapshotOptions{LogLimit: 10, AuditLimit: 10})
