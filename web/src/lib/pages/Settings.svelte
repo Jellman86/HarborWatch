@@ -403,7 +403,7 @@
 
         if (domain === "remediation") {
             settings.unhealthyAutoRemediationEnabled = enabled;
-            toasts.success(`${enabled ? "Enabled" : "Disabled"} ${automationConfig[domain].title}.`);
+            toasts.info(`${automationConfig[domain].title} ${enabled ? "enabled" : "disabled"} locally. Click Save Settings to persist.`);
             domainToggleBusy = "";
             return;
         }
@@ -714,6 +714,14 @@
                 toasts.warning(`Bulk update partial: ${success} set to Automatic, ${fail} failed.`);
             } else {
                 toasts.success(`Successfully set all ${success} containers to Automatic.`);
+            }
+
+            await loadContainersForExclusions();
+
+            const updateCheckEnabled = scheduleById("container_update_check")?.enabled ?? false;
+            const updateApplyEnabled = scheduleById("container_update_apply")?.enabled ?? false;
+            if (!updateCheckEnabled || !updateApplyEnabled) {
+                toasts.info("Container policies were updated. Enable the Update Check and Update Apply tasks to run upgrades automatically.");
             }
         } catch (e) {
             toasts.error("Bulk update failed to complete.");

@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { JobProgress } from "../api-types";
-    import { slide, fly } from "svelte/transition";
+    import { slide } from "svelte/transition";
 
     let { jobs = [] } = $props<{
         jobs: JobProgress[];
@@ -29,6 +29,25 @@
         }
         if (type === "redeploy") return "Redeploying";
         return "Processing";
+    };
+
+    const jobTag = (type: string) => {
+        if (type === "scan:trivy") return { label: "Vulnerability (Trivy)", tone: "amber" };
+        if (type === "scan:clamav") return { label: "AV (ClamAV)", tone: "rose" };
+        if (type === "update") return { label: "Upgrade", tone: "brand" };
+        if (type === "redeploy") return { label: "Redeploy", tone: "sky" };
+        if (type.startsWith("remediation")) return { label: "Self-Heal", tone: "fuchsia" };
+        return { label: "Task", tone: "slate" };
+    };
+
+    const jobTagClass = (type: string) => {
+        const tone = jobTag(type).tone;
+        if (tone === "amber") return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+        if (tone === "rose") return "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300";
+        if (tone === "brand") return "bg-brand-100 text-brand-800 dark:bg-brand-900/30 dark:text-brand-300";
+        if (tone === "sky") return "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300";
+        if (tone === "fuchsia") return "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/30 dark:text-fuchsia-300";
+        return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
     };
 
     let summaryLabel = $derived.by(() => {
@@ -151,11 +170,14 @@
                 </div>
 
                 <!-- Aggregated Progress Bar -->
-                <div class="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
+                    <div class="absolute inset-0 opacity-60 bg-[linear-gradient(90deg,transparent_0,transparent_6px,rgba(255,255,255,0.45)_6px,rgba(255,255,255,0.45)_8px)] dark:bg-[linear-gradient(90deg,transparent_0,transparent_6px,rgba(255,255,255,0.08)_6px,rgba(255,255,255,0.08)_8px)] bg-[length:12px_100%]"></div>
                     <div 
-                        class="h-full bg-brand-500 transition-all duration-700 ease-out rounded-full shadow-[0_0_8px_rgba(var(--color-brand-500),0.5)]"
+                        class="h-full bg-gradient-to-r from-brand-500 via-brand-400 to-emerald-400 transition-all duration-700 ease-out rounded-full shadow-[0_0_10px_rgba(var(--color-brand-500),0.35)] relative"
                         style="width: {aggregateProgress}%"
-                    ></div>
+                    >
+                        <div class="absolute inset-0 bg-white/20"></div>
+                    </div>
                 </div>
 
                 <!-- Detailed View (Expanded on Hover or if multiple) -->
@@ -163,13 +185,18 @@
                     <div class="pt-2 border-t border-slate-100 dark:border-slate-800/50 mt-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2" in:slide>
                         {#each jobs as job, i (i)}
                             <div class="flex items-center justify-between gap-3 text-[9px] min-w-0">
-                                <span class="text-slate-500 font-bold uppercase truncate flex-1">
-                                    {formatTarget(job.target)}
-                                </span>
+                                <div class="flex items-center gap-2 min-w-0 flex-1">
+                                    <span class="px-1.5 py-0.5 rounded-md font-black uppercase tracking-wide whitespace-nowrap {jobTagClass(job.type)}">
+                                        {jobTag(job.type).label}
+                                    </span>
+                                    <span class="text-slate-500 font-bold uppercase truncate min-w-0">
+                                        {formatTarget(job.target)}
+                                    </span>
+                                </div>
                                 <span class="text-slate-400 truncate flex-1 text-right">
                                     {job.message || job.status}
                                 </span>
-                                <span class="font-black text-brand-600 dark:text-brand-400 w-6 text-right">
+                                <span class="font-black text-brand-600 dark:text-brand-400 w-8 text-right">
                                     {job.progress >= 0 ? job.progress + '%' : '...'}
                                 </span>
                             </div>

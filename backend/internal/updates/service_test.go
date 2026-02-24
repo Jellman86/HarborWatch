@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/portainer"
@@ -153,6 +154,9 @@ func newTestService(t *testing.T, failStep string) *Service {
 }
 
 func TestUpdatePipelineSuccess(t *testing.T) {
+	dockerengine.SetCachedUpdateAvailability("img", true)
+	t.Cleanup(func() { dockerengine.ClearCachedUpdateAvailability("img") })
+
 	svc := newTestService(t, "")
 	res, err := svc.StartUpdate(Request{ContainerID: "test-c", TargetImage: "img", ValidateURL: "http://x"})
 	if err != nil {
@@ -168,6 +172,9 @@ func TestUpdatePipelineSuccess(t *testing.T) {
 		if job != nil && job.Status == "completed" {
 			if len(job.Steps) == 0 {
 				t.Fatal("expected steps")
+			}
+			if dockerengine.GetCachedUpdateAvailability("img") {
+				t.Fatal("expected cached update flag to be cleared after successful update")
 			}
 			return
 		}

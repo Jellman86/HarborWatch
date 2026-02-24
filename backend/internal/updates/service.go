@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/ai"
+	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
@@ -333,6 +334,7 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 		})
 	}
 	s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "success", Status: "completed", Message: "Update pipeline completed", Timestamp: time.Now().UTC().Unix()})
+	s.clearCachedUpdateAvailability(req)
 	s.finish(jobID, "completed", nil)
 }
 
@@ -460,6 +462,7 @@ func (s *Service) executePortainer(ctx context.Context, jobID string, req Reques
 	}
 
 	s.setRunProgress(jobID, "completed", 100)
+	s.clearCachedUpdateAvailability(req)
 	s.finish(jobID, "completed", nil)
 }
 
@@ -515,6 +518,16 @@ func (s *Service) emit(jobID string, e gen.UpdateStepEvent) {
 		case ch <- e:
 		default:
 		}
+	}
+}
+
+func (s *Service) clearCachedUpdateAvailability(req Request) {
+	for _, image := range []string{req.TargetImage, req.CurrentImage} {
+		image = strings.TrimSpace(image)
+		if image == "" {
+			continue
+		}
+		dockerengine.SetCachedUpdateAvailability(image, false)
 	}
 }
 

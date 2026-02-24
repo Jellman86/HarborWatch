@@ -25,10 +25,28 @@ func (s *UpdateStore) Set(imageName string, available bool) {
 	s.updates[imageName] = available
 }
 
+func (s *UpdateStore) Delete(imageName string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.updates, imageName)
+}
+
 func (s *UpdateStore) Get(imageName string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.updates[imageName]
+}
+
+func SetCachedUpdateAvailability(imageName string, available bool) {
+	globalUpdateStore.Set(imageName, available)
+}
+
+func ClearCachedUpdateAvailability(imageName string) {
+	globalUpdateStore.Delete(imageName)
+}
+
+func GetCachedUpdateAvailability(imageName string) bool {
+	return globalUpdateStore.Get(imageName)
 }
 
 // RefreshUpdateStatus checks for updates for all unique images in the provided container list.

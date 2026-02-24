@@ -403,6 +403,27 @@ func (f staticRulesService) Save(ctx context.Context, r rules.ContainerRules) er
 	return nil
 }
 
+type recordingRulesService struct {
+	getRule rules.ContainerRules
+	saved   rules.ContainerRules
+}
+
+func (f *recordingRulesService) Get(ctx context.Context, id, name string) (rules.ContainerRules, error) {
+	out := f.getRule
+	if out.ContainerID == "" {
+		out.ContainerID = id
+	}
+	if out.ContainerName == "" {
+		out.ContainerName = name
+	}
+	return out, nil
+}
+
+func (f *recordingRulesService) Save(ctx context.Context, r rules.ContainerRules) error {
+	f.saved = r
+	return nil
+}
+
 type fakeUpdateService struct {
 	startResp gen.UpdateStartResponse
 	job       *gen.UpdateJobStatus
@@ -600,7 +621,7 @@ func TestUpdateAIBlockedEndpoint(t *testing.T) {
 }
 
 func TestUpdateRunEndpoint_BlockedWhenPolicyLocked(t *testing.T) {
-	mux := NewMuxWithDeps(nil, 
+	mux := NewMuxWithDeps(nil,
 		nil,
 		nil,
 		nil,
@@ -697,7 +718,7 @@ func TestAuditComposeByID_DockerUnavailable(t *testing.T) {
 
 func TestAuditComposeByID_PersistsAndReturnsHTML(t *testing.T) {
 	history := &fakeComposeAuditHistoryStore{}
-	mux := newMuxWithDepsAndComposeAuditStore(nil, 
+	mux := newMuxWithDepsAndComposeAuditStore(nil,
 		fakeDockerClient{},
 		nil,
 		nil,
@@ -764,7 +785,7 @@ func TestAuditComposeHistoryEndpoints(t *testing.T) {
 			CreatedAt:        1700000000,
 		}},
 	}
-	mux := newMuxWithDepsAndComposeAuditStore(nil, 
+	mux := newMuxWithDepsAndComposeAuditStore(nil,
 		nil,
 		nil,
 		nil,
@@ -816,6 +837,41 @@ func TestRulesRoute_BackwardCompatibleContainersPath(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docker/containers/c1/rules", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestRulesRoute_SaveMergesPartialPayloadWithoutClearingUnhealthyRestart(t *testing.T) {
+	rulesSvc := &recordingRulesService{
+		getRule: rules.ContainerRules{
+			ContainerID:                 "c1",
+			ContainerName:               "web",
+			UpdatePolicy:                "manual",
+			AutoRollback:                true,
+			InheritAutomation:           false,
+			UpgradesAutomation:          false,
+			MaintenanceAutomation:       false,
+			SecurityAutomation:          false,
+			RestartOnUnhealthy:          true,
+			UnhealthyRestartCooldownSec: 600,
+		},
+	}
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, rulesSvc, nil, nil)
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader(`{"updatePolicy":"auto","inheritAutomation":true,"upgradesAutomation":true}`)
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/docker/c1/rules", body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	if !rulesSvc.saved.RestartOnUnhealthy {
+		t.Fatalf("expected restartOnUnhealthy to be preserved on partial save")
+	}
+	if rulesSvc.saved.UnhealthyRestartCooldownSec != 600 {
+		t.Fatalf("expected cooldown to be preserved, got %d", rulesSvc.saved.UnhealthyRestartCooldownSec)
+	}
+	if rulesSvc.saved.UpdatePolicy != "auto" {
+		t.Fatalf("expected updatePolicy=auto, got %q", rulesSvc.saved.UpdatePolicy)
 	}
 }
 

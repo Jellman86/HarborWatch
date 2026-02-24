@@ -336,15 +336,15 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 
 	loadRuntimeSettings := func(ctx context.Context) settings.Settings {
 		st := settings.Settings{
-			AutomationIgnoredContainers: "harborwatch",
-			TrivySweepMode:              scheduler.TrivySweepModeRunningOnly,
-			RetentionLogsDays:           30,
-			RetentionMetricsDays:        14,
-			RetentionScanResultsDays:    30,
-			RetentionScanJobsDays:       30,
-			RetentionUpdateRunsDays:     90,
-			RetentionComposeAuditDays:   90,
-			RetentionAIUsageDays:        180,
+			AutomationIgnoredContainers:        "harborwatch",
+			TrivySweepMode:                     scheduler.TrivySweepModeRunningOnly,
+			RetentionLogsDays:                  30,
+			RetentionMetricsDays:               14,
+			RetentionScanResultsDays:           30,
+			RetentionScanJobsDays:              30,
+			RetentionUpdateRunsDays:            90,
+			RetentionComposeAuditDays:          90,
+			RetentionAIUsageDays:               180,
 			UnhealthyAutoRemediationEnabled:    true,
 			UnhealthyRestartCooldownSecDefault: 300,
 			MaxRestartsPerWindow:               3,
@@ -1274,21 +1274,92 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 						writeError(w, http.StatusServiceUnavailable, "rules_unavailable", "Rules service not initialized")
 						return
 					}
-					var req rules.ContainerRules
-					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					var raw map[string]json.RawMessage
+					if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 						writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
 						return
 					}
-					req.ContainerID = chi.URLParam(r, "id")
-					req.UpdatePolicy = normalizeUpdatePolicy(req.UpdatePolicy)
-					summary := gen.ContainerSummary{ID: req.ContainerID}
+					body, err := json.Marshal(raw)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+						return
+					}
+					var incoming rules.ContainerRules
+					if err := json.Unmarshal(body, &incoming); err != nil {
+						writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
+						return
+					}
+					containerID := chi.URLParam(r, "id")
+					summary := gen.ContainerSummary{ID: containerID}
 					if dockerClient != nil {
 						ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-						if c, err := dockerClient.GetContainer(ctx, req.ContainerID); err == nil {
+						if c, err := dockerClient.GetContainer(ctx, containerID); err == nil {
 							summary = c
 						}
 						cancel()
 					}
+					name := "unknown"
+					if len(summary.Names) > 0 {
+						name = strings.TrimPrefix(summary.Names[0], "/")
+					}
+					req, err := rulesService.Get(r.Context(), containerID, name)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "rules_get_failed", err.Error())
+						return
+					}
+					req.ContainerID = containerID
+					if strings.TrimSpace(name) != "" && !strings.EqualFold(name, "unknown") {
+						req.ContainerName = name
+					}
+					if _, ok := raw["containerName"]; ok {
+						req.ContainerName = incoming.ContainerName
+					}
+					if _, ok := raw["updatePolicy"]; ok {
+						req.UpdatePolicy = incoming.UpdatePolicy
+					}
+					if _, ok := raw["validateUrl"]; ok {
+						req.ValidateURL = incoming.ValidateURL
+					}
+					if _, ok := raw["validateMode"]; ok {
+						req.ValidateMode = incoming.ValidateMode
+					}
+					if _, ok := raw["validateTimeoutSec"]; ok {
+						req.ValidateTimeoutSec = incoming.ValidateTimeoutSec
+					}
+					if _, ok := raw["validateIntervalSec"]; ok {
+						req.ValidateIntervalSec = incoming.ValidateIntervalSec
+					}
+					if _, ok := raw["bypassAi"]; ok {
+						req.BypassAI = incoming.BypassAI
+					}
+					if _, ok := raw["skipHealthCheck"]; ok {
+						req.SkipHealthCheck = incoming.SkipHealthCheck
+					}
+					if _, ok := raw["aiValidateLogs"]; ok {
+						req.AIValidateLogs = incoming.AIValidateLogs
+					}
+					if _, ok := raw["autoRollback"]; ok {
+						req.AutoRollback = incoming.AutoRollback
+					}
+					if _, ok := raw["inheritAutomation"]; ok {
+						req.InheritAutomation = incoming.InheritAutomation
+					}
+					if _, ok := raw["upgradesAutomation"]; ok {
+						req.UpgradesAutomation = incoming.UpgradesAutomation
+					}
+					if _, ok := raw["maintenanceAutomation"]; ok {
+						req.MaintenanceAutomation = incoming.MaintenanceAutomation
+					}
+					if _, ok := raw["securityAutomation"]; ok {
+						req.SecurityAutomation = incoming.SecurityAutomation
+					}
+					if _, ok := raw["restartOnUnhealthy"]; ok {
+						req.RestartOnUnhealthy = incoming.RestartOnUnhealthy
+					}
+					if _, ok := raw["unhealthyRestartCooldownSec"]; ok {
+						req.UnhealthyRestartCooldownSec = incoming.UnhealthyRestartCooldownSec
+					}
+					req.UpdatePolicy = normalizeUpdatePolicy(req.UpdatePolicy)
 					req = effectiveContainerRules(r.Context(), summary, req, settingsService, diagService)
 					if err := rulesService.Save(r.Context(), req); err != nil {
 						writeError(w, http.StatusInternalServerError, "rules_save_failed", err.Error())
