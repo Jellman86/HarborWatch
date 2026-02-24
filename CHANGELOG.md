@@ -33,9 +33,12 @@ All notable changes to HarborWatch are documented in this file.
   - Extracted major route groups from `httpapi/server.go` (`admin`, `portainer`, `scans`, `updates`, `audit`) to improve maintainability without changing API behavior.
 - **AI History UX:**
   - Added explicit pagination (`Prev`/`Next`) and JSON/YAML/Markdown-aware prompt/response formatting for easier review.
+- **Fleet / Images / Stacks UX:**
+  - Added client-side pagination to Fleet Inventory, Image Repository, and Stacks views to prevent effectively infinite scroll behavior on larger hosts.
 - **UI Polish:**
   - Improved logo rendering quality across the app using responsive assets.
   - Normalized Settings single-card header styling and improved global progress labeling/tags.
+  - Reworked Settings page hierarchy with sticky navigation rails, stronger visual shell styling, and tab-level hero headers to improve section discoverability.
 
 ### Fixed
 - **Container History & Setting Continuity (P0):**
