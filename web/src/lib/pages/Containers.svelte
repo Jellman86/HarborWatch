@@ -3,6 +3,7 @@
     import type { ContainerSummary, Metric } from "../api-types";
     import Sparkline from "../components/Sparkline.svelte";
     import PortainerLogo from "../components/PortainerLogo.svelte";
+    import PaginationBar from "../components/PaginationBar.svelte";
     import { parseImageRef } from "../utils/image-ref";
     import { configStore } from "../stores/config.svelte";
 
@@ -548,9 +549,6 @@
                     <span class="ml-1 text-slate-400">({hiddenIgnoredCount} Hidden)</span>
                 {/if}
             </span>
-            <span class="px-3 py-1 bg-white dark:bg-slate-900/40 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
-                Page {pageIndex + 1}/{totalContainerPages}
-            </span>
         </div>
     </div>
 
@@ -602,29 +600,14 @@
     </div>
 
     {#if visibleContainers.length > 0}
-        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 px-4 py-3">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                Showing {visiblePageStart}-{visiblePageEnd} of {visibleContainers.length}
-            </p>
-            <div class="flex items-center gap-2">
-                <button
-                    type="button"
-                    onclick={() => pageIndex = Math.max(0, pageIndex - 1)}
-                    disabled={pageIndex === 0}
-                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
-                >
-                    Prev
-                </button>
-                <button
-                    type="button"
-                    onclick={() => pageIndex = Math.min(totalContainerPages - 1, pageIndex + 1)}
-                    disabled={pageIndex >= totalContainerPages - 1}
-                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
-                >
-                    Next
-                </button>
-            </div>
-        </div>
+        <PaginationBar
+            summaryText={`Showing ${visiblePageStart}-${visiblePageEnd} of ${visibleContainers.length}`}
+            pageText={`Page ${pageIndex + 1}/${totalContainerPages}`}
+            canPrev={pageIndex > 0}
+            canNext={pageIndex < totalContainerPages - 1}
+            onPrev={() => pageIndex = Math.max(0, pageIndex - 1)}
+            onNext={() => pageIndex = Math.min(totalContainerPages - 1, pageIndex + 1)}
+        />
     {/if}
 
     {#if loadingIgnoreTokens}

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import PaginationBar from "../components/PaginationBar.svelte";
     import { toasts } from "../stores/ToastStore";
 
     let { onNavigate } = $props<{
@@ -165,9 +166,6 @@
             </svg>
             Refresh
         </button>
-        <span class="px-3 py-1 bg-white dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
-            Page {pageIndex + 1}/{totalPages}
-        </span>
     </div>
 
     {#if loading}
@@ -192,29 +190,14 @@
             <p class="text-slate-400 italic font-medium">No stacks discovered in the configured Portainer endpoint.</p>
         </div>
     {:else}
-        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 px-4 py-3">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                Showing {pageStart}-{pageEnd} of {stacks.length}
-            </p>
-            <div class="flex items-center gap-2">
-                <button
-                    type="button"
-                    onclick={() => pageIndex = Math.max(0, pageIndex - 1)}
-                    disabled={pageIndex === 0}
-                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
-                >
-                    Prev
-                </button>
-                <button
-                    type="button"
-                    onclick={() => pageIndex = Math.min(totalPages - 1, pageIndex + 1)}
-                    disabled={pageIndex >= totalPages - 1}
-                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
-                >
-                    Next
-                </button>
-            </div>
-        </div>
+        <PaginationBar
+            summaryText={`Showing ${pageStart}-${pageEnd} of ${stacks.length}`}
+            pageText={`Page ${pageIndex + 1}/${totalPages}`}
+            canPrev={pageIndex > 0}
+            canNext={pageIndex < totalPages - 1}
+            onPrev={() => pageIndex = Math.max(0, pageIndex - 1)}
+            onNext={() => pageIndex = Math.min(totalPages - 1, pageIndex + 1)}
+        />
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10 opacity-0 animate-reveal stagger-1">
             {#each pagedStacks as s, i}
                 <div 

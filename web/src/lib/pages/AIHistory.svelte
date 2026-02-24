@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { slide } from "svelte/transition";
+    import PaginationBar from "../components/PaginationBar.svelte";
     import { toasts } from "../stores/ToastStore";
 
     interface AIConversation {
@@ -139,6 +140,9 @@
     );
 
     const features = $derived([...new Set(conversations.map(c => c.feature))]);
+    const visibleHistoryCount = $derived(filteredConvs.length);
+    const historyPageStart = $derived(visibleHistoryCount > 0 ? (pageIndex * pageSize) + 1 : 0);
+    const historyPageEnd = $derived(visibleHistoryCount > 0 ? (pageIndex * pageSize) + visibleHistoryCount : 0);
 
     const formatFeature = (f: string) => f.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
@@ -163,23 +167,6 @@
             <p class="text-xs text-slate-500 font-medium">Full audit trail of all prompts and automated decisions.</p>
         </div>
         <div class="flex items-center gap-2">
-            <button 
-                onclick={() => pageIndex = Math.max(0, pageIndex - 1)}
-                disabled={pageIndex === 0 || loading}
-                class="px-3 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm disabled:opacity-50"
-            >
-                Prev
-            </button>
-            <div class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                Page {pageIndex + 1}
-            </div>
-            <button 
-                onclick={() => pageIndex = pageIndex + 1}
-                disabled={!hasNextPage || loading}
-                class="px-3 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm disabled:opacity-50"
-            >
-                Next
-            </button>
             <button 
                 onclick={loadData}
                 class="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center gap-2"
@@ -280,6 +267,16 @@
 
     <!-- Interaction List -->
     <div class="space-y-3">
+        {#if !loading && conversations.length > 0}
+            <PaginationBar
+                summaryText={visibleHistoryCount > 0 ? `Showing ${historyPageStart}-${historyPageEnd}` : "Showing 0"}
+                pageText={`Page ${pageIndex + 1}`}
+                canPrev={pageIndex > 0 && !loading}
+                canNext={hasNextPage && !loading}
+                onPrev={() => pageIndex = Math.max(0, pageIndex - 1)}
+                onNext={() => pageIndex = pageIndex + 1}
+            />
+        {/if}
         {#if loading}
             {#each Array(3) as _}
                 <div class="h-24 bg-white dark:bg-slate-800 rounded-2xl animate-pulse border border-slate-200 dark:border-slate-700"></div>

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import type { ImageSummary } from "../api-types";
+    import PaginationBar from "../components/PaginationBar.svelte";
     import { toasts } from "../stores/ToastStore";
     import { parseImageRef } from "../utils/image-ref";
 
@@ -313,9 +314,6 @@
             </select>
 
             <div class="flex items-center gap-2">
-                <span class="px-3 py-1 bg-white dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
-                    Page {pageIndex + 1}/{totalPages}
-                </span>
                 <button 
                     onclick={() => loadImages()}
                     class="p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-brand-600 transition-colors flex items-center justify-center shadow-sm"
@@ -404,29 +402,14 @@
             <button onclick={() => searchQuery = ""} class="mt-4 text-brand-600 text-[10px] font-black uppercase tracking-widest hover:underline">Clear Search</button>
         </div>
     {:else}
-        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 px-4 py-3">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                Showing {pageStart}-{pageEnd} of {filteredRows.length}
-            </p>
-            <div class="flex items-center gap-2">
-                <button
-                    type="button"
-                    onclick={() => pageIndex = Math.max(0, pageIndex - 1)}
-                    disabled={pageIndex === 0}
-                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
-                >
-                    Prev
-                </button>
-                <button
-                    type="button"
-                    onclick={() => pageIndex = Math.min(totalPages - 1, pageIndex + 1)}
-                    disabled={pageIndex >= totalPages - 1}
-                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
-                >
-                    Next
-                </button>
-            </div>
-        </div>
+        <PaginationBar
+            summaryText={`Showing ${pageStart}-${pageEnd} of ${filteredRows.length}`}
+            pageText={`Page ${pageIndex + 1}/${totalPages}`}
+            canPrev={pageIndex > 0}
+            canNext={pageIndex < totalPages - 1}
+            onPrev={() => pageIndex = Math.max(0, pageIndex - 1)}
+            onNext={() => pageIndex = Math.min(totalPages - 1, pageIndex + 1)}
+        />
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 opacity-0 animate-reveal stagger-1">
             {#each pagedRows as img, i}
                 <article
