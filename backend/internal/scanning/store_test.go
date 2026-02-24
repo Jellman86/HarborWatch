@@ -85,3 +85,53 @@ func TestMalwareDetails_MatchesShortContainerIDPrefix(t *testing.T) {
 		t.Fatalf("expected 1 detail for short id prefix, got %d", len(rows))
 	}
 }
+
+func TestMalwareSummariesByContainer_ExposesContainerName(t *testing.T) {
+	store := newStoreTestDB(t)
+	now := time.Now().UTC().Unix()
+
+	if err := store.SaveMalwareResult(context.Background(), MalwareResult{
+		Target:        "container:abc123:rootfs",
+		Source:        "clamav",
+		ScannedAt:     now,
+		ContainerName: "gluetun",
+	}); err != nil {
+		t.Fatalf("save malware result: %v", err)
+	}
+
+	rows, err := store.MalwareSummariesByContainer(context.Background(), "abc123", "gluetun")
+	if err != nil {
+		t.Fatalf("query summaries by container: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 summary, got %d", len(rows))
+	}
+	if rows[0].ContainerName != "gluetun" {
+		t.Fatalf("expected container name gluetun, got %q", rows[0].ContainerName)
+	}
+}
+
+func TestMalwareDetailsForContainer_ExposesContainerName(t *testing.T) {
+	store := newStoreTestDB(t)
+	now := time.Now().UTC().Unix()
+
+	if err := store.SaveMalwareResult(context.Background(), MalwareResult{
+		Target:        "container:def456:mount:/config",
+		Source:        "clamav",
+		ScannedAt:     now,
+		ContainerName: "qbittorrent",
+	}); err != nil {
+		t.Fatalf("save malware result: %v", err)
+	}
+
+	rows, err := store.MalwareDetailsForContainer(context.Background(), "def456", "qbittorrent", 25)
+	if err != nil {
+		t.Fatalf("query details by container: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 detail, got %d", len(rows))
+	}
+	if rows[0].ContainerName != "qbittorrent" {
+		t.Fatalf("expected container name qbittorrent, got %q", rows[0].ContainerName)
+	}
+}

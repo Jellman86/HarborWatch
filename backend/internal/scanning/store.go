@@ -64,7 +64,7 @@ VALUES(?, ?, ?, ?, ?, ?, ?)
 }
 
 func (s *Store) MalwareSummaries(ctx context.Context, target string) ([]gen.MalwareScanSummary, error) {
-	query := `SELECT target, source, scanned_at, infected, threats_found FROM malware_scan_results`
+	query := `SELECT target, container_name, source, scanned_at, infected, threats_found FROM malware_scan_results`
 	var args []any
 	if target != "" {
 		query += ` WHERE target = ?`
@@ -83,7 +83,7 @@ func (s *Store) MalwareSummaries(ctx context.Context, target string) ([]gen.Malw
 		var sm gen.MalwareScanSummary
 		var infected int
 		var threatsRaw string
-		if err := rows.Scan(&sm.Target, &sm.Source, &sm.ScannedAt, &infected, &threatsRaw); err != nil {
+		if err := rows.Scan(&sm.Target, &sm.ContainerName, &sm.Source, &sm.ScannedAt, &infected, &threatsRaw); err != nil {
 			return nil, fmt.Errorf("scan malware summary: %w", err)
 		}
 		sm.Infected = infected == 1
@@ -98,7 +98,7 @@ func (s *Store) MalwareSummariesByPrefix(ctx context.Context, prefix string) ([]
 	if prefix == "" {
 		return []gen.MalwareScanSummary{}, nil
 	}
-	query := `SELECT target, source, scanned_at, infected, threats_found
+	query := `SELECT target, container_name, source, scanned_at, infected, threats_found
 FROM malware_scan_results
 WHERE target = ? OR target LIKE ? OR target LIKE ?
 ORDER BY scanned_at DESC`
@@ -113,7 +113,7 @@ ORDER BY scanned_at DESC`
 		var sm gen.MalwareScanSummary
 		var infected int
 		var threatsRaw string
-		if err := rows.Scan(&sm.Target, &sm.Source, &sm.ScannedAt, &infected, &threatsRaw); err != nil {
+		if err := rows.Scan(&sm.Target, &sm.ContainerName, &sm.Source, &sm.ScannedAt, &infected, &threatsRaw); err != nil {
 			return nil, fmt.Errorf("scan malware summary: %w", err)
 		}
 		sm.Infected = infected == 1
@@ -131,7 +131,7 @@ func (s *Store) MalwareDetails(ctx context.Context, target, prefix string, limit
 		limit = 200
 	}
 
-	query := `SELECT target, source, scanned_at, infected, threats_found, raw_output FROM malware_scan_results`
+	query := `SELECT target, container_name, source, scanned_at, infected, threats_found, raw_output FROM malware_scan_results`
 	var (
 		clauses []string
 		args    []any
@@ -170,7 +170,7 @@ func (s *Store) MalwareDetails(ctx context.Context, target, prefix string, limit
 			threatsRaw string
 			rawOutput  string
 		)
-		if err := rows.Scan(&detail.Target, &detail.Source, &detail.ScannedAt, &infected, &threatsRaw, &rawOutput); err != nil {
+		if err := rows.Scan(&detail.Target, &detail.ContainerName, &detail.Source, &detail.ScannedAt, &infected, &threatsRaw, &rawOutput); err != nil {
 			return nil, fmt.Errorf("scan malware detail: %w", err)
 		}
 		detail.Infected = infected == 1
@@ -200,7 +200,7 @@ func (s *Store) MalwareSummariesByContainer(ctx context.Context, id, name string
 	id = strings.TrimSpace(id)
 	name = strings.TrimSpace(name)
 	prefix := "container:" + id
-	query := `SELECT target, source, scanned_at, infected, threats_found
+	query := `SELECT target, container_name, source, scanned_at, infected, threats_found
 FROM malware_scan_results
 WHERE target = ? OR target LIKE ? OR target LIKE ? OR (container_name = ? AND container_name != '')
 ORDER BY scanned_at DESC`
@@ -215,7 +215,7 @@ ORDER BY scanned_at DESC`
 		var sm gen.MalwareScanSummary
 		var infected int
 		var threatsRaw string
-		if err := rows.Scan(&sm.Target, &sm.Source, &sm.ScannedAt, &infected, &threatsRaw); err != nil {
+		if err := rows.Scan(&sm.Target, &sm.ContainerName, &sm.Source, &sm.ScannedAt, &infected, &threatsRaw); err != nil {
 			return nil, fmt.Errorf("scan malware summary: %w", err)
 		}
 		sm.Infected = infected == 1
@@ -233,7 +233,7 @@ func (s *Store) MalwareDetailsForContainer(ctx context.Context, id, name string,
 	name = strings.TrimSpace(name)
 	prefix := "container:" + id
 
-	query := `SELECT target, source, scanned_at, infected, threats_found, raw_output 
+	query := `SELECT target, container_name, source, scanned_at, infected, threats_found, raw_output 
 FROM malware_scan_results
 WHERE target = ? OR target LIKE ? OR target LIKE ? OR (container_name = ? AND container_name != '')
 ORDER BY scanned_at DESC, id DESC LIMIT ?`
@@ -252,7 +252,7 @@ ORDER BY scanned_at DESC, id DESC LIMIT ?`
 			threatsRaw string
 			rawOutput  string
 		)
-		if err := rows.Scan(&detail.Target, &detail.Source, &detail.ScannedAt, &infected, &threatsRaw, &rawOutput); err != nil {
+		if err := rows.Scan(&detail.Target, &detail.ContainerName, &detail.Source, &detail.ScannedAt, &infected, &threatsRaw, &rawOutput); err != nil {
 			return nil, fmt.Errorf("scan malware detail: %w", err)
 		}
 		detail.Infected = infected == 1

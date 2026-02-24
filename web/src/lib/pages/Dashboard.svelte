@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import type { ContainerSummary, ScanSummary, ImageSummary, DockerEvent } from "../api-types";
+    import type { ContainerSummary, ScanSummary, ImageSummary, DockerEvent, ScanJobStatus } from "../api-types";
     import { configStore } from "../stores/config.svelte";
 
     let { containers, images, events, onRefresh, onNavigate } = $props<{ 
@@ -16,21 +16,29 @@
     let fleetAdviceTs = $state<number | null>(null);
     let analyzingFleet = $state(false);
     let schedules = $state<any[]>([]);
+    let recentScanJobs = $state<ScanJobStatus[]>([]);
+    let fleetAdviceExpanded = $state(false);
 
     async function loadData() {
         try {
-            const [scanRes, schedRes, adviceRes] = await Promise.all([
+            const [scanRes, schedRes, adviceRes, scanJobsRes] = await Promise.all([
                 fetch("/api/scans/summary"),
                 fetch("/api/scheduler/schedules"),
-                fetch("/api/ai/fleet-advice")
+                fetch("/api/ai/fleet-advice"),
+                fetch("/api/scans/jobs?limit=200")
             ]);
             if (scanRes.ok) scanSummary = await scanRes.json();
             if (schedRes.ok) schedules = await schedRes.json();
+            if (scanJobsRes.ok) {
+                const rows = await scanJobsRes.json();
+                recentScanJobs = Array.isArray(rows) ? rows : [];
+            }
             if (adviceRes.ok) {
                 const adviceData = await adviceRes.json();
                 fleetAdvice = adviceData.adviceMarkdown || adviceData.advice || "";
                 fleetAdviceHtml = adviceData.adviceHtml || "";
                 fleetAdviceTs = adviceData.timestamp;
+                fleetAdviceExpanded = false;
             }
         } catch (e) {
             console.error("Failed to load dashboard data", e);
@@ -51,6 +59,7 @@
                 fleetAdvice = data.adviceMarkdown || data.advice || "";
                 fleetAdviceHtml = data.adviceHtml || "";
                 fleetAdviceTs = Math.floor(Date.now() / 1000);
+                fleetAdviceExpanded = false;
             }
         } catch (e) {
             console.error("Fleet analysis failed", e);
@@ -66,6 +75,23 @@
     let safeContainers = $derived(containers || []);
     let runningCount = $derived(safeContainers.filter((c: ContainerSummary) => c.state === 'running').length);
     let updateCount = $derived(safeContainers.filter((c: ContainerSummary) => c.updateAvailable).length);
+    let recentSecurityScanCount = $derived(
+        (recentScanJobs || []).filter((j: ScanJobStatus) =>
+            (j.source === "trivy" || j.source === "clamav") &&
+            (j.status === "completed" || j.status === "failed" || j.status === "cancelled")
+        ).length
+    );
+
+    function fleetAdviceTldrText(raw: string): string {
+        const cleaned = (raw || "")
+            .replace(/```[\s\S]*?```/g, " ")
+            .replace(/[#*_>`-]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (!cleaned) return "";
+        const sentence = cleaned.match(/(.{1,260}?[.!?])(\s|$)/)?.[1] || cleaned.slice(0, 260);
+        return sentence.length < cleaned.length ? `${sentence}…` : sentence;
+    }
 
     // Automation Domain Helpers
     function getDomainStatus(taskIds: string[]) {
@@ -163,7 +189,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Security Scans</p>
-            <p class="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">{scanSummary?.total || 0}</p>
+            <p class="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">{recentSecurityScanCount}</p>
         </button>
     </div>
 
@@ -226,7 +252,7 @@
                 <h3 class="text-sm font-black uppercase tracking-widest text-slate-400">System Activity & Events</h3>
                 <button onclick={() => onNavigate('diagnostics')} class="text-[10px] font-black uppercase text-brand-600 hover:underline">View Logs</button>
             </div>
-            <div class="divide-y divide-slate-50 dark:divide-slate-700/50 overflow-y-auto max-h-[480px]">
+            <div class="dashboard-scroll divide-y divide-slate-50 dark:divide-slate-700/50 overflow-y-auto max-h-[480px]">
                 {#each (events || []).slice(0, 15) as event}
                     <div class="p-4 hover:bg-slate-50 dark:hover:bg-slate-900/20 transition-colors flex gap-4">
                         <div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center flex-shrink-0">
@@ -281,14 +307,34 @@
                                             Last generated: {new Date(fleetAdviceTs * 1000).toLocaleString()}
                                         </p>
                                     {/if}
-                                    <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-5">
-                                        {#if fleetAdviceHtml}
-                                            <div class="markdown-content prose prose-invert prose-sm max-w-none text-slate-200 leading-relaxed">
-                                                {@html fleetAdviceHtml}
-                                            </div>
-                                        {:else}
-                                            <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
-                                                {fleetAdvice}
+                                    <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-5 space-y-4">
+                                        <div>
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2">TLDR</p>
+                                            <p class="text-sm text-slate-200 leading-relaxed">{fleetAdviceTldrText(fleetAdvice)}</p>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-3">
+                                            <p class="text-[10px] uppercase tracking-widest text-slate-500 font-black">
+                                                {fleetAdviceExpanded ? 'Full advisory expanded' : 'Full advisory collapsed'}
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onclick={() => fleetAdviceExpanded = !fleetAdviceExpanded}
+                                                class="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-200"
+                                            >
+                                                {fleetAdviceExpanded ? 'Collapse' : 'Expand Full View'}
+                                            </button>
+                                        </div>
+                                        {#if fleetAdviceExpanded}
+                                            <div class="dashboard-scroll max-h-[420px] overflow-auto rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                                                {#if fleetAdviceHtml}
+                                                    <div class="markdown-content prose prose-invert prose-sm max-w-none text-slate-200 leading-relaxed">
+                                                        {@html fleetAdviceHtml}
+                                                    </div>
+                                                {:else}
+                                                    <div class="prose prose-invert prose-sm max-w-none text-slate-300 italic leading-relaxed whitespace-pre-wrap">
+                                                        {fleetAdvice}
+                                                    </div>
+                                                {/if}
                                             </div>
                                         {/if}
                                     </div>
@@ -303,3 +349,34 @@
         </div>
     {/if}
 </div>
+
+<style>
+    .dashboard-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(59, 130, 246, 0.55) rgba(15, 23, 42, 0.08);
+    }
+
+    .dashboard-scroll::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    .dashboard-scroll::-webkit-scrollbar-track {
+        background: rgba(148, 163, 184, 0.12);
+        border-radius: 999px;
+    }
+
+    .dashboard-scroll::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, rgba(59, 130, 246, 0.7), rgba(14, 165, 233, 0.6));
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+    }
+
+    .dashboard-scroll::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, rgba(37, 99, 235, 0.8), rgba(2, 132, 199, 0.75));
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+    }
+</style>

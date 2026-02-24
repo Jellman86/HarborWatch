@@ -177,7 +177,7 @@ func (s *Service) StartMalwareScanPath(targetLabel, containerName, scanPath stri
 		Type:       jobs.JobTypeScan,
 		Subtype:    "clamav",
 		Target:     targetLabel,
-		TargetName: targetLabel,
+		TargetName: malwareTargetDisplayName(targetLabel, containerName),
 		Status:     "queued",
 		Message:    "Waiting for concurrency slot",
 		StartedAt:  time.Now().UTC().Unix(),
@@ -204,6 +204,31 @@ func (s *Service) StartMalwareScanPath(targetLabel, containerName, scanPath stri
 	go s.runMalware(jobID, targetLabel, containerName, scanPath, cleanupPath, runCtx)
 
 	return gen.ScanStartResponse{JobID: jobID, Status: "queued"}, nil
+}
+
+func malwareTargetDisplayName(targetLabel, containerName string) string {
+	targetLabel = strings.TrimSpace(targetLabel)
+	containerName = strings.TrimSpace(containerName)
+	if containerName == "" || !strings.HasPrefix(targetLabel, "container:") {
+		return targetLabel
+	}
+	parts := strings.Split(targetLabel, ":")
+	if len(parts) < 3 {
+		return containerName
+	}
+	scope := strings.Join(parts[2:], ":")
+	switch {
+	case scope == "rootfs":
+		return containerName + " · rootfs (/)"
+	case strings.HasPrefix(scope, "mount:"):
+		dest := strings.TrimSpace(strings.TrimPrefix(scope, "mount:"))
+		if dest == "" {
+			return containerName
+		}
+		return containerName + " · " + dest
+	default:
+		return containerName
+	}
 }
 
 func (s *Service) run(jobID, target string, runCtx context.Context) {
