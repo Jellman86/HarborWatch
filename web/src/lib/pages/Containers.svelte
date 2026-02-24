@@ -23,6 +23,8 @@
     let searchQuery = $state("");
     let showIgnored = $state(false);
     let sortBy = $state<"name" | "state" | "memory" | "cpu">("name");
+    let pageIndex = $state(0);
+    const pageSize = 24;
 
     $effect(() => {
         if (params?.search) {
@@ -309,6 +311,13 @@
         !showIgnored ? filteredContainers.filter((c: ContainerSummary) => isAutomationIgnored(c) && activeFilter !== "ignored").length : 0
     );
 
+    let totalContainerPages = $derived(Math.max(1, Math.ceil(visibleContainers.length / pageSize)));
+    let pagedVisibleContainers = $derived(
+        visibleContainers.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)
+    );
+    let visiblePageStart = $derived(visibleContainers.length === 0 ? 0 : (pageIndex * pageSize) + 1);
+    let visiblePageEnd = $derived(Math.min((pageIndex + 1) * pageSize, visibleContainers.length));
+
     function latestMetric(id: string): Metric | null {
         const series = sparklineMetrics[id] || [];
         return series.length > 0 ? series[series.length - 1] : null;
@@ -487,6 +496,21 @@
         loadAIBlockedSignals();
     });
 
+    $effect(() => {
+        normalizedSearch;
+        activeFilter;
+        showIgnored;
+        sortBy;
+        safeContainers.length;
+        pageIndex = 0;
+    });
+
+    $effect(() => {
+        if (pageIndex > totalContainerPages - 1) {
+            pageIndex = Math.max(0, totalContainerPages - 1);
+        }
+    });
+
     onMount(() => {
         loadIgnoredContainerTokens();
     });
@@ -523,6 +547,9 @@
                 {#if hiddenIgnoredCount > 0}
                     <span class="ml-1 text-slate-400">({hiddenIgnoredCount} Hidden)</span>
                 {/if}
+            </span>
+            <span class="px-3 py-1 bg-white dark:bg-slate-900/40 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
+                Page {pageIndex + 1}/{totalContainerPages}
             </span>
         </div>
     </div>
@@ -574,12 +601,38 @@
         </div>
     </div>
 
+    {#if visibleContainers.length > 0}
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 px-4 py-3">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Showing {visiblePageStart}-{visiblePageEnd} of {visibleContainers.length}
+            </p>
+            <div class="flex items-center gap-2">
+                <button
+                    type="button"
+                    onclick={() => pageIndex = Math.max(0, pageIndex - 1)}
+                    disabled={pageIndex === 0}
+                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
+                >
+                    Prev
+                </button>
+                <button
+                    type="button"
+                    onclick={() => pageIndex = Math.min(totalContainerPages - 1, pageIndex + 1)}
+                    disabled={pageIndex >= totalContainerPages - 1}
+                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
+                >
+                    Next
+                </button>
+            </div>
+        </div>
+    {/if}
+
     {#if loadingIgnoreTokens}
         <p class="text-[11px] text-slate-500">Resolving automation ignore state...</p>
     {/if}
 
     <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
-        {#each visibleContainers as c, i}
+        {#each pagedVisibleContainers as c, i}
             {@const current = latestMetric(c.id)}
             {@const memoryPct = memoryRatio(current)}
             {@const ignored = isAutomationIgnored(c)}

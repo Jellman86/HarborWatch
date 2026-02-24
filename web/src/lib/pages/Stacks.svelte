@@ -11,6 +11,8 @@
     let loading = $state(true);
     let redeploying = $state<Record<number, boolean>>({});
     let error = $state("");
+    let pageIndex = $state(0);
+    const pageSize = 12;
 
     async function loadStacks() {
         loading = true;
@@ -74,6 +76,18 @@
             default: return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400";
         }
     };
+
+    const totalPages = $derived(Math.max(1, Math.ceil(stacks.length / pageSize)));
+    const pagedStacks = $derived(stacks.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize));
+    const pageStart = $derived(stacks.length === 0 ? 0 : (pageIndex * pageSize) + 1);
+    const pageEnd = $derived(Math.min((pageIndex + 1) * pageSize, stacks.length));
+
+    $effect(() => {
+        stacks.length;
+        if (pageIndex > totalPages - 1) {
+            pageIndex = Math.max(0, totalPages - 1);
+        }
+    });
 </script>
 
 <style>
@@ -151,6 +165,9 @@
             </svg>
             Refresh
         </button>
+        <span class="px-3 py-1 bg-white dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
+            Page {pageIndex + 1}/{totalPages}
+        </span>
     </div>
 
     {#if loading}
@@ -175,8 +192,31 @@
             <p class="text-slate-400 italic font-medium">No stacks discovered in the configured Portainer endpoint.</p>
         </div>
     {:else}
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 px-4 py-3">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Showing {pageStart}-{pageEnd} of {stacks.length}
+            </p>
+            <div class="flex items-center gap-2">
+                <button
+                    type="button"
+                    onclick={() => pageIndex = Math.max(0, pageIndex - 1)}
+                    disabled={pageIndex === 0}
+                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
+                >
+                    Prev
+                </button>
+                <button
+                    type="button"
+                    onclick={() => pageIndex = Math.min(totalPages - 1, pageIndex + 1)}
+                    disabled={pageIndex >= totalPages - 1}
+                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
+                >
+                    Next
+                </button>
+            </div>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10 opacity-0 animate-reveal stagger-1">
-            {#each stacks as s, i}
+            {#each pagedStacks as s, i}
                 <div 
                     class="stack-card-container opacity-0 animate-reveal"
                     style="animation-delay: {0.1 + (i * 0.05)}s"

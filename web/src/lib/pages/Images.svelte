@@ -190,6 +190,8 @@
     
     let searchQuery = $state("");
     let sortBy = $state<"repo" | "size" | "security">("repo");
+    let pageIndex = $state(0);
+    const pageSize = 24;
 
     const filteredRows = $derived(
         safeRows.filter(row => {
@@ -209,6 +211,11 @@
             return imageRepo(a).localeCompare(imageRepo(b));
         })
     );
+
+    const totalPages = $derived(Math.max(1, Math.ceil(filteredRows.length / pageSize)));
+    const pagedRows = $derived(filteredRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize));
+    const pageStart = $derived(filteredRows.length === 0 ? 0 : (pageIndex * pageSize) + 1);
+    const pageEnd = $derived(Math.min((pageIndex + 1) * pageSize, filteredRows.length));
 
     const stats = $derived({
         total: safeRows.length,
@@ -262,6 +269,19 @@
         if (primary && primary !== "<none>:<none>") refs.add(primary);
         return refs.size;
     }
+
+    $effect(() => {
+        searchQuery;
+        sortBy;
+        safeRows.length;
+        pageIndex = 0;
+    });
+
+    $effect(() => {
+        if (pageIndex > totalPages - 1) {
+            pageIndex = Math.max(0, totalPages - 1);
+        }
+    });
 </script>
 
 <div class="space-y-6">
@@ -293,6 +313,9 @@
             </select>
 
             <div class="flex items-center gap-2">
+                <span class="px-3 py-1 bg-white dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
+                    Page {pageIndex + 1}/{totalPages}
+                </span>
                 <button 
                     onclick={() => loadImages()}
                     class="p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-brand-600 transition-colors flex items-center justify-center shadow-sm"
@@ -381,8 +404,31 @@
             <button onclick={() => searchQuery = ""} class="mt-4 text-brand-600 text-[10px] font-black uppercase tracking-widest hover:underline">Clear Search</button>
         </div>
     {:else}
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 px-4 py-3">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Showing {pageStart}-{pageEnd} of {filteredRows.length}
+            </p>
+            <div class="flex items-center gap-2">
+                <button
+                    type="button"
+                    onclick={() => pageIndex = Math.max(0, pageIndex - 1)}
+                    disabled={pageIndex === 0}
+                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
+                >
+                    Prev
+                </button>
+                <button
+                    type="button"
+                    onclick={() => pageIndex = Math.min(totalPages - 1, pageIndex + 1)}
+                    disabled={pageIndex >= totalPages - 1}
+                    class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:border-brand-300"
+                >
+                    Next
+                </button>
+            </div>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 opacity-0 animate-reveal stagger-1">
-            {#each filteredRows as img, i}
+            {#each pagedRows as img, i}
                 <article
                     class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:border-brand-500/50 transition-all flex flex-col group overflow-hidden opacity-0 animate-reveal"
                     style="animation-delay: {0.1 + (i * 0.03)}s"
