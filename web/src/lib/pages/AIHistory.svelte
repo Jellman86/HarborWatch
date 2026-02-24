@@ -31,6 +31,10 @@
     let expandedId = $state<number | null>(null);
     let searchQuery = $state("");
     let filterFeature = $state("");
+    let pageSize = $state(25);
+    let pageIndex = $state(0);
+    let hasNextPage = $state(false);
+    let historyInitialized = false;
 
     // Timeline helpers
     function buildTimeline14Days(daily: AIUsageDaily[]): AIUsageDaily[] {
@@ -52,15 +56,70 @@
     let maxCalls = $derived(Math.max(...timelineDays.map(d => d.calls), 1));
     let timelineHasActivity = $derived(timelineDays.some(d => d.calls > 0));
 
+    function normalizeText(raw: string | null | undefined): string {
+        return String(raw || "").replace(/\r\n/g, "\n");
+    }
+
+    function unwrapSingleCodeFence(raw: string): { text: string; lang: string } {
+        const text = normalizeText(raw).trim();
+        const m = text.match(/^```([a-zA-Z0-9_-]+)?\n([\s\S]*?)\n```$/);
+        if (!m) return { text: normalizeText(raw), lang: "" };
+        return { text: m[2], lang: (m[1] || "").toLowerCase() };
+    }
+
+    function prettyJson(raw: string): string | null {
+        try {
+            const parsed = JSON.parse(raw);
+            return JSON.stringify(parsed, null, 2);
+        } catch {
+            return null;
+        }
+    }
+
+    function looksLikeYAML(raw: string): boolean {
+        const text = raw.trim();
+        if (!text || text.startsWith("{") || text.startsWith("[")) return false;
+        return /(^|\n)\s*[A-Za-z0-9_.-]+\s*:\s*/.test(text);
+    }
+
+    function looksLikeMarkdown(raw: string): boolean {
+        const text = raw.trim();
+        if (!text) return false;
+        return /(^|\n)\s*(#{1,6}\s+|[-*]\s+|\d+\.\s+|>\s+)/.test(text) || text.includes("```");
+    }
+
+    function formattedContent(raw: string, role: "prompt" | "response"): { text: string; kind: "json" | "yaml" | "markdown" | "text"; mono: boolean; label: string } {
+        const unwrapped = unwrapSingleCodeFence(raw);
+        const base = unwrapped.text.trim() ? unwrapped.text : normalizeText(raw);
+        const lang = unwrapped.lang;
+
+        if (lang === "json" || (!lang && (base.trim().startsWith("{") || base.trim().startsWith("[")))) {
+            const pretty = prettyJson(base);
+            if (pretty) return { text: pretty, kind: "json", mono: true, label: "JSON" };
+        }
+        if (lang === "yaml" || lang === "yml" || looksLikeYAML(base)) {
+            return { text: base, kind: "yaml", mono: true, label: "YAML" };
+        }
+        if (lang === "markdown" || looksLikeMarkdown(base)) {
+            return { text: base, kind: "markdown", mono: false, label: "Markdown" };
+        }
+        return { text: base, kind: "text", mono: role === "prompt", label: role === "prompt" ? "Text Prompt" : "Text Response" };
+    }
+
     async function loadData() {
         loading = true;
         try {
             const [convRes, usageRes] = await Promise.all([
-                fetch("/api/ai/conversations?limit=50"),
+                fetch(`/api/ai/conversations?limit=${pageSize}&offset=${pageIndex * pageSize}`),
                 fetch("/api/ai/usage?span=30d")
             ]);
             
-            if (convRes.ok) conversations = await convRes.json();
+            if (convRes.ok) {
+                const rows = await convRes.json();
+                conversations = Array.isArray(rows) ? rows : [];
+                hasNextPage = conversations.length === pageSize;
+                expandedId = null;
+            }
             if (usageRes.ok) usageSummary = await usageRes.json();
         } catch (e) {
             toasts.error("Failed to load AI history");
@@ -83,7 +142,17 @@
 
     const formatFeature = (f: string) => f.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-    onMount(loadData);
+    onMount(async () => {
+        historyInitialized = true;
+        await loadData();
+    });
+
+    $effect(() => {
+        pageIndex;
+        pageSize;
+        if (!historyInitialized) return;
+        loadData();
+    });
 </script>
 
 <div class="space-y-6">
@@ -93,15 +162,34 @@
             <h2 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">AI Intelligence Logs</h2>
             <p class="text-xs text-slate-500 font-medium">Full audit trail of all prompts and automated decisions.</p>
         </div>
-        <button 
-            onclick={loadData}
-            class="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center gap-2"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-        </button>
+        <div class="flex items-center gap-2">
+            <button 
+                onclick={() => pageIndex = Math.max(0, pageIndex - 1)}
+                disabled={pageIndex === 0 || loading}
+                class="px-3 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm disabled:opacity-50"
+            >
+                Prev
+            </button>
+            <div class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Page {pageIndex + 1}
+            </div>
+            <button 
+                onclick={() => pageIndex = pageIndex + 1}
+                disabled={!hasNextPage || loading}
+                class="px-3 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm disabled:opacity-50"
+            >
+                Next
+            </button>
+            <button 
+                onclick={loadData}
+                class="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center gap-2"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+            </button>
+        </div>
     </div>
 
     <!-- Timeline / Stats -->
@@ -242,26 +330,32 @@
                         <div class="px-5 pb-5 pt-0 grid grid-cols-1 lg:grid-cols-2 gap-6" transition:slide>
                             <div class="space-y-2">
                                 <div class="flex items-center justify-between px-1">
-                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Raw Prompt</h4>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Prompt</h4>
+                                        <span class="px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-[9px] font-bold uppercase tracking-widest text-slate-500">{formattedContent(conv.prompt, "prompt").label}</span>
+                                    </div>
                                     <button 
                                         onclick={() => navigator.clipboard.writeText(conv.prompt)}
                                         class="text-[9px] font-bold text-brand-600 hover:underline"
                                     >Copy</button>
                                 </div>
-                                <div class="bg-slate-50 dark:bg-slate-950 rounded-2xl p-4 text-[11px] font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap border border-slate-100 dark:border-slate-800 leading-relaxed max-h-[400px] overflow-y-auto custom-scrollbar">
-                                    {conv.prompt}
+                                <div class="bg-slate-50 dark:bg-slate-950 rounded-2xl p-4 text-[11px] {formattedContent(conv.prompt, 'prompt').mono ? 'font-mono' : 'font-sans'} text-slate-600 dark:text-slate-300 whitespace-pre-wrap border border-slate-100 dark:border-slate-800 leading-relaxed max-h-[400px] overflow-y-auto custom-scrollbar">
+                                    {formattedContent(conv.prompt, "prompt").text}
                                 </div>
                             </div>
                             <div class="space-y-2">
                                 <div class="flex items-center justify-between px-1">
-                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-brand-500">AI Response</h4>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="text-[10px] font-black uppercase tracking-widest text-brand-500">AI Response</h4>
+                                        <span class="px-1.5 py-0.5 rounded border border-brand-200/50 dark:border-brand-900/40 text-[9px] font-bold uppercase tracking-widest text-brand-600 dark:text-brand-300">{formattedContent(conv.response, "response").label}</span>
+                                    </div>
                                     <button 
                                         onclick={() => navigator.clipboard.writeText(conv.response)}
                                         class="text-[9px] font-bold text-brand-600 hover:underline"
                                     >Copy</button>
                                 </div>
-                                <div class="bg-brand-50/30 dark:bg-brand-900/10 rounded-2xl p-4 text-[11px] font-mono text-brand-700 dark:text-brand-200 whitespace-pre-wrap border border-brand-100/50 dark:border-brand-900/20 leading-relaxed max-h-[400px] overflow-y-auto custom-scrollbar">
-                                    {conv.response}
+                                <div class="bg-brand-50/30 dark:bg-brand-900/10 rounded-2xl p-4 text-[11px] {formattedContent(conv.response, 'response').mono ? 'font-mono' : 'font-sans'} text-brand-700 dark:text-brand-200 whitespace-pre-wrap border border-brand-100/50 dark:border-brand-900/20 leading-relaxed max-h-[400px] overflow-y-auto custom-scrollbar">
+                                    {formattedContent(conv.response, "response").text}
                                 </div>
                             </div>
                         </div>
