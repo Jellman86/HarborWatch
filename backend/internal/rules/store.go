@@ -10,6 +10,7 @@ import (
 )
 
 type ContainerRules struct {
+	Exists                      bool   `json:"-"`
 	ContainerID                 string `json:"containerId"`
 	ContainerName               string `json:"containerName"`
 	UpdatePolicy                string `json:"updatePolicy"` // auto, manual, locked
@@ -92,6 +93,7 @@ LIMIT 1
 	r.MaintenanceAutomation = maintenanceAutomation == 1
 	r.SecurityAutomation = securityAutomation == 1
 	r.RestartOnUnhealthy = restartOnUnhealthy == 1
+	r.Exists = true
 	if strings.TrimSpace(r.ValidateMode) == "" {
 		r.ValidateMode = "both"
 	}

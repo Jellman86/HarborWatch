@@ -52,6 +52,12 @@ type Settings struct {
 	MetricsNormalized                  bool   `json:"metricsNormalized"`
 	GlobalBypassAI                     bool   `json:"globalBypassAi"`
 	GlobalSkipHealthCheck              bool   `json:"globalSkipHealthCheck"`
+	DefaultValidateMode                string `json:"defaultValidateMode"`
+	DefaultValidateTimeoutSec          int    `json:"defaultValidateTimeoutSec"`
+	DefaultValidateIntervalSec         int    `json:"defaultValidateIntervalSec"`
+	DefaultAIValidateLogs              bool   `json:"defaultAiValidateLogs"`
+	DefaultAutoRollback                bool   `json:"defaultAutoRollback"`
+	DefaultRestartOnUnhealthy          bool   `json:"defaultRestartOnUnhealthy"`
 	UnhealthyAutoRemediationEnabled    bool   `json:"unhealthyAutoRemediationEnabled"`
 	UnhealthyRestartCooldownSecDefault int    `json:"unhealthyRestartCooldownSecDefault"`
 	MaxRestartsPerWindow               int    `json:"maxRestartsPerWindow"`
@@ -110,6 +116,12 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		UnhealthyRestartCooldownSecDefault: 300,
 		MaxRestartsPerWindow:               3,
 		MetricsNormalized:                  true,
+		DefaultValidateMode:                "both",
+		DefaultValidateTimeoutSec:          45,
+		DefaultValidateIntervalSec:         2,
+		DefaultAIValidateLogs:              false,
+		DefaultAutoRollback:                true,
+		DefaultRestartOnUnhealthy:          false,
 		EnvironmentOverrides:               make(map[string]bool),
 	}
 
@@ -196,6 +208,18 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.GlobalBypassAI = parseStoredBool(value, st.GlobalBypassAI)
 		case "global_skip_health_check":
 			st.GlobalSkipHealthCheck = parseStoredBool(value, st.GlobalSkipHealthCheck)
+		case "default_validate_mode":
+			st.DefaultValidateMode = normalizeValidateModeValue(value)
+		case "default_validate_timeout_sec":
+			st.DefaultValidateTimeoutSec = parseStoredInt(value, st.DefaultValidateTimeoutSec, 1, 3600)
+		case "default_validate_interval_sec":
+			st.DefaultValidateIntervalSec = parseStoredInt(value, st.DefaultValidateIntervalSec, 1, 300)
+		case "default_ai_validate_logs":
+			st.DefaultAIValidateLogs = parseStoredBool(value, st.DefaultAIValidateLogs)
+		case "default_auto_rollback":
+			st.DefaultAutoRollback = parseStoredBool(value, st.DefaultAutoRollback)
+		case "default_restart_on_unhealthy":
+			st.DefaultRestartOnUnhealthy = parseStoredBool(value, st.DefaultRestartOnUnhealthy)
 		case "unhealthy_auto_remediation_enabled":
 			st.UnhealthyAutoRemediationEnabled = parseStoredBool(value, st.UnhealthyAutoRemediationEnabled)
 		case "unhealthy_restart_cooldown_sec_default":
@@ -305,6 +329,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 	}
 
 	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
+	st.DefaultValidateMode = normalizeValidateModeValue(st.DefaultValidateMode)
 	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
 	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
 
@@ -322,6 +347,9 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	st.AutoUpgradeMinRetryMinutes = parseStoredInt(strconv.Itoa(st.AutoUpgradeMinRetryMinutes), 60, 1, 24*60)
 	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
 	st.ClamAVSnapshotMaxBytes = parseStoredInt64(strconv.FormatInt(st.ClamAVSnapshotMaxBytes, 10), 2<<30, 1, 32<<30)
+	st.DefaultValidateMode = normalizeValidateModeValue(st.DefaultValidateMode)
+	st.DefaultValidateTimeoutSec = parseStoredInt(strconv.Itoa(st.DefaultValidateTimeoutSec), 45, 1, 3600)
+	st.DefaultValidateIntervalSec = parseStoredInt(strconv.Itoa(st.DefaultValidateIntervalSec), 2, 1, 300)
 	st.DataRetentionDays = parseStoredInt(strconv.Itoa(st.DataRetentionDays), 30, 1, 3650)
 	st.RetentionLogsDays = st.DataRetentionDays
 	st.RetentionMetricsDays = st.DataRetentionDays
@@ -373,6 +401,12 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"metrics_normalized":                     boolString(st.MetricsNormalized),
 		"global_bypass_ai":                       boolString(st.GlobalBypassAI),
 		"global_skip_health_check":               boolString(st.GlobalSkipHealthCheck),
+		"default_validate_mode":                  st.DefaultValidateMode,
+		"default_validate_timeout_sec":           intString(st.DefaultValidateTimeoutSec),
+		"default_validate_interval_sec":          intString(st.DefaultValidateIntervalSec),
+		"default_ai_validate_logs":               boolString(st.DefaultAIValidateLogs),
+		"default_auto_rollback":                  boolString(st.DefaultAutoRollback),
+		"default_restart_on_unhealthy":           boolString(st.DefaultRestartOnUnhealthy),
 		"unhealthy_auto_remediation_enabled":     boolString(st.UnhealthyAutoRemediationEnabled),
 		"unhealthy_restart_cooldown_sec_default": intString(st.UnhealthyRestartCooldownSecDefault),
 		"max_restarts_per_window":                intString(st.MaxRestartsPerWindow),
@@ -416,6 +450,12 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"metricsNormalized":                  "metrics_normalized",
 		"globalBypassAi":                     "global_bypass_ai",
 		"globalSkipHealthCheck":              "global_skip_health_check",
+		"defaultValidateMode":                "default_validate_mode",
+		"defaultValidateTimeoutSec":          "default_validate_timeout_sec",
+		"defaultValidateIntervalSec":         "default_validate_interval_sec",
+		"defaultAiValidateLogs":              "default_ai_validate_logs",
+		"defaultAutoRollback":                "default_auto_rollback",
+		"defaultRestartOnUnhealthy":          "default_restart_on_unhealthy",
 		"unhealthyAutoRemediationEnabled":    "unhealthy_auto_remediation_enabled",
 		"unhealthyRestartCooldownSecDefault": "unhealthy_restart_cooldown_sec_default",
 		"maxRestartsPerWindow":               "max_restarts_per_window",
@@ -524,6 +564,19 @@ func normalizeDelimitedList(raw string) string {
 		out = append(out, part)
 	}
 	return strings.Join(out, ", ")
+}
+
+func normalizeValidateModeValue(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "http":
+		return "http"
+	case "docker":
+		return "docker"
+	case "both":
+		return "both"
+	default:
+		return "both"
+	}
 }
 
 func splitDelimitedList(raw string) []string {

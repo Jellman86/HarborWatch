@@ -172,3 +172,41 @@ func TestGetAppliesRetentionEnvOverrides(t *testing.T) {
 		t.Fatalf("expected RetentionAIUsageDays=365, got %d", got.RetentionAIUsageDays)
 	}
 }
+
+func TestSaveAndGetLifecycleDefaultPolicySettings(t *testing.T) {
+	store := newTestStore(t)
+	in := Settings{
+		DefaultValidateMode:                "docker",
+		DefaultValidateTimeoutSec:          120,
+		DefaultValidateIntervalSec:         5,
+		DefaultAIValidateLogs:              true,
+		DefaultAutoRollback:                true,
+		DefaultRestartOnUnhealthy:          true,
+		UnhealthyRestartCooldownSecDefault: 900,
+	}
+	if err := store.Save(context.Background(), in); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+	got, err := store.Get(context.Background())
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if got.DefaultValidateMode != "docker" {
+		t.Fatalf("expected DefaultValidateMode=docker, got %q", got.DefaultValidateMode)
+	}
+	if got.DefaultValidateTimeoutSec != 120 {
+		t.Fatalf("expected DefaultValidateTimeoutSec=120, got %d", got.DefaultValidateTimeoutSec)
+	}
+	if got.DefaultValidateIntervalSec != 5 {
+		t.Fatalf("expected DefaultValidateIntervalSec=5, got %d", got.DefaultValidateIntervalSec)
+	}
+	if !got.DefaultAIValidateLogs {
+		t.Fatalf("expected DefaultAIValidateLogs=true")
+	}
+	if !got.DefaultAutoRollback {
+		t.Fatalf("expected DefaultAutoRollback=true")
+	}
+	if !got.DefaultRestartOnUnhealthy {
+		t.Fatalf("expected DefaultRestartOnUnhealthy=true")
+	}
+}

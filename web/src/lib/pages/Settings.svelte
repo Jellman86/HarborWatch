@@ -139,6 +139,12 @@
         metricsNormalized: true,
         globalBypassAi: false,
         globalSkipHealthCheck: false,
+        defaultValidateMode: "both",
+        defaultValidateTimeoutSec: 45,
+        defaultValidateIntervalSec: 2,
+        defaultAiValidateLogs: false,
+        defaultAutoRollback: true,
+        defaultRestartOnUnhealthy: false,
         unhealthyAutoRemediationEnabled: true,
         unhealthyRestartCooldownSecDefault: 300,
         maxRestartsPerWindow: 3,
@@ -1321,6 +1327,102 @@
                                                         >
                                                             <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.globalSkipHealthCheck ? 'right-1' : 'left-1'}"></div>
                                                         </button>
+                                                    </div>
+
+                                                    <div class="pt-3 border-t border-slate-200/50 dark:border-slate-700/50 space-y-3">
+                                                        <div>
+                                                            <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Default Upgrade Validation Profile</p>
+                                                            <p class="text-[11px] text-slate-500 mt-0.5 italic">
+                                                                Applied to containers that do not yet have explicit lifecycle settings. Validation URL still follows container labels / pattern-based derivation.
+                                                            </p>
+                                                        </div>
+
+                                                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                            <div class="space-y-2">
+                                                                <label for="default-validate-mode" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Validation Mode</label>
+                                                                <select
+                                                                    id="default-validate-mode"
+                                                                    bind:value={settings.defaultValidateMode}
+                                                                    disabled={isLocked("defaultValidateMode")}
+                                                                    class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                                >
+                                                                    <option value="both">Docker + HTTP</option>
+                                                                    <option value="docker">Docker health only</option>
+                                                                    <option value="http">HTTP only</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="space-y-2">
+                                                                <label for="default-validate-timeout" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Timeout (seconds)</label>
+                                                                <input
+                                                                    id="default-validate-timeout"
+                                                                    type="number"
+                                                                    min="1"
+                                                                    max="3600"
+                                                                    bind:value={settings.defaultValidateTimeoutSec}
+                                                                    disabled={isLocked("defaultValidateTimeoutSec")}
+                                                                    class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                                />
+                                                            </div>
+                                                            <div class="space-y-2">
+                                                                <label for="default-validate-interval" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Probe Interval (seconds)</label>
+                                                                <input
+                                                                    id="default-validate-interval"
+                                                                    type="number"
+                                                                    min="1"
+                                                                    max="300"
+                                                                    bind:value={settings.defaultValidateIntervalSec}
+                                                                    disabled={isLocked("defaultValidateIntervalSec")}
+                                                                    class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
+                                                            <div class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2">
+                                                                <div class="pr-3">
+                                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Auto Rollback</p>
+                                                                    <p class="text-[10px] text-slate-500">Default for new containers</p>
+                                                                </div>
+                                                                <button
+                                                                    onclick={() => settings.defaultAutoRollback = !settings.defaultAutoRollback}
+                                                                    disabled={isLocked("defaultAutoRollback")}
+                                                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.defaultAutoRollback ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                                    aria-label="Toggle Default Auto Rollback"
+                                                                >
+                                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.defaultAutoRollback ? 'right-1' : 'left-1'}"></div>
+                                                                </button>
+                                                            </div>
+
+                                                            <div class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2">
+                                                                <div class="pr-3">
+                                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">AI Log Validation</p>
+                                                                    <p class="text-[10px] text-slate-500">Default for new containers</p>
+                                                                </div>
+                                                                <button
+                                                                    onclick={() => settings.defaultAiValidateLogs = !settings.defaultAiValidateLogs}
+                                                                    disabled={isLocked("defaultAiValidateLogs")}
+                                                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.defaultAiValidateLogs ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                                    aria-label="Toggle Default AI Log Validation"
+                                                                >
+                                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.defaultAiValidateLogs ? 'right-1' : 'left-1'}"></div>
+                                                                </button>
+                                                            </div>
+
+                                                            <div class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2">
+                                                                <div class="pr-3">
+                                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Restart on Unhealthy</p>
+                                                                    <p class="text-[10px] text-slate-500">Per-container opt-in default</p>
+                                                                </div>
+                                                                <button
+                                                                    onclick={() => settings.defaultRestartOnUnhealthy = !settings.defaultRestartOnUnhealthy}
+                                                                    disabled={isLocked("defaultRestartOnUnhealthy")}
+                                                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.defaultRestartOnUnhealthy ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                                    aria-label="Toggle Default Restart on Unhealthy"
+                                                                >
+                                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.defaultRestartOnUnhealthy ? 'right-1' : 'left-1'}"></div>
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>

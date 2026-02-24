@@ -383,7 +383,7 @@ func (f fakeSettingsService) Save(ctx context.Context, s settings.Settings) erro
 type fakeRulesService struct{}
 
 func (f fakeRulesService) Get(ctx context.Context, id, name string) (rules.ContainerRules, error) {
-	return rules.ContainerRules{ContainerID: id, ContainerName: name, UpdatePolicy: "manual"}, nil
+	return rules.ContainerRules{Exists: true, ContainerID: id, ContainerName: name, UpdatePolicy: "manual"}, nil
 }
 func (f fakeRulesService) Save(ctx context.Context, r rules.ContainerRules) error {
 	return nil
@@ -401,6 +401,7 @@ func (f staticRulesService) Get(ctx context.Context, id, name string) (rules.Con
 	if out.ContainerName == "" {
 		out.ContainerName = name
 	}
+	out.Exists = true
 	return out, nil
 }
 
@@ -421,6 +422,7 @@ func (f *recordingRulesService) Get(ctx context.Context, id, name string) (rules
 	if out.ContainerName == "" {
 		out.ContainerName = name
 	}
+	out.Exists = true
 	return out, nil
 }
 

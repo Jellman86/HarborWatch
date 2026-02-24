@@ -18,19 +18,41 @@ var healthURLPattern = regexp.MustCompile(`https?://[^\s"'<>]+`)
 
 func effectiveContainerRules(ctx context.Context, summary gen.ContainerSummary, existing rules.ContainerRules, settingsService SettingsService, diagService DiagService) rules.ContainerRules {
 	out := existing
+	defaults := lifecycleRuleDefaults()
+	if settingsService != nil {
+		ctxSettings, cancel := context.WithTimeout(ctx, 2*time.Second)
+		if st, err := settingsService.Get(ctxSettings); err == nil {
+			defaults = lifecycleRuleDefaultsFromSettings(st)
+		}
+		cancel()
+	}
+	if !out.Exists {
+		out.ValidateMode = defaults.ValidateMode
+		out.ValidateTimeoutSec = defaults.ValidateTimeoutSec
+		out.ValidateIntervalSec = defaults.ValidateIntervalSec
+		out.AIValidateLogs = defaults.AIValidateLogs
+		out.AutoRollback = defaults.AutoRollback
+		out.RestartOnUnhealthy = defaults.RestartOnUnhealthy
+		if out.UnhealthyRestartCooldownSec <= 0 {
+			out.UnhealthyRestartCooldownSec = defaults.UnhealthyRestartCooldownSec
+		}
+	}
 	out.UpdatePolicy = normalizeUpdatePolicy(out.UpdatePolicy)
 	if out.UpdatePolicy == "" {
 		out.UpdatePolicy = "manual"
 	}
 	out.ValidateMode = normalizeValidateMode(out.ValidateMode)
 	if out.ValidateMode == "" {
-		out.ValidateMode = "both"
+		out.ValidateMode = defaults.ValidateMode
 	}
 	if out.ValidateTimeoutSec <= 0 {
-		out.ValidateTimeoutSec = 45
+		out.ValidateTimeoutSec = defaults.ValidateTimeoutSec
 	}
 	if out.ValidateIntervalSec <= 0 {
-		out.ValidateIntervalSec = 2
+		out.ValidateIntervalSec = defaults.ValidateIntervalSec
+	}
+	if out.UnhealthyRestartCooldownSec <= 0 {
+		out.UnhealthyRestartCooldownSec = defaults.UnhealthyRestartCooldownSec
 	}
 	if out.InheritAutomation {
 		out.UpgradesAutomation = true
@@ -41,6 +63,49 @@ func effectiveContainerRules(ctx context.Context, summary gen.ContainerSummary, 
 		return out
 	}
 	out.ValidateURL = deriveValidationURL(ctx, summary, settingsService, diagService)
+	return out
+}
+
+type lifecycleDefaults struct {
+	ValidateMode                string
+	ValidateTimeoutSec          int
+	ValidateIntervalSec         int
+	AIValidateLogs              bool
+	AutoRollback                bool
+	RestartOnUnhealthy          bool
+	UnhealthyRestartCooldownSec int
+}
+
+func lifecycleRuleDefaults() lifecycleDefaults {
+	return lifecycleDefaults{
+		ValidateMode:                "both",
+		ValidateTimeoutSec:          45,
+		ValidateIntervalSec:         2,
+		AIValidateLogs:              false,
+		AutoRollback:                true,
+		RestartOnUnhealthy:          false,
+		UnhealthyRestartCooldownSec: 300,
+	}
+}
+
+func lifecycleRuleDefaultsFromSettings(st settings.Settings) lifecycleDefaults {
+	out := lifecycleRuleDefaults()
+	out.ValidateMode = normalizeValidateMode(st.DefaultValidateMode)
+	if out.ValidateMode == "" {
+		out.ValidateMode = "both"
+	}
+	if st.DefaultValidateTimeoutSec > 0 {
+		out.ValidateTimeoutSec = st.DefaultValidateTimeoutSec
+	}
+	if st.DefaultValidateIntervalSec > 0 {
+		out.ValidateIntervalSec = st.DefaultValidateIntervalSec
+	}
+	out.AIValidateLogs = st.DefaultAIValidateLogs
+	out.AutoRollback = st.DefaultAutoRollback
+	out.RestartOnUnhealthy = st.DefaultRestartOnUnhealthy
+	if st.UnhealthyRestartCooldownSecDefault > 0 {
+		out.UnhealthyRestartCooldownSec = st.UnhealthyRestartCooldownSecDefault
+	}
 	return out
 }
 
