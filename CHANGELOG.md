@@ -35,6 +35,8 @@ All notable changes to HarborWatch are documented in this file.
   - Added explicit pagination (`Prev`/`Next`) and JSON/YAML/Markdown-aware prompt/response formatting for easier review.
 - **Fleet / Images / Stacks UX:**
   - Added client-side pagination to Fleet Inventory, Image Repository, and Stacks views to prevent effectively infinite scroll behavior on larger hosts.
+- **Pagination UI Consistency:**
+  - Unified Fleet, Images, Stacks, and AI History pagination into a shared pagination bar component with consistent controls and placement directly above paged content.
 - **UI Polish:**
   - Improved logo rendering quality across the app using responsive assets.
   - Normalized Settings single-card header styling and improved global progress labeling/tags.
