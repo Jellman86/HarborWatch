@@ -126,7 +126,7 @@ func collectDiagnosticsSnapshot(ctx context.Context, deps diagnosticsDeps, opts 
 	if deps.updateService != nil {
 		activeJobs = append(activeJobs, deps.updateService.ActiveJobs()...)
 	}
-	snapshot.ActiveJobs = activeJobs
+	snapshot.ActiveJobs = dedupeActiveJobs(activeJobs)
 
 	if deps.auditService != nil {
 		jobs, err := deps.auditService.ListAuditJobs(ctx)
@@ -225,6 +225,27 @@ func componentStatus(enabled bool) string {
 		return "enabled"
 	}
 	return "disabled"
+}
+
+func dedupeActiveJobs(jobs []gen.JobProgress) []gen.JobProgress {
+	if len(jobs) <= 1 {
+		return jobs
+	}
+	seen := make(map[string]struct{}, len(jobs))
+	out := make([]gen.JobProgress, 0, len(jobs))
+	for _, job := range jobs {
+		id := strings.TrimSpace(job.ID)
+		if id == "" {
+			out = append(out, job)
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, job)
+	}
+	return out
 }
 
 func isContainerNotFoundError(err error) bool {

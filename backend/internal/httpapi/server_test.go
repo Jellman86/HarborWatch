@@ -69,9 +69,10 @@ func (f fakeDockerClient) OpenEventStream(ctx context.Context) (io.ReadCloser, e
 }
 
 type fakeScanService struct {
-	startResp gen.ScanStartResponse
-	jobs      map[string]gen.ScanJobStatus
-	summary   *gen.ScanSummary
+	startResp  gen.ScanStartResponse
+	jobs       map[string]gen.ScanJobStatus
+	summary    *gen.ScanSummary
+	activeJobs []gen.JobProgress
 }
 
 func (f fakeScanService) StartScan(target string) (gen.ScanStartResponse, error) {
@@ -140,7 +141,7 @@ func (f fakeScanService) MalwareDetailsForContainer(ctx context.Context, contain
 	return nil, nil
 }
 func (f fakeScanService) ActiveJobs() []gen.JobProgress {
-	return nil
+	return f.activeJobs
 }
 func (f fakeScanService) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
 	return []gen.ImageSummary{}, nil
@@ -425,9 +426,10 @@ func (f *recordingRulesService) Save(ctx context.Context, r rules.ContainerRules
 }
 
 type fakeUpdateService struct {
-	startResp gen.UpdateStartResponse
-	job       *gen.UpdateJobStatus
-	runsByID  map[string][]gen.UpdateJobStatus
+	startResp  gen.UpdateStartResponse
+	job        *gen.UpdateJobStatus
+	runsByID   map[string][]gen.UpdateJobStatus
+	activeJobs []gen.JobProgress
 }
 
 func (f fakeUpdateService) StartUpdate(req updates.Request) (gen.UpdateStartResponse, error) {
@@ -443,7 +445,7 @@ func (f fakeUpdateService) ListContainerJobs(ctx context.Context, containerID st
 	return []gen.UpdateJobStatus{}, nil
 }
 func (f fakeUpdateService) ActiveJobs() []gen.JobProgress {
-	return nil
+	return f.activeJobs
 }
 func (f fakeUpdateService) Subscribe(jobID string) (<-chan gen.UpdateStepEvent, func()) {
 	ch := make(chan gen.UpdateStepEvent, 1)
@@ -1053,6 +1055,26 @@ func TestDiagnosticsSnapshotEndpoint(t *testing.T) {
 	}
 	if payload["components"] == nil {
 		t.Fatalf("expected components in diagnostics snapshot")
+	}
+}
+
+func TestDiagnosticsSnapshotDedupesActiveJobsByID(t *testing.T) {
+	sharedJobs := []gen.JobProgress{
+		{ID: "j1", Type: "scan:trivy", Target: "nginx:latest", Status: "queued", Progress: 0, StartedAt: 1},
+		{ID: "j2", Type: "scan:clamav", Target: "/mnt/media", Status: "running", Progress: 25, StartedAt: 2},
+	}
+	snapshot, err := collectDiagnosticsSnapshot(context.Background(), diagnosticsDeps{
+		scanService:   fakeScanService{activeJobs: sharedJobs},
+		updateService: fakeUpdateService{activeJobs: sharedJobs},
+	}, diagnosticsSnapshotOptions{LogLimit: 10, AuditLimit: 10})
+	if err != nil {
+		t.Fatalf("collectDiagnosticsSnapshot failed: %v", err)
+	}
+	if len(snapshot.ActiveJobs) != 2 {
+		t.Fatalf("expected 2 deduped active jobs, got %d (%#v)", len(snapshot.ActiveJobs), snapshot.ActiveJobs)
+	}
+	if snapshot.ActiveJobs[0].ID != "j1" || snapshot.ActiveJobs[1].ID != "j2" {
+		t.Fatalf("unexpected activeJobs order/content: %#v", snapshot.ActiveJobs)
 	}
 }
 

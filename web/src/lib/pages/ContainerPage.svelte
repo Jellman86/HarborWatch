@@ -76,6 +76,12 @@
     let lifecycleMode = $state<"global" | "manual">("global");
     let bypassAi = $state(false);
     let skipHealth = $state(false);
+    let aiValidateLogs = $state(false);
+    let autoRollback = $state(true);
+    let validateMode = $state<"http" | "docker" | "both">("both");
+    let validateUrl = $state("");
+    let validateTimeoutSec = $state(45);
+    let validateIntervalSec = $state(2);
     let restartOnUnhealthy = $state(false);
     let unhealthyRestartCooldownSec = $state(300);
     let updateHistory = $state<UpdateJobStatus[]>([]);
@@ -325,6 +331,12 @@
         lifecycleMode = detail?.rules?.inheritAutomation === false ? "manual" : "global";
         bypassAi = !!(detail?.rules as any)?.bypassAi;
         skipHealth = !!(detail?.rules as any)?.skipHealthCheck;
+        aiValidateLogs = !!(detail?.rules as any)?.aiValidateLogs;
+        autoRollback = (detail?.rules as any)?.autoRollback ?? true;
+        validateMode = ((detail?.rules?.validateMode || "both") as "http" | "docker" | "both");
+        validateUrl = String(detail?.rules?.validateUrl || "");
+        validateTimeoutSec = Number(detail?.rules?.validateTimeoutSec || 45);
+        validateIntervalSec = Number(detail?.rules?.validateIntervalSec || 2);
         restartOnUnhealthy = !!detail?.rules?.restartOnUnhealthy;
         unhealthyRestartCooldownSec = detail?.rules?.unhealthyRestartCooldownSec ?? 300;
     }
@@ -353,6 +365,12 @@
         if (!containerId) return;
         (detail.rules as any).bypassAi = !!bypassAi;
         (detail.rules as any).skipHealthCheck = !!skipHealth;
+        (detail.rules as any).aiValidateLogs = !!aiValidateLogs;
+        (detail.rules as any).autoRollback = !!autoRollback;
+        detail.rules.validateMode = validateMode;
+        detail.rules.validateUrl = validateUrl.trim();
+        detail.rules.validateTimeoutSec = Math.max(1, Number(validateTimeoutSec || 45));
+        detail.rules.validateIntervalSec = Math.max(1, Number(validateIntervalSec || 2));
         detail.rules.restartOnUnhealthy = restartOnUnhealthy;
         detail.rules.unhealthyRestartCooldownSec = Number(unhealthyRestartCooldownSec);
         
@@ -634,10 +652,10 @@
                 body: JSON.stringify({
                     containerId: detail.summary.id,
                     targetImage: detail.summary.image,
-                    validateUrl: detail.rules?.validateUrl || "",
-                    validateMode: detail.rules?.validateMode || "both",
-                    validateTimeoutSec: detail.rules?.validateTimeoutSec || 45,
-                    validateIntervalSec: detail.rules?.validateIntervalSec || 2,
+                    validateUrl: validateUrl.trim(),
+                    validateMode: validateMode,
+                    validateTimeoutSec: Math.max(1, Number(validateTimeoutSec || 45)),
+                    validateIntervalSec: Math.max(1, Number(validateIntervalSec || 2)),
                     bypassAi: bypassAi,
                     skipHealthCheck: skipHealth
                 })
@@ -993,6 +1011,96 @@
                                                     aria-label="Toggle Ignore Breaking Change Signals"
                                                 >
                                                     <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {bypassAi ? 'translate-x-5' : ''}"></div>
+                                                </button>
+                                            </div>
+                                        {/if}
+
+                                        <div class="pt-2 border-t border-slate-200/50 dark:border-slate-700/50 space-y-3">
+                                            <div>
+                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Upgrade Validation Profile</p>
+                                                <p class="text-[11px] text-slate-500">Controls how HarborWatch verifies the container after an upgrade. For VPN gateway containers like Gluetun, prefer <span class="font-semibold">Docker</span> mode with longer timeouts.</p>
+                                            </div>
+
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div class="space-y-2">
+                                                    <label for="validate-mode" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Validation Mode</label>
+                                                    <select
+                                                        id="validate-mode"
+                                                        bind:value={validateMode}
+                                                        class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                    >
+                                                        <option value="both">Docker + HTTP (default)</option>
+                                                        <option value="docker">Docker health only</option>
+                                                        <option value="http">HTTP only</option>
+                                                    </select>
+                                                </div>
+                                                <div class="space-y-2">
+                                                    <label for="validate-timeout" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Validation Timeout (seconds)</label>
+                                                    <input
+                                                        id="validate-timeout"
+                                                        type="number"
+                                                        min="1"
+                                                        bind:value={validateTimeoutSec}
+                                                        class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div class="space-y-2">
+                                                    <label for="validate-interval" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Probe Interval (seconds)</label>
+                                                    <input
+                                                        id="validate-interval"
+                                                        type="number"
+                                                        min="1"
+                                                        bind:value={validateIntervalSec}
+                                                        class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                    />
+                                                </div>
+                                                <div class="space-y-2">
+                                                    <label for="validate-url" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Validation URL (HTTP/Both)</label>
+                                                    <input
+                                                        id="validate-url"
+                                                        type="url"
+                                                        bind:value={validateUrl}
+                                                        disabled={validateMode === "docker"}
+                                                        placeholder={validateMode === "docker" ? "Not used in Docker-only mode" : "http://localhost:8080/health"}
+                                                        class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <p class="text-[10px] text-slate-500">
+                                                Current profile: <span class="font-semibold uppercase">{validateMode}</span>{#if validateMode !== "docker" && validateUrl.trim()} | <span class="font-mono">{validateUrl.trim()}</span>{/if} | timeout {Math.max(1, Number(validateTimeoutSec || 45))}s | interval {Math.max(1, Number(validateIntervalSec || 2))}s
+                                            </p>
+                                        </div>
+
+                                        <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                            <div>
+                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Auto Rollback</p>
+                                                <p class="text-[11px] text-slate-500">Rollback automatically if validation fails after an upgrade.</p>
+                                            </div>
+                                            <button
+                                                onclick={() => autoRollback = !autoRollback}
+                                                class="w-10 h-5 rounded-full transition-colors relative {autoRollback ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                aria-label="Toggle Auto Rollback"
+                                            >
+                                                <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {autoRollback ? 'translate-x-5' : ''}"></div>
+                                            </button>
+                                        </div>
+
+                                        {#if configStore.aiActive}
+                                            <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+                                                <div>
+                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">AI Log Validation</p>
+                                                    <p class="text-[11px] text-slate-500">Run an additional AI health assessment on container logs after upgrade validation.</p>
+                                                </div>
+                                                <button
+                                                    onclick={() => aiValidateLogs = !aiValidateLogs}
+                                                    class="w-10 h-5 rounded-full transition-colors relative {aiValidateLogs ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                    aria-label="Toggle AI Log Validation"
+                                                >
+                                                    <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {aiValidateLogs ? 'translate-x-5' : ''}"></div>
                                                 </button>
                                             </div>
                                         {/if}
