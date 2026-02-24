@@ -4,6 +4,39 @@ All notable changes to HarborWatch are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Migration + Schema Versioning Foundation (2026-02-24):**
+  - Centralized SQLite schema migrations with `schema_migrations` and startup migration execution before store init.
+  - Added diagnostics reporting for current schema version and migrated core tables (`settings`, `rules`, `updates`, `scanning`, `metrics`, `scheduler`, `diag`, `healthremediation`, `containerintel`, AI stores) into versioned migrations.
+- **Lifecycle Policy Controls + Defaults:**
+  - Added per-container lifecycle controls for validation mode/URL/timeouts/probe interval, auto rollback, AI log validation, and post-upgrade dependent restarts (with delay).
+  - Added global default lifecycle policy settings so new containers inherit sensible automation defaults while preserving saved overrides.
+- **Scoped Compose Preview / AI Audit (Container Configuration tab):**
+  - Added service-scoped compose preview derivation (when compose metadata is available) with `Service Only` vs `Full Compose` AI audit scope selection.
+  - Added explicit classic-Docker fallback messaging when no compose source is available.
+
+### Fixed
+- **Progress / Jobs Accuracy:**
+  - Dedupliced active jobs in diagnostics, stabilized job ordering/row keys, and corrected queued-vs-running scan status accounting.
+- **Automation Persistence + Upgrade State:**
+  - `/rules` partial saves now merge with existing records (avoids wiping omitted lifecycle fields).
+  - Cleared cached update-available flags after successful upgrades so upgrade indicators drop promptly.
+- **Dashboard Counter Semantics / Persistence:**
+  - Dashboard update count now has a persisted fallback from the last update-check snapshot.
+  - Dashboard vulnerability count now uses fleet-wide persisted image intelligence critical findings instead of only the latest scan result.
+- **AI / Dashboard UX:**
+  - Fleet Intelligence Advisor now includes TLDR + expandable detail.
+  - AI Activity Timeline now renders correctly for sparse/empty periods with a zero-filled 14-day bar chart.
+
+### Changed
+- **HTTP API Maintainability:**
+  - Extracted major route groups from `httpapi/server.go` (`admin`, `portainer`, `scans`, `updates`, `audit`) to improve maintainability without changing API behavior.
+- **AI History UX:**
+  - Added explicit pagination (`Prev`/`Next`) and JSON/YAML/Markdown-aware prompt/response formatting for easier review.
+- **UI Polish:**
+  - Improved logo rendering quality across the app using responsive assets.
+  - Normalized Settings single-card header styling and improved global progress labeling/tags.
+
 ### Fixed
 - **Container History & Setting Continuity (P0):**
   - Overhauled database schema and service layers for **Rules**, **Container Intelligence**, **Malware Scanning**, and **Audit Logs** to support a "Stable Name" fallback.
