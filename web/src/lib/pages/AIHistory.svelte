@@ -33,8 +33,24 @@
     let filterFeature = $state("");
 
     // Timeline helpers
-    let maxCalls = $derived(Math.max(...(usageSummary?.daily || []).map(d => d.calls), 1));
-    let timelineDays = $derived((usageSummary?.daily || []).slice(-14)); // Last 14 days
+    function buildTimeline14Days(daily: AIUsageDaily[]): AIUsageDaily[] {
+        const byDay = new Map((daily || []).map((d) => [d.day, d]));
+        const out: AIUsageDaily[] = [];
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        for (let offset = 13; offset >= 0; offset--) {
+            const d = new Date(now);
+            d.setDate(now.getDate() - offset);
+            const dayKey = d.toISOString().slice(0, 10);
+            const existing = byDay.get(dayKey);
+            out.push(existing || { day: dayKey, calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+        }
+        return out;
+    }
+
+    let timelineDays = $derived(buildTimeline14Days(usageSummary?.daily || []));
+    let maxCalls = $derived(Math.max(...timelineDays.map(d => d.calls), 1));
+    let timelineHasActivity = $derived(timelineDays.some(d => d.calls > 0));
 
     async function loadData() {
         loading = true;
@@ -96,13 +112,13 @@
                 <span class="text-[10px] font-bold text-brand-600 uppercase">Requests per day</span>
             </div>
             
-            <div class="flex items-end justify-between gap-1 h-32 px-2">
+            <div class="relative flex items-end justify-between gap-1 h-32 px-2">
                 {#if usageSummary}
                     {#each timelineDays as day}
                         <div class="flex-1 flex flex-col items-center gap-2 group">
                             <div 
                                 class="w-full bg-brand-500/20 group-hover:bg-brand-500/40 transition-all rounded-t-sm relative"
-                                style="height: {(day.calls / maxCalls) * 100}%"
+                                style="height: {day.calls > 0 ? Math.max((day.calls / maxCalls) * 100, 6) : 4}%"
                             >
                                 {#if day.calls > 0}
                                     <div class="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
@@ -115,6 +131,13 @@
                             </span>
                         </div>
                     {/each}
+                    {#if !timelineHasActivity}
+                        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 text-[11px] text-slate-500 italic">
+                                No AI activity recorded in the last 14 days yet.
+                            </div>
+                        </div>
+                    {/if}
                 {:else}
                     <div class="w-full h-full flex items-center justify-center text-slate-400 text-xs italic">
                         Loading timeline data...
