@@ -237,6 +237,39 @@
         }
     };
 
+    const settingsTabChrome: Record<string, { title: string; subtitle: string; accentClass: string; badge: string }> = {
+        automations: {
+            title: "Automation Control Plane",
+            subtitle: "Orchestrate upgrade, maintenance, security, and remediation behavior with explicit scheduling and safety guardrails.",
+            accentClass: "from-sky-500/20 via-brand-500/10 to-transparent border-sky-200/60 dark:border-sky-900/40",
+            badge: "Pipelines"
+        },
+        ai: {
+            title: "AI Runtime & Provider Policy",
+            subtitle: "Provider configuration, risk thresholds, usage analytics, and audit visibility for all AI-assisted workflows.",
+            accentClass: "from-brand-500/20 via-emerald-500/10 to-transparent border-brand-200/60 dark:border-brand-900/40",
+            badge: "AI Ops"
+        },
+        integrations: {
+            title: "External Integrations",
+            subtitle: "Configure connected systems and credentials for notifications and Portainer-backed orchestration context.",
+            accentClass: "from-cyan-500/20 via-blue-500/10 to-transparent border-cyan-200/60 dark:border-cyan-900/40",
+            badge: "Connectors"
+        },
+        system: {
+            title: "System Runtime Controls",
+            subtitle: "Operational settings for metrics, ClamAV signatures, instance identity, and validation defaults.",
+            accentClass: "from-amber-500/20 via-orange-500/10 to-transparent border-amber-200/60 dark:border-amber-900/40",
+            badge: "Runtime"
+        },
+        appearance: {
+            title: "Interface Presentation",
+            subtitle: "Adjust motion and visual interpretation defaults for day-to-day operation across all HarborWatch views.",
+            accentClass: "from-fuchsia-500/20 via-indigo-500/10 to-transparent border-fuchsia-200/60 dark:border-fuchsia-900/40",
+            badge: "UX"
+        }
+    };
+
     function isLocked(key: string) {
         return settings.environmentOverrides?.[key] || false;
     }
@@ -1057,8 +1090,8 @@
     });
 </script>
 
-<div class="w-full space-y-8">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="w-full space-y-6 settings-page">
+    <div class="settings-topbar flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Settings</h2>
             <p class="text-sm text-slate-500 mt-1">Global configuration and automation policy control plane.</p>
@@ -1072,7 +1105,7 @@
         </button>
     </div>
 
-    <div class="flex flex-wrap gap-2 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
+    <div class="settings-tab-strip flex flex-wrap gap-2 bg-slate-100/95 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit backdrop-blur">
         {#each [
             { id: "automations", label: "Automations" },
             { id: "ai", label: "AI", status: configStore.initialized && !configStore.aiActive ? "Inactive" : "" },
@@ -1092,12 +1125,30 @@
         {/each}
     </div>
 
-    <div class="w-full bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm min-h-[620px]">
+    <div class="settings-shell w-full bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm min-h-[620px] overflow-hidden">
         {#if loading}
             <div class="p-10 text-sm text-slate-500">Loading settings...</div>
         {:else if activeTab === "automations"}
-            <div class="p-6 md:p-8 space-y-6">
-                <div class="flex flex-wrap gap-2 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 w-fit">
+            <div class="p-6 md:p-8 space-y-6 settings-pane">
+                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.automations.accentClass} p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="max-w-3xl">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.automations.badge}</span>
+                                <span class="text-[10px] font-black uppercase tracking-widest text-brand-700 dark:text-brand-300">{automationConfig[activeAutomationTab].title}</span>
+                            </div>
+                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.automations.title}</h3>
+                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.automations.subtitle}</p>
+                        </div>
+                        <div class="rounded-xl border border-white/70 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-right min-w-[180px]">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-slate-500">Active Domain</p>
+                            <p class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1">{automationConfig[activeAutomationTab].title}</p>
+                            <p class="text-[10px] text-slate-500 mt-1">{activeAutomationTab === "general" ? "Global automation defaults" : (domainEnabled(activeAutomationTab) ? "Domain enabled" : "Domain disabled")}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-subtab-strip flex flex-wrap gap-2 bg-slate-100/90 dark:bg-slate-900/70 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 w-fit backdrop-blur">
                     {#each [
                         { id: "general", label: "General" },
                         { id: "upgrades", label: "Upgrades" },
@@ -1114,7 +1165,7 @@
                     {/each}
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex flex-wrap items-center justify-between gap-3">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
                     <div>
                         {#if activeAutomationTab !== "general"}
                             <p class="text-xs font-black uppercase tracking-wider text-slate-500">{automationConfig[activeAutomationTab].title}</p>
@@ -1710,7 +1761,21 @@
                 </div>
             </div>
         {:else if activeTab === "ai"}
-            <div class="p-6 md:p-8 space-y-8">
+            <div class="p-6 md:p-8 space-y-8 settings-pane">
+                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.ai.accentClass} p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="max-w-3xl">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.ai.badge}</span>
+                                {#if configStore.aiActive}
+                                    <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 text-[8px] font-black uppercase">Verified</span>
+                                {/if}
+                            </div>
+                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.ai.title}</h3>
+                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.ai.subtitle}</p>
+                        </div>
+                    </div>
+                </div>
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Features</p>
@@ -2004,7 +2069,21 @@
             </div>
 
         {:else if activeTab === "integrations"}
-            <div class="p-6 md:p-8 space-y-8">
+            <div class="p-6 md:p-8 space-y-8 settings-pane">
+                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.integrations.accentClass} p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="max-w-3xl">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.integrations.badge}</span>
+                                {#if settings.portainerEnabled && !settings.portainerTestingPassed}
+                                    <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 text-[8px] font-black uppercase">Portainer Attention</span>
+                                {/if}
+                            </div>
+                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.integrations.title}</h3>
+                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.integrations.subtitle}</p>
+                        </div>
+                    </div>
+                </div>
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-3">
                         <div>
@@ -2062,7 +2141,18 @@
             </div>
 
         {:else if activeTab === "system"}
-            <div class="p-6 md:p-8 space-y-6">
+            <div class="p-6 md:p-8 space-y-6 settings-pane">
+                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.system.accentClass} p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="max-w-3xl">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.system.badge}</span>
+                            </div>
+                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.system.title}</h3>
+                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.system.subtitle}</p>
+                        </div>
+                    </div>
+                </div>
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">Metrics Collection</p>
@@ -2167,7 +2257,18 @@
             </div>
 
         {:else if activeTab === "appearance"}
-            <div class="p-6 md:p-8 space-y-6">
+            <div class="p-6 md:p-8 space-y-6 settings-pane">
+                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.appearance.accentClass} p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="max-w-3xl">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.appearance.badge}</span>
+                            </div>
+                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.appearance.title}</h3>
+                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.appearance.subtitle}</p>
+                        </div>
+                    </div>
+                </div>
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">UI Animations</p>
@@ -2208,3 +2309,98 @@
         </div>
     </div>
 </div>
+
+<style>
+    .settings-page {
+        position: relative;
+    }
+
+    .settings-topbar {
+        position: sticky;
+        top: 0.5rem;
+        z-index: 30;
+        padding: 0.9rem 1rem;
+        border-radius: 1rem;
+        border: 1px solid rgb(226 232 240 / 0.9);
+        background:
+            radial-gradient(circle at top right, rgb(14 165 233 / 0.08), transparent 45%),
+            radial-gradient(circle at top left, rgb(99 102 241 / 0.08), transparent 50%),
+            rgb(255 255 255 / 0.9);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 12px 30px -24px rgb(15 23 42 / 0.35);
+    }
+
+    .settings-tab-strip {
+        position: sticky;
+        top: 7.1rem;
+        z-index: 25;
+        box-shadow: 0 8px 24px -22px rgb(15 23 42 / 0.4);
+    }
+
+    .settings-subtab-strip {
+        position: sticky;
+        top: 10.7rem;
+        z-index: 15;
+        box-shadow: 0 8px 24px -24px rgb(15 23 42 / 0.35);
+    }
+
+    .settings-shell {
+        background:
+            linear-gradient(to bottom, rgb(248 250 252), rgb(255 255 255) 14rem),
+            rgb(255 255 255);
+        box-shadow:
+            0 18px 50px -32px rgb(15 23 42 / 0.28),
+            inset 0 1px 0 rgb(255 255 255 / 0.7);
+    }
+
+    .settings-pane {
+        position: relative;
+    }
+
+    .settings-pane::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+            linear-gradient(rgb(148 163 184 / 0.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgb(148 163 184 / 0.06) 1px, transparent 1px);
+        background-size: 18px 18px;
+        mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.14), transparent 22%);
+    }
+
+    .settings-pane > * {
+        position: relative;
+        z-index: 1;
+    }
+
+    .settings-pane-hero {
+        box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.7),
+            0 10px 30px -24px rgb(15 23 42 / 0.25);
+    }
+
+    :global(.dark) .settings-topbar {
+        border-color: rgb(51 65 85 / 0.9);
+        background:
+            radial-gradient(circle at top right, rgb(14 165 233 / 0.12), transparent 45%),
+            radial-gradient(circle at top left, rgb(99 102 241 / 0.12), transparent 50%),
+            rgb(15 23 42 / 0.9);
+        box-shadow: 0 14px 40px -30px rgb(0 0 0 / 0.6);
+    }
+
+    :global(.dark) .settings-shell {
+        background:
+            linear-gradient(to bottom, rgb(15 23 42), rgb(30 41 59) 14rem),
+            rgb(30 41 59);
+        box-shadow:
+            0 20px 48px -28px rgb(0 0 0 / 0.55),
+            inset 0 1px 0 rgb(255 255 255 / 0.03);
+    }
+
+    :global(.dark) .settings-pane::before {
+        background-image:
+            linear-gradient(rgb(148 163 184 / 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgb(148 163 184 / 0.05) 1px, transparent 1px);
+    }
+</style>
