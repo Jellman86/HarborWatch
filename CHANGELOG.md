@@ -21,6 +21,9 @@ All notable changes to HarborWatch are documented in this file.
 - **Automation Persistence + Upgrade State:**
   - `/rules` partial saves now merge with existing records (avoids wiping omitted lifecycle fields).
   - Cleared cached update-available flags after successful upgrades so upgrade indicators drop promptly.
+- **Compose Source-of-Truth Auto-Updates:**
+  - Automated updates now enforce compose/Portainer source authority for compose-managed containers, skipping auto-apply when the compose source cannot be verified or when runtime/target image refs diverge from the declared compose image.
+  - Manual updates remain unchanged (operator escape hatch).
 - **Dashboard Counter Semantics / Persistence:**
   - Dashboard update count now has a persisted fallback from the last update-check snapshot.
   - Dashboard vulnerability count now uses fleet-wide persisted image intelligence critical findings instead of only the latest scan result.
