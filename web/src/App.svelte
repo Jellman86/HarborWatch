@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import Sidebar from "./lib/components/Sidebar.svelte";
+  import BrandMark from "./lib/components/BrandMark.svelte";
   import ToastContainer from "./lib/components/ToastContainer.svelte";
   import GlobalProgress from "./lib/components/GlobalProgress.svelte";
   import { layoutStore } from "./lib/stores/layout.svelte";
@@ -162,11 +163,7 @@
         </svg>
       </button>
       <div class="flex items-center gap-2">
-        <img 
-          src="/logo-64.png" 
-          alt="HarborWatch" 
-          class="h-8 w-8" 
-        />
+        <BrandMark alt="HarborWatch" sizes="32px" class="h-8 w-8" />
         <h1 class="text-sm font-black uppercase tracking-wider truncate max-w-[150px]">HarborWatch</h1>
       </div>
     </div>

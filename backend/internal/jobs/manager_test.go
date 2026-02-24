@@ -29,3 +29,22 @@ func TestRegisterJobIfNoDuplicateAllowsDifferentSubtypeOrTarget(t *testing.T) {
 		t.Fatalf("expected different target to be allowed")
 	}
 }
+
+func TestActiveJobsReturnsStableSortedOrder(t *testing.T) {
+	m := NewManager(2)
+	m.RegisterJob(&Job{ID: "z", Type: JobTypeScan, Subtype: "trivy", TargetName: "redis", Status: "queued", StartedAt: 20})
+	m.RegisterJob(&Job{ID: "a", Type: JobTypeUpdate, TargetName: "nginx", Status: "running", StartedAt: 10})
+	m.RegisterJob(&Job{ID: "b", Type: JobTypeScan, Subtype: "clamav", TargetName: "alpine", Status: "queued", StartedAt: 20})
+
+	got := m.ActiveJobs()
+	if len(got) != 3 {
+		t.Fatalf("expected 3 jobs, got %d", len(got))
+	}
+
+	wantIDs := []string{"a", "b", "z"}
+	for i, want := range wantIDs {
+		if got[i].ID != want {
+			t.Fatalf("expected job[%d]=%q, got %q", i, want, got[i].ID)
+		}
+	}
+}

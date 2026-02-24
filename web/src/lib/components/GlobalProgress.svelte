@@ -183,7 +183,7 @@
                 <!-- Detailed View (Expanded on Hover or if multiple) -->
                 {#if (showDetails && jobs.length > 1) || (showDetails && jobs[0]?.message)}
                     <div class="pt-2 border-t border-slate-100 dark:border-slate-800/50 mt-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2" in:slide>
-                        {#each jobs as job, i (i)}
+                        {#each jobs as job (job.id)}
                             <div class="flex items-center justify-between gap-3 text-[9px] min-w-0">
                                 <div class="flex items-center gap-2 min-w-0 flex-1">
                                     <span class="px-1.5 py-0.5 rounded-md font-black uppercase tracking-wide whitespace-nowrap {jobTagClass(job.type)}">

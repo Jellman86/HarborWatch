@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import type { HealthResponse } from "../api-types";
+    import BrandMark from "../components/BrandMark.svelte";
 
     let version = $state("Unknown");
     let serviceStatus = $state("Unknown");
@@ -31,7 +32,11 @@
                 </div>
             </div>
             <div class="w-28 h-28 md:w-32 md:h-32 rounded-3xl bg-white/90 dark:bg-slate-800/80 ring-1 ring-brand-200 dark:ring-brand-700 shadow-xl shadow-brand-900/10 flex items-center justify-center">
-                <img src="/logo-128.png" alt="HarborWatch icon" class="w-24 h-24 md:w-28 md:h-28" />
+                <BrandMark
+                    alt="HarborWatch icon"
+                    sizes="(max-width: 767px) 96px, 112px"
+                    class="w-24 h-24 md:w-28 md:h-28"
+                />
             </div>
         </div>
     </section>

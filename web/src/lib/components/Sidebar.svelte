@@ -2,6 +2,7 @@
     import { themeStore } from '../stores/theme.svelte';
     import { layoutStore } from '../stores/layout.svelte';
     import { configStore } from '../stores/config.svelte';
+    import BrandMark from './BrandMark.svelte';
 
     let { currentRoute, onNavigate, hasActiveJobs = false } = $props<{
         currentRoute: string;
@@ -44,10 +45,10 @@
             </button>
 
             <div class="relative">
-                <img 
-                    src="/logo-64.png" 
-                    alt="HarborWatch" 
-                    class="flex-shrink-0 transition-all duration-500 {collapsed ? 'h-10 w-10' : 'h-20 w-20'}" 
+                <BrandMark
+                    alt="HarborWatch"
+                    sizes={collapsed ? '40px' : '80px'}
+                    class="flex-shrink-0 transition-all duration-500 {collapsed ? 'h-10 w-10' : 'h-20 w-20'}"
                 />
             </div>
             

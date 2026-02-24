@@ -375,7 +375,9 @@ func (s *Service) setJobProgressWithMessageAndMode(jobID string, progress int, m
 		return
 	}
 	job.Progress = progress
-	if job.Status == "queued" && (progress > 0 || message != "") {
+	// Keep jobs queued while they are only waiting for a slot. They should
+	// transition to running once actual work begins (first non-zero progress).
+	if job.Status == "queued" && progress > 0 {
 		job.Status = "running"
 	}
 	s.jobs[jobID] = job

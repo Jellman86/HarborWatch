@@ -1,5 +1,6 @@
 <script lang="ts">
     import { themeStore, type ThemeMode } from '../stores/theme.svelte';
+    import BrandMark from './BrandMark.svelte';
 
     const modes: { value: ThemeMode, label: string, icon: string }[] = [
         { value: 'light', label: 'Light', icon: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z' },
@@ -30,7 +31,11 @@
     <div class="space-y-3">
         <span class="block text-[10px] font-black uppercase text-slate-400 ml-1">Color Theme</span>
         <div class="flex items-center gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3">
-            <img src="/logo-64.png" alt="HarborWatch icon" class="h-10 w-10 rounded-xl shadow-sm ring-1 ring-brand-200/70 dark:ring-brand-700/60" />
+            <BrandMark
+                alt="HarborWatch icon"
+                sizes="40px"
+                class="h-10 w-10 rounded-xl shadow-sm ring-1 ring-brand-200/70 dark:ring-brand-700/60"
+            />
             <div class="min-w-0">
                 <p class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-tight">Harbor Signpost</p>
                 <p class="text-[10px] text-slate-500 dark:text-slate-400">Single modern theme based on your uploaded icon palette. Light and dark modes adapt automatically.</p>

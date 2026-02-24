@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -224,6 +225,18 @@ func (m *Manager) ActiveJobs() []gen.JobProgress {
 			StartedAt:    j.StartedAt,
 		})
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].StartedAt != out[j].StartedAt {
+			return out[i].StartedAt < out[j].StartedAt
+		}
+		if out[i].Type != out[j].Type {
+			return out[i].Type < out[j].Type
+		}
+		if out[i].Target != out[j].Target {
+			return out[i].Target < out[j].Target
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 
