@@ -146,9 +146,9 @@
 
     const formatFeature = (f: string) => f.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-    onMount(async () => {
+    onMount(() => {
+        // Let the reactive loader handle the first fetch after mount so we don't double-load.
         historyInitialized = true;
-        await loadData();
     });
 
     $effect(() => {
@@ -286,7 +286,7 @@
                 <p class="text-slate-400 italic">No interactions found matching your filters.</p>
             </div>
         {:else}
-            {#each filteredConvs as conv, i (conv.timestamp + i)}
+            {#each filteredConvs as conv, i (`${conv.timestamp}-${i}`)}
                 <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden transition-all hover:border-brand-500/50">
                     <button 
                         onclick={() => expandedId = expandedId === i ? null : i}
