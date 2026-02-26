@@ -505,12 +505,12 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		} else if rawDocker != nil {
 			newScheduledDockerPruneTask := func() *scheduler.DockerPruneTask {
 				task := scheduler.NewDockerPruneTask(rawDocker).WithLogger(diagService)
-					if settingsStore != nil {
-						task = task.WithImagePruneModeResolver(func(ctx context.Context) string {
-							st, err := settingsStore.Get(ctx)
-							if err != nil {
-								if diagService != nil {
-									diagService.Log("WARN", "Scheduler", fmt.Sprintf("Falling back to default image prune mode (settings read failed): %v", err))
+				if settingsStore != nil {
+					task = task.WithImagePruneModeResolver(func(ctx context.Context) string {
+						st, err := settingsStore.Get(ctx)
+						if err != nil {
+							if diagService != nil {
+								diagService.Log("WARN", "Scheduler", fmt.Sprintf("Falling back to default image prune mode (settings read failed): %v", err))
 							}
 							return scheduler.ImagePruneModeDanglingOnly
 						}
@@ -2070,6 +2070,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 		registerScanRoutes(r, adminDeps)
 		registerUpdateRoutes(r, adminDeps)
 		registerAuditRoutes(r, adminDeps)
+		registerComposeRoutes(r, adminDeps)
 		registerPortainerRoutes(r, adminDeps)
 	})
 

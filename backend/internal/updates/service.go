@@ -24,6 +24,7 @@ import (
 )
 
 type Request struct {
+	JobID                         string
 	ContainerID                   string
 	TargetImage                   string
 	ValidateURL                   string
@@ -43,11 +44,25 @@ type Request struct {
 	RestartDependentsAfterUpgrade bool
 	DependentRestartDelaySec      int
 
+	// Orchestration mode metadata
+	OrchestrationMode   string
+	ComposeProject      string
+	ComposeService      string
+	ComposeWorkingDir   string
+	ComposeConfigFiles  []string
+	ComposeSnapshotRoot string
+
 	// Portainer support
 	IsPortainerManaged  bool
 	PortainerStackID    int
 	PortainerEndpointID int
 }
+
+const (
+	OrchestrationModePlainDocker   = "plain_docker"
+	OrchestrationModeDockerCompose = "docker_compose"
+	OrchestrationModePortainer     = "portainer_stack"
+)
 
 type PortainerClient interface {
 	GetStack(ctx context.Context, stackID int) (*portainer.Stack, error)
@@ -128,6 +143,7 @@ func (s *Service) StartUpdate(req Request) (gen.UpdateStartResponse, error) {
 	if err := s.store.CreateRunWithContainerName(context.Background(), run, req.ContainerName); err != nil {
 		return gen.UpdateStartResponse{}, err
 	}
+	req.JobID = jobID
 	go s.execute(jobID, req)
 	return gen.UpdateStartResponse{JobID: jobID, Status: "running"}, nil
 }
@@ -198,6 +214,10 @@ func (s *Service) execute(jobID string, req Request) {
 
 	if req.IsPortainerManaged && s.portainer != nil {
 		s.executePortainer(ctx, jobID, req)
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(req.OrchestrationMode), OrchestrationModeDockerCompose) {
+		s.executeCompose(ctx, jobID, req)
 		return
 	}
 	s.executeLocal(ctx, jobID, req)
@@ -342,6 +362,117 @@ func (s *Service) executeLocal(ctx context.Context, jobID string, req Request) {
 		})
 	}
 	s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "success", Status: "completed", Message: "Update pipeline completed", Timestamp: time.Now().UTC().Unix()})
+	s.clearCachedUpdateAvailability(req)
+	s.finish(jobID, "completed", nil)
+}
+
+func (s *Service) executeCompose(ctx context.Context, jobID string, req Request) {
+	s.setRunProgress(jobID, "running", 5)
+	if err := s.runStep(ctx, jobID, "preflight", func(ctx context.Context) error { return s.executor.Preflight(ctx, req) }); err != nil {
+		s.finish(jobID, "failed", err)
+		return
+	}
+
+	if !req.BypassAI && s.ai != nil && s.ai.HasProvider() {
+		s.setRunProgress(jobID, "running", 10)
+		if err := s.runStep(ctx, jobID, "release_analysis", func(ctx context.Context) error {
+			notes := buildAIReleaseContext(req)
+			analysis, err := s.ai.AnalyzeReleaseNotes(ctx, notes)
+			if err != nil {
+				return err
+			}
+			summary := &gen.AIAnalysisSummary{
+				RiskScore:       analysis.RiskScore,
+				RiskLevel:       string(analysis.RiskLevel),
+				Summary:         analysis.Summary,
+				BreakingChanges: analysis.BreakingChanges,
+			}
+			_ = s.store.SaveAIAnalysis(ctx, jobID, summary)
+			threshold := req.AIBlockRiskThreshold
+			if threshold < 0 || threshold > 100 {
+				threshold = envInt("HW_AI_BLOCK_RISK_THRESHOLD", 80, 0, 100)
+			}
+			if blocked, reason := shouldBlockForAI(analysis, threshold); blocked {
+				return fmt.Errorf("AI blocked update: %s", reason)
+			}
+			return nil
+		}); err != nil {
+			s.finish(jobID, "failed", err)
+			return
+		}
+	} else {
+		message := "skipped: ai provider not configured"
+		if req.BypassAI {
+			message = "skipped: bypass requested by user"
+		}
+		s.emit(jobID, gen.UpdateStepEvent{
+			JobID:     jobID,
+			Step:      "release_analysis",
+			Status:    "completed",
+			Message:   message,
+			Timestamp: time.Now().UTC().Unix(),
+		})
+	}
+
+	s.setRunProgress(jobID, "running", 25)
+	if err := s.runStep(ctx, jobID, "backup", func(ctx context.Context) error { return s.executor.Backup(ctx, req) }); err != nil {
+		s.finish(jobID, "failed", err)
+		return
+	}
+	s.setRunProgress(jobID, "running", 35)
+	if err := s.runStep(ctx, jobID, "pull", func(ctx context.Context) error { return s.executor.Pull(ctx, req) }); err != nil {
+		s.finish(jobID, "failed", err)
+		return
+	}
+	s.setRunProgress(jobID, "running", 60)
+	if err := s.runStep(ctx, jobID, "compose_apply", func(ctx context.Context) error { return s.executor.ComposeApply(ctx, req) }); err != nil {
+		s.finish(jobID, "failed", err)
+		return
+	}
+	s.setRunProgress(jobID, "running", 80)
+	if !req.SkipHealthCheck {
+		if err := s.runStep(ctx, jobID, "validate", func(ctx context.Context) error { return s.executor.Validate(ctx, req) }); err != nil {
+			s.finish(jobID, "failed", err)
+			return
+		}
+	} else {
+		s.emit(jobID, gen.UpdateStepEvent{
+			JobID:     jobID,
+			Step:      "validate",
+			Status:    "completed",
+			Message:   "skipped: force update requested (no health check)",
+			Timestamp: time.Now().UTC().Unix(),
+		})
+	}
+	s.setRunProgress(jobID, "running", 95)
+	_ = s.runStep(ctx, jobID, "cleanup", func(ctx context.Context) error { return s.executor.Cleanup(ctx, req) })
+
+	if req.AIValidateLogs && s.ai != nil && s.ai.HasProvider() {
+		if err := s.runStep(ctx, jobID, "ai_health_assessment", func(ctx context.Context) error {
+			logTail := envInt("HW_AI_HEALTH_LOG_TAIL", 300, 50, 2000)
+			logs, err := collectContainerLogsForAI(ctx, req.ContainerID, logTail)
+			if err != nil {
+				return fmt.Errorf("collect container logs for AI: %w", err)
+			}
+			assessment, err := s.ai.AnalyzeHealthLogs(ctx, req.ContainerID, logs)
+			if err != nil {
+				return fmt.Errorf("AI health assessment failed: %w", err)
+			}
+			if !assessment.Healthy {
+				return fmt.Errorf("AI health assessment marked container unhealthy (confidence %d): %s", assessment.Confidence, assessment.Summary)
+			}
+			return nil
+		}); err != nil {
+			s.finish(jobID, "failed", err)
+			return
+		}
+	}
+	if req.RestartDependentsAfterUpgrade {
+		s.setRunProgress(jobID, "running", 97)
+		s.restartDependentsBestEffort(ctx, jobID, req)
+	}
+
+	s.setRunProgress(jobID, "completed", 100)
 	s.clearCachedUpdateAvailability(req)
 	s.finish(jobID, "completed", nil)
 }

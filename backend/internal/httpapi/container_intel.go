@@ -33,6 +33,14 @@ type containerIntelResponse struct {
 	Issues                 []containerIntelIssue `json:"issues,omitempty"`
 	PortainerManaged       bool                  `json:"portainerManaged"`
 	PortainerConfigured    bool                  `json:"portainerConfigured"`
+	OrchestrationMode      string                `json:"orchestrationMode,omitempty"`
+	ComposeProject         string                `json:"composeProject,omitempty"`
+	ComposeService         string                `json:"composeService,omitempty"`
+	ComposeWorkingDir      string                `json:"composeWorkingDir,omitempty"`
+	ComposeConfigFiles     []string              `json:"composeConfigFiles,omitempty"`
+	ComposeSourceStatus    string                `json:"composeSourceStatus,omitempty"`
+	ComposeSourceVerified  bool                  `json:"composeSourceVerified"`
+	ComposeSourceWritable  bool                  `json:"composeSourceWritable"`
 	UpdatedAt              int64                 `json:"updatedAt,omitempty"`
 }
 
@@ -67,18 +75,17 @@ func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Ove
 	effectiveChangelog := firstNonEmpty(overrideChangelog, derivedChangelog)
 	readiness := evaluateContainerIntelReadiness(effectiveRepo, effectiveChangelog)
 
-	portainerManaged := false
-	if summary.Labels != nil {
-		if _, ok := summary.Labels["io.portainer.stack_id"]; ok {
-			portainerManaged = true
-		} else if cfg, ok := summary.Labels["com.docker.compose.project.config_files"]; ok && strings.HasPrefix(cfg, "/data/compose/") {
-			// Portainer standard path pattern
-			portainerManaged = true
-		} else if wd, ok := summary.Labels["com.docker.compose.project.working_dir"]; ok && strings.HasPrefix(wd, "/data/compose/") {
-			portainerManaged = true
-		}
-	}
+	mode := detectContainerOrchestrationMode(summary)
+	portainerManaged := mode == orchestrationModePortainerStack
 	portainerConfigured := portainerService != nil
+	composeProject := strings.TrimSpace(summary.Labels["com.docker.compose.project"])
+	composeService := strings.TrimSpace(summary.Labels["com.docker.compose.service"])
+	composeWorkingDir := strings.TrimSpace(summary.Labels["com.docker.compose.project.working_dir"])
+	composeConfigFiles := splitComposePathList(summary.Labels["com.docker.compose.project.config_files"])
+	composeStatus := composeSourceStatus("")
+	if mode == orchestrationModeDockerCompose {
+		composeStatus = detectComposeSourceStatus(composeConfigFiles)
+	}
 
 	if portainerManaged && !portainerConfigured {
 		readiness.Issues = append(readiness.Issues, containerIntelIssue{
@@ -108,6 +115,14 @@ func effectiveContainerIntel(summary gen.ContainerSummary, ov containerintel.Ove
 		Issues:                 readiness.Issues,
 		PortainerManaged:       portainerManaged,
 		PortainerConfigured:    portainerConfigured,
+		OrchestrationMode:      string(mode),
+		ComposeProject:         composeProject,
+		ComposeService:         composeService,
+		ComposeWorkingDir:      composeWorkingDir,
+		ComposeConfigFiles:     composeConfigFiles,
+		ComposeSourceStatus:    string(composeStatus),
+		ComposeSourceVerified:  composeStatus != "" && composeStatus != composeSourceStatusUnverified,
+		ComposeSourceWritable:  composeStatus == composeSourceStatusVerifiedWritable,
 		UpdatedAt:              ov.UpdatedAt,
 	}
 }

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/composesnapshots"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/moby/moby/client"
@@ -22,6 +24,7 @@ type Executor interface {
 	Backup(ctx context.Context, req Request) error
 	Pull(ctx context.Context, req Request) error
 	Recreate(ctx context.Context, req Request) error
+	ComposeApply(ctx context.Context, req Request) error
 	Validate(ctx context.Context, req Request) error
 	Cleanup(ctx context.Context, req Request) error
 	Rollback(ctx context.Context, req Request, cause error) error
@@ -55,13 +58,48 @@ func (CommandExecutor) Preflight(ctx context.Context, req Request) error {
 }
 
 func (CommandExecutor) Backup(ctx context.Context, req Request) error {
-	// Hook point for snapshots/backups in later milestones.
+	if strings.EqualFold(strings.TrimSpace(req.OrchestrationMode), OrchestrationModeDockerCompose) {
+		_, err := composesnapshots.CreateProjectSnapshot(composesnapshots.CreateSnapshotInput{
+			RootDir:      req.ComposeSnapshotRoot,
+			ProjectName:  req.ComposeProject,
+			ServiceName:  req.ComposeService,
+			WorkingDir:   req.ComposeWorkingDir,
+			ConfigFiles:  req.ComposeConfigFiles,
+			CreatedAtUTC: time.Now().UTC(),
+		})
+		if err != nil {
+			return fmt.Errorf("compose snapshot failed: %w", err)
+		}
+		return nil
+	}
+	// Hook point for docker container backups in later milestones.
 	return nil
 }
 
 func (CommandExecutor) Pull(ctx context.Context, req Request) error {
-	cmd := exec.CommandContext(ctx, "docker", "pull", req.TargetImage)
+	var cmd *exec.Cmd
+	if strings.EqualFold(strings.TrimSpace(req.OrchestrationMode), OrchestrationModeDockerCompose) {
+		service := strings.TrimSpace(req.ComposeService)
+		if service == "" {
+			return errors.New("compose pull requires compose service")
+		}
+		configFiles := composeConfigFileList(req)
+		if len(configFiles) == 0 {
+			return errors.New("compose pull requires compose file path")
+		}
+		workdir := strings.TrimSpace(req.ComposeWorkingDir)
+		if workdir == "" {
+			workdir = composeWorkingDir(req)
+		}
+		cmd = exec.CommandContext(ctx, "docker", composePullArgs(req, service)...)
+		cmd.Dir = workdir
+	} else {
+		cmd = exec.CommandContext(ctx, "docker", "pull", req.TargetImage)
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
+		if strings.EqualFold(strings.TrimSpace(req.OrchestrationMode), OrchestrationModeDockerCompose) {
+			return fmt.Errorf("docker compose pull failed: %w (%s)", err, truncate(string(out), 400))
+		}
 		return fmt.Errorf("docker pull failed: %w (%s)", err, truncate(string(out), 400))
 	}
 	return nil
@@ -122,6 +160,25 @@ func (CommandExecutor) Recreate(ctx context.Context, req Request) error {
 		return fmt.Errorf("failed to start replacement container: %w", err)
 	}
 
+	return nil
+}
+
+func (CommandExecutor) ComposeApply(ctx context.Context, req Request) error {
+	service := strings.TrimSpace(req.ComposeService)
+	if service == "" {
+		return errors.New("compose service is required")
+	}
+	configFiles := composeConfigFileList(req)
+	if len(configFiles) == 0 {
+		return errors.New("compose file path is required")
+	}
+	workdir := composeWorkingDir(req)
+	args := composeUpArgs(req, service)
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Dir = workdir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("docker compose up failed: %w (%s)", err, truncate(string(out), 400))
+	}
 	return nil
 }
 
@@ -218,6 +275,9 @@ func (CommandExecutor) Cleanup(ctx context.Context, req Request) error {
 }
 
 func (CommandExecutor) Rollback(ctx context.Context, req Request, cause error) error {
+	if strings.EqualFold(strings.TrimSpace(req.OrchestrationMode), OrchestrationModeDockerCompose) {
+		return errors.New("compose rollback is not supported for non-mutating compose updates")
+	}
 	liveRef := liveContainerRef(req)
 	// 1. Stop and Remove the "new" container if it exists
 	_ = exec.CommandContext(ctx, "docker", "stop", liveRef).Run()
@@ -262,6 +322,52 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-3] + "..."
+}
+
+func composeUpArgs(req Request, service string) []string {
+	args := []string{"compose"}
+	for _, file := range composeConfigFileList(req) {
+		args = append(args, "-f", file)
+	}
+	args = append(args, "up", "-d", "--no-deps", "--force-recreate", service)
+	return args
+}
+
+func composePullArgs(req Request, service string) []string {
+	args := []string{"compose"}
+	for _, file := range composeConfigFileList(req) {
+		args = append(args, "-f", file)
+	}
+	args = append(args, "pull", service)
+	return args
+}
+
+func composeWorkingDir(req Request) string {
+	if wd := strings.TrimSpace(req.ComposeWorkingDir); wd != "" {
+		return wd
+	}
+	files := composeConfigFileList(req)
+	if len(files) == 0 {
+		return ""
+	}
+	return filepath.Dir(files[0])
+}
+
+func composeConfigFileList(req Request) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(req.ComposeConfigFiles))
+	for _, raw := range req.ComposeConfigFiles {
+		p := strings.TrimSpace(raw)
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
 }
 
 func newestBackupName(backups []string, containerID string) (string, error) {

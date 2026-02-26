@@ -41,6 +41,7 @@ type Settings struct {
 	AutoUpgradeMinRetryMinutes           int    `json:"autoUpgradeMinRetryMinutes"`
 	TrivySweepMode                       string `json:"trivySweepMode"`
 	DockerPruneIncludeUnusedTaggedImages bool   `json:"dockerPruneIncludeUnusedTaggedImages"`
+	ComposeSnapshotRootPath              string `json:"composeSnapshotRootPath"`
 	ClamAVSnapshotMaxBytes               int64  `json:"clamavSnapshotMaxBytes"`
 	DataRetentionDays                    int    `json:"dataRetentionDays"`
 	RetentionLogsDays                    int    `json:"retentionLogsDays"`
@@ -194,6 +195,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.TrivySweepMode = normalizeTrivySweepMode(value)
 		case "docker_prune_include_unused_tagged_images":
 			st.DockerPruneIncludeUnusedTaggedImages = parseStoredBool(value, st.DockerPruneIncludeUnusedTaggedImages)
+		case "compose_snapshot_root_path":
+			st.ComposeSnapshotRootPath = strings.TrimSpace(value)
 		case "clamav_snapshot_max_bytes":
 			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
 		case "data_retention_days":
@@ -268,6 +271,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		"automationIgnoredContainers": {&st.AutomationIgnoredContainers, "HW_AUTOMATION_IGNORE_CONTAINERS"},
 		"malwareIgnoredMounts":        {&st.MalwareIgnoredMounts, "HW_MALWARE_IGNORE_MOUNTS"},
 		"trivySweepMode":              {&st.TrivySweepMode, "HW_TRIVY_SWEEP_MODE"},
+		"composeSnapshotRootPath":     {&st.ComposeSnapshotRootPath, "HW_COMPOSE_SNAPSHOT_ROOT"},
 	}
 
 	for jsonKey, mapping := range envMap {
@@ -344,6 +348,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 	}
 
 	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
+	st.ComposeSnapshotRootPath = strings.TrimSpace(st.ComposeSnapshotRootPath)
 	st.DefaultValidateMode = normalizeValidateModeValue(st.DefaultValidateMode)
 	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
 	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
@@ -361,6 +366,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	st.AutoUpgradeMaxConcurrency = parseStoredInt(strconv.Itoa(st.AutoUpgradeMaxConcurrency), 1, 1, 20)
 	st.AutoUpgradeMinRetryMinutes = parseStoredInt(strconv.Itoa(st.AutoUpgradeMinRetryMinutes), 60, 1, 24*60)
 	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
+	st.ComposeSnapshotRootPath = strings.TrimSpace(st.ComposeSnapshotRootPath)
 	st.ClamAVSnapshotMaxBytes = parseStoredInt64(strconv.FormatInt(st.ClamAVSnapshotMaxBytes, 10), 2<<30, 1, 32<<30)
 	st.DefaultValidateMode = normalizeValidateModeValue(st.DefaultValidateMode)
 	st.DefaultValidateTimeoutSec = parseStoredInt(strconv.Itoa(st.DefaultValidateTimeoutSec), 45, 1, 3600)
@@ -405,6 +411,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"auto_upgrade_min_retry_minutes":            intString(st.AutoUpgradeMinRetryMinutes),
 		"trivy_sweep_mode":                          st.TrivySweepMode,
 		"docker_prune_include_unused_tagged_images": boolString(st.DockerPruneIncludeUnusedTaggedImages),
+		"compose_snapshot_root_path":                st.ComposeSnapshotRootPath,
 		"clamav_snapshot_max_bytes":                 int64String(st.ClamAVSnapshotMaxBytes),
 		"data_retention_days":                       intString(st.DataRetentionDays),
 		"retention_logs_days":                       intString(st.RetentionLogsDays),
@@ -455,6 +462,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"autoUpgradeMinRetryMinutes":           "auto_upgrade_min_retry_minutes",
 		"trivySweepMode":                       "trivy_sweep_mode",
 		"dockerPruneIncludeUnusedTaggedImages": "docker_prune_include_unused_tagged_images",
+		"composeSnapshotRootPath":              "compose_snapshot_root_path",
 		"clamavSnapshotMaxBytes":               "clamav_snapshot_max_bytes",
 		"dataRetentionDays":                    "data_retention_days",
 		"retentionLogsDays":                    "retention_logs_days",

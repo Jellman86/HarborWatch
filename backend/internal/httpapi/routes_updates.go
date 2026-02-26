@@ -59,6 +59,12 @@ func registerUpdateRoutes(r chi.Router, deps adminRouteDeps) {
 					writeError(w, http.StatusLocked, "update_policy_locked", err.Error())
 				case errors.Is(err, ErrPortainerIntegrationRequired):
 					writeError(w, http.StatusPreconditionFailed, "portainer_required", err.Error())
+				case errors.Is(err, ErrComposeTargetDivergesFromSource):
+					writeError(w, http.StatusPreconditionFailed, "compose_source_change_required", err.Error())
+				case errors.Is(err, ErrComposeSourceDriftDetected):
+					writeError(w, http.StatusPreconditionFailed, "compose_source_drift", err.Error())
+				case errors.Is(err, ErrComposeSourceVerificationUnavailable):
+					writeError(w, http.StatusPreconditionFailed, "compose_source_required", err.Error())
 				default:
 					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 				}

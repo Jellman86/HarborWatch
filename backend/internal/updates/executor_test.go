@@ -43,3 +43,35 @@ func TestLiveContainerRefFallsBackToContainerID(t *testing.T) {
 		t.Fatalf("expected container id fallback, got %q", got)
 	}
 }
+
+func TestComposeUpArgsIncludesAllComposeFiles(t *testing.T) {
+	req := Request{
+		ComposeConfigFiles: []string{"/tmp/base.yml", "/tmp/override.yml"},
+	}
+	got := composeUpArgs(req, "web")
+	want := []string{"compose", "-f", "/tmp/base.yml", "-f", "/tmp/override.yml", "up", "-d", "--no-deps", "--force-recreate", "web"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected arg length: got=%v want=%v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("arg[%d] got %q want %q (all args=%v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestComposePullArgsIncludesAllComposeFiles(t *testing.T) {
+	req := Request{
+		ComposeConfigFiles: []string{"/tmp/base.yml", "/tmp/override.yml"},
+	}
+	got := composePullArgs(req, "web")
+	want := []string{"compose", "-f", "/tmp/base.yml", "-f", "/tmp/override.yml", "pull", "web"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected arg length: got=%v want=%v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("arg[%d] got %q want %q (all args=%v)", i, got[i], want[i], got)
+		}
+	}
+}

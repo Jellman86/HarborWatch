@@ -137,6 +137,7 @@
         autoUpgradeMinRetryMinutes: 60,
         trivySweepMode: "running-only",
         dockerPruneIncludeUnusedTaggedImages: false,
+        composeSnapshotRootPath: "",
         clamavSnapshotMaxBytes: 2147483648,
         dataRetentionDays: 30,
         retentionLogsDays: 30,
@@ -1887,6 +1888,20 @@
                                                 <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.dockerPruneIncludeUnusedTaggedImages ? 'right-1' : 'left-1'}"></div>
                                             </button>
                                         </div>
+                                    </div>
+
+                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
+                                        <div>
+                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Compose Snapshot Archive Path</p>
+                                            <p class="text-[11px] text-slate-500 mt-1">HarborWatch stores zipped snapshots of local Compose config files and the project <span class="font-mono">.env</span> before compose upgrades. Leave blank to use the default appliance path.</p>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            bind:value={settings.composeSnapshotRootPath}
+                                            disabled={isLocked("composeSnapshotRootPath")}
+                                            placeholder="/data/compose-snapshots"
+                                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                        />
                                     </div>
 
                                     <div class="rounded-2xl border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 p-4 space-y-3">

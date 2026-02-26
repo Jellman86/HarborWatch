@@ -79,6 +79,14 @@ type countingExecutor struct {
 	validateCalls int
 }
 
+type routingExecutor struct {
+	mu                sync.Mutex
+	recreateCalls     int
+	composeApplyCalls int
+	rollbackCalls     int
+	failValidate      bool
+}
+
 func (e *countingExecutor) Validate(ctx context.Context, req Request) error {
 	e.mu.Lock()
 	e.validateCalls++
@@ -119,6 +127,12 @@ func (f fakeExecutor) Recreate(ctx context.Context, req Request) error {
 	}
 	return nil
 }
+func (f fakeExecutor) ComposeApply(ctx context.Context, req Request) error {
+	if f.failStep == "compose_apply" {
+		return errors.New("compose apply failed")
+	}
+	return nil
+}
 func (f fakeExecutor) Validate(ctx context.Context, req Request) error {
 	if f.failStep == "validate" {
 		return errors.New("validate failed")
@@ -135,6 +149,35 @@ func (f fakeExecutor) Rollback(ctx context.Context, req Request, cause error) er
 	if f.failStep == "rollback" {
 		return errors.New("rollback failed")
 	}
+	return nil
+}
+
+func (e *routingExecutor) Preflight(ctx context.Context, req Request) error { return nil }
+func (e *routingExecutor) Backup(ctx context.Context, req Request) error    { return nil }
+func (e *routingExecutor) Pull(ctx context.Context, req Request) error      { return nil }
+func (e *routingExecutor) Recreate(ctx context.Context, req Request) error {
+	e.mu.Lock()
+	e.recreateCalls++
+	e.mu.Unlock()
+	return nil
+}
+func (e *routingExecutor) ComposeApply(ctx context.Context, req Request) error {
+	e.mu.Lock()
+	e.composeApplyCalls++
+	e.mu.Unlock()
+	return nil
+}
+func (e *routingExecutor) Validate(ctx context.Context, req Request) error {
+	if e.failValidate {
+		return errors.New("validate failed")
+	}
+	return nil
+}
+func (e *routingExecutor) Cleanup(ctx context.Context, req Request) error { return nil }
+func (e *routingExecutor) Rollback(ctx context.Context, req Request, cause error) error {
+	e.mu.Lock()
+	e.rollbackCalls++
+	e.mu.Unlock()
 	return nil
 }
 
@@ -243,6 +286,118 @@ func TestUpdatePipelineRollback(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("timeout waiting for rolled_back")
+}
+
+func TestUpdatePipelineComposeModeUsesComposeApply(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates-compose.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	exec := &routingExecutor{}
+	svc := NewService(store, exec, nil, nil, nil, nil, jobs.NewManager(1))
+	res, err := svc.StartUpdate(Request{
+		ContainerID:        "compose-c",
+		ContainerName:      "app-web",
+		TargetImage:        "ghcr.io/acme/app:1.2.3",
+		ValidateURL:        "http://x",
+		OrchestrationMode:  OrchestrationModeDockerCompose,
+		ComposeService:     "web",
+		ComposeWorkingDir:  "/tmp",
+		ComposeConfigFiles: []string{"/tmp/docker-compose.yml"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.GetJob(context.Background(), res.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job != nil && job.Status == "completed" {
+			exec.mu.Lock()
+			recreateCalls := exec.recreateCalls
+			composeCalls := exec.composeApplyCalls
+			exec.mu.Unlock()
+			if composeCalls != 1 {
+				t.Fatalf("expected ComposeApply to be called once, got %d", composeCalls)
+			}
+			if recreateCalls != 0 {
+				t.Fatalf("expected Recreate not to be used for compose mode, got %d calls", recreateCalls)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for compose-mode completion")
+}
+
+func TestUpdatePipelineComposeModeFailsOnValidateFailureWithoutRollback(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates-compose-rollback.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	exec := &routingExecutor{failValidate: true}
+	svc := NewService(store, exec, nil, nil, nil, nil, jobs.NewManager(1))
+	res, err := svc.StartUpdate(Request{
+		ContainerID:        "compose-c",
+		ContainerName:      "app-web",
+		TargetImage:        "ghcr.io/acme/app:1.2.3",
+		ValidateURL:        "http://x",
+		OrchestrationMode:  OrchestrationModeDockerCompose,
+		ComposeService:     "web",
+		ComposeWorkingDir:  "/tmp",
+		ComposeConfigFiles: []string{"/tmp/docker-compose.yml"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.GetJob(context.Background(), res.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job != nil && job.Status == "failed" {
+			exec.mu.Lock()
+			rollbackCalls := exec.rollbackCalls
+			composeCalls := exec.composeApplyCalls
+			exec.mu.Unlock()
+			if composeCalls != 1 {
+				t.Fatalf("expected ComposeApply call before validation failure, got %d", composeCalls)
+			}
+			if rollbackCalls != 0 {
+				t.Fatalf("expected compose rollback not to be invoked, got %d", rollbackCalls)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for compose failed status")
 }
 
 func TestIsDependentOnTarget_MatchesSharedContainerNetworkMode(t *testing.T) {

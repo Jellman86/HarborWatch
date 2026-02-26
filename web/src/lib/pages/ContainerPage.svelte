@@ -34,6 +34,14 @@
         fullAutomationReady?: boolean;
         portainerManaged?: boolean;
         portainerConfigured?: boolean;
+        orchestrationMode?: "plain_docker" | "docker_compose" | "portainer_stack" | string;
+        composeProject?: string;
+        composeService?: string;
+        composeWorkingDir?: string;
+        composeConfigFiles?: string[];
+        composeSourceStatus?: "unverified" | "verified_readonly" | "verified_writable" | string;
+        composeSourceVerified?: boolean;
+        composeSourceWritable?: boolean;
         issues?: Array<{
             code: string;
             severity: "info" | "warning" | "error";
@@ -713,6 +721,52 @@
         return "Action Needed";
     }
 
+    function orchestrationModeLabel(): string {
+        const mode = String(intel?.orchestrationMode || "").trim();
+        if (mode === "portainer_stack") return "Portainer";
+        if (mode === "docker_compose") return "Compose";
+        if (mode === "plain_docker") return "Docker";
+        return "Unknown Mode";
+    }
+
+    function orchestrationModeBadgeClass(): string {
+        const mode = String(intel?.orchestrationMode || "").trim();
+        if (mode === "portainer_stack") return "bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-200 dark:border-cyan-900/40";
+        if (mode === "docker_compose") return "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/40";
+        return "bg-slate-100 text-slate-700 dark:bg-slate-900/50 dark:text-slate-300 border-slate-200 dark:border-slate-700";
+    }
+
+    function lifecycleAutomationCapabilityNote(): string {
+        if (!intel) return "Loading orchestration mode…";
+        const mode = String(intel.orchestrationMode || "").trim();
+        if (mode === "portainer_stack") {
+            if (!intel.portainerConfigured) return "Portainer stack detected. Configure Portainer integration to enable safe upgrades.";
+            return "Portainer stack detected. HarborWatch redeploys through Portainer and respects the stack definition as the source of truth (no stack file edits).";
+        }
+        if (mode === "docker_compose") {
+            const status = String(intel.composeSourceStatus || "").trim();
+            if (status === "verified_writable" || status === "verified_readonly") {
+                return "Local Compose service detected. HarborWatch uses compose-aware pull/up actions and will not edit compose files or .env files.";
+            }
+            return "Local Compose service detected. Compose source could not be verified from this appliance (check mounts/path mapping).";
+        }
+        return "Plain Docker container detected. HarborWatch uses the local recreate pipeline for upgrades.";
+    }
+
+    function composeUpgradeBlockedInUI(): boolean {
+        return intel?.orchestrationMode === "docker_compose" && intel?.composeSourceVerified === false;
+    }
+
+    function lifecycleUpgradeActionBlocked(): boolean {
+        return !!(updateJobPolling || (intel?.portainerManaged && !intel?.portainerConfigured) || composeUpgradeBlockedInUI());
+    }
+
+    function lifecycleUpgradeBlockTitle(): string {
+        if (intel?.portainerManaged && !intel?.portainerConfigured) return "Portainer integration required";
+        if (composeUpgradeBlockedInUI()) return "Local Compose source must be readable for compose-aware upgrades";
+        return "";
+    }
+
     function extractAIBlockedReason(job: UpdateJobStatus | null | undefined): string {
         if (!job) return "";
         const direct = String(job.error || "").trim();
@@ -926,6 +980,11 @@
                         {#if detail.summary.updateAvailable}
                             <span class="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded text-[9px] font-black uppercase animate-pulse whitespace-nowrap">
                                 Update Available
+                            </span>
+                        {/if}
+                        {#if intel}
+                            <span class="px-2 py-1 border rounded text-[9px] font-black uppercase whitespace-nowrap {orchestrationModeBadgeClass()}">
+                                {orchestrationModeLabel()}
                             </span>
                         {/if}
                         {#if configStore.portainerActive && intel?.portainerManaged}
@@ -1331,9 +1390,9 @@
                                         <div class="flex flex-wrap items-center gap-3">
                                             <button
                                                 onclick={triggerForceUpgradeOnce}
-                                                disabled={updateJobPolling || (intel?.portainerManaged && !intel?.portainerConfigured)}
+                                                disabled={lifecycleUpgradeActionBlocked()}
                                                 class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:scale-105 transition-all"
-                                                title={intel?.portainerManaged && !intel?.portainerConfigured ? "Portainer integration required" : "Ignore AI breaking-change block for one run only"}
+                                                title={lifecycleUpgradeActionBlocked() ? lifecycleUpgradeBlockTitle() : "Ignore AI breaking-change block for one run only"}
                                             >
                                                 {updateJobPolling ? "Updating..." : "Force Upgrade Once"}
                                             </button>
@@ -1345,6 +1404,16 @@
                                 {/if}
 
                                 <div class="flex flex-wrap gap-3 pt-2">
+                                    <div class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 px-3 py-2">
+                                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Upgrade Execution Mode</p>
+                                        <p class="mt-1 text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">{lifecycleAutomationCapabilityNote()}</p>
+                                        {#if intel?.orchestrationMode === "docker_compose" && intel?.composeProject}
+                                            <p class="mt-1 text-[10px] text-slate-500">
+                                                Compose Project: <span class="font-mono">{intel.composeProject}</span>
+                                                {#if intel.composeService} | Service: <span class="font-mono">{intel.composeService}</span>{/if}
+                                            </p>
+                                        {/if}
+                                    </div>
                                     <button
                                         onclick={saveRules}
                                         disabled={savingRules}
@@ -1354,9 +1423,9 @@
                                     </button>
                                     <button
                                         onclick={triggerManualUpdate}
-                                        disabled={updateJobPolling || (intel?.portainerManaged && !intel?.portainerConfigured)}
+                                        disabled={lifecycleUpgradeActionBlocked()}
                                         class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-500/20 hover:scale-105 transition-all"
-                                        title={intel?.portainerManaged && !intel?.portainerConfigured ? "Portainer integration required" : ""}
+                                        title={lifecycleUpgradeBlockTitle()}
                                     >
                                         {updateJobPolling ? "Updating..." : "Trigger Upgrade"}
                                     </button>

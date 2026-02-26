@@ -135,6 +135,7 @@ func buildUpdateRequestForContainer(
 	aiBlockRiskThreshold := -1
 	globalBypassAI := false
 	globalSkipHealthCheck := false
+	composeSnapshotRoot := ""
 	if settingsService != nil {
 		settingsCtx, settingsCancel := context.WithTimeout(ctx, 2*time.Second)
 		if st, err := settingsService.Get(settingsCtx); err == nil {
@@ -143,6 +144,7 @@ func buildUpdateRequestForContainer(
 			}
 			globalBypassAI = st.GlobalBypassAI
 			globalSkipHealthCheck = st.GlobalSkipHealthCheck
+			composeSnapshotRoot = strings.TrimSpace(st.ComposeSnapshotRootPath)
 		}
 		settingsCancel()
 	}
@@ -172,6 +174,12 @@ func buildUpdateRequestForContainer(
 	isPortainer := false
 	stackID := 0
 	endpointID := 0
+	mode := detectContainerOrchestrationMode(out.Summary)
+	composeProject, composeService, composeWorkingDir, composeConfigFiles, composeMetaOK := localComposeProjectMetadata(out.Summary)
+	composeStatus := composeSourceStatus("")
+	if composeMetaOK {
+		composeStatus = detectComposeSourceStatus(composeConfigFiles)
+	}
 	if out.Summary.Labels != nil {
 		sid, hasSID := out.Summary.Labels["io.portainer.stack_id"]
 		if !hasSID {
@@ -218,7 +226,10 @@ func buildUpdateRequestForContainer(
 		}
 	}
 
-	if opts.RequireAutoPolicy {
+	if mode == orchestrationModeDockerCompose && composeStatus == composeSourceStatusUnverified {
+		return out, fmt.Errorf("%w: local compose source is %s for container %s", ErrComposeSourceVerificationUnavailable, firstNonEmpty(string(composeStatus), string(composeSourceStatusUnverified)), containerID)
+	}
+	if isComposeManagedContainer(out.Summary) {
 		if err := enforceComposeSourceAuthorityForAuto(ctx, out.Summary, targetImage, portainerService); err != nil {
 			return out, err
 		}
@@ -243,6 +254,12 @@ func buildUpdateRequestForContainer(
 		SkipHealthCheck:               skipHealthCheck || effectiveRules.SkipHealthCheck || globalSkipHealthCheck,
 		RestartDependentsAfterUpgrade: effectiveRules.RestartDependentsAfterUpgrade,
 		DependentRestartDelaySec:      effectiveRules.DependentRestartDelaySec,
+		OrchestrationMode:             string(mode),
+		ComposeProject:                composeProject,
+		ComposeService:                composeService,
+		ComposeWorkingDir:             composeWorkingDir,
+		ComposeConfigFiles:            composeConfigFiles,
+		ComposeSnapshotRoot:           composeSnapshotRoot,
 		IsPortainerManaged:            isPortainer,
 		PortainerStackID:              stackID,
 		PortainerEndpointID:           endpointID,

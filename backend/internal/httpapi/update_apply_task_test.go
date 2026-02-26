@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -318,10 +320,10 @@ func TestAutomatedUpdateApplyTask_SkipsWhenPortainerComposeSourceDriftDetected(t
 		Names: []string{"/gluetun"},
 		Image: "qmcgaw/gluetun:v3.39.0",
 		Labels: map[string]string{
-			"io.portainer.stack_id":          "12",
-			"io.portainer.endpoint_id":       "1",
-			"com.docker.compose.service":     "gluetun",
-			"com.docker.compose.project":     "media",
+			"io.portainer.stack_id":                  "12",
+			"io.portainer.endpoint_id":               "1",
+			"com.docker.compose.service":             "gluetun",
+			"com.docker.compose.project":             "media",
 			"com.docker.compose.project.working_dir": "/data/compose/12",
 		},
 		UpdateAvailable: true,
@@ -392,5 +394,114 @@ func TestAutomatedUpdateApplyTask_SkipsComposeManagedWhenSourceCannotBeVerified(
 	}
 	if len(updateSvc.started) != 0 {
 		t.Fatalf("expected compose-managed container without source verification to be skipped, got %d starts", len(updateSvc.started))
+	}
+}
+
+func TestAutomatedUpdateApplyTask_StartsLocalComposeWhenSourceIsWritable(t *testing.T) {
+	tempDir := t.TempDir()
+	composeFile := filepath.Join(tempDir, "docker-compose.yml")
+	if err := os.WriteFile(composeFile, []byte("services:\n  web:\n    image: ghcr.io/acme/app:1.2.3\n"), 0o644); err != nil {
+		t.Fatalf("write compose file: %v", err)
+	}
+
+	container := gen.ContainerSummary{
+		ID:    "c-compose-local",
+		Names: []string{"/app"},
+		Image: "ghcr.io/acme/app:1.2.3",
+		Labels: map[string]string{
+			"com.docker.compose.project":              "app",
+			"com.docker.compose.service":              "web",
+			"com.docker.compose.project.working_dir":  tempDir,
+			"com.docker.compose.project.config_files": composeFile,
+		},
+		UpdateAvailable: true,
+	}
+	dockerClient := autoTaskDockerClient{
+		containers: []gen.ContainerSummary{container},
+		byID:       map[string]gen.ContainerSummary{container.ID: container},
+	}
+	updateSvc := &recordingUpdateService{}
+	task := newAutomatedUpdateApplyTask(
+		dockerClient,
+		fakePortainerClient{},
+		updateSvc,
+		testRulesService{rule: rules.ContainerRules{
+			UpdatePolicy: "auto",
+			ValidateURL:  "http://localhost:8080/health",
+		}},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run task: %v", err)
+	}
+	if len(updateSvc.started) != 1 {
+		t.Fatalf("expected writable local compose container to auto-start, got %d starts", len(updateSvc.started))
+	}
+	if got := strings.TrimSpace(updateSvc.started[0].OrchestrationMode); got != "docker_compose" {
+		t.Fatalf("expected orchestration mode docker_compose, got %q", got)
+	}
+	if got := strings.TrimSpace(updateSvc.started[0].ComposeService); got != "web" {
+		t.Fatalf("expected compose service web, got %q", got)
+	}
+}
+
+func TestAutomatedUpdateApplyTask_StartsLocalComposeWithMultipleConfigFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	baseFile := filepath.Join(tempDir, "compose.base.yml")
+	overrideFile := filepath.Join(tempDir, "compose.override.yml")
+	if err := os.WriteFile(baseFile, []byte("services:\n  web:\n    image: ghcr.io/acme/app:1.2.3\n"), 0o644); err != nil {
+		t.Fatalf("write base file: %v", err)
+	}
+	if err := os.WriteFile(overrideFile, []byte("services:\n  web:\n    environment:\n      - FOO=bar\n"), 0o644); err != nil {
+		t.Fatalf("write override file: %v", err)
+	}
+
+	container := gen.ContainerSummary{
+		ID:    "c-compose-multi",
+		Names: []string{"/app"},
+		Image: "ghcr.io/acme/app:1.2.3",
+		Labels: map[string]string{
+			"com.docker.compose.project":              "app",
+			"com.docker.compose.service":              "web",
+			"com.docker.compose.project.working_dir":  tempDir,
+			"com.docker.compose.project.config_files": baseFile + "," + overrideFile,
+		},
+		UpdateAvailable: true,
+	}
+	dockerClient := autoTaskDockerClient{
+		containers: []gen.ContainerSummary{container},
+		byID:       map[string]gen.ContainerSummary{container.ID: container},
+	}
+	updateSvc := &recordingUpdateService{}
+	task := newAutomatedUpdateApplyTask(
+		dockerClient,
+		fakePortainerClient{},
+		updateSvc,
+		testRulesService{rule: rules.ContainerRules{
+			UpdatePolicy: "auto",
+			ValidateURL:  "http://localhost:8080/health",
+		}},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run task: %v", err)
+	}
+	if len(updateSvc.started) != 1 {
+		t.Fatalf("expected writable local compose multi-file container to auto-start, got %d starts", len(updateSvc.started))
+	}
+	if len(updateSvc.started[0].ComposeConfigFiles) != 2 {
+		t.Fatalf("expected 2 compose config files on request, got %d", len(updateSvc.started[0].ComposeConfigFiles))
 	}
 }

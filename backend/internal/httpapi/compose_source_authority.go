@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -15,6 +18,27 @@ var (
 	ErrComposeSourceVerificationUnavailable = errors.New("compose source verification unavailable")
 	ErrComposeSourceDriftDetected           = errors.New("runtime image diverges from compose source")
 	ErrComposeTargetDivergesFromSource      = errors.New("target image diverges from compose source")
+
+	dockerComposeConfigRunner = func(ctx context.Context, workingDir string, configFiles []string) ([]byte, error) {
+		args := []string{"compose"}
+		for _, raw := range configFiles {
+			p := strings.TrimSpace(raw)
+			if p == "" {
+				continue
+			}
+			args = append(args, "-f", p)
+		}
+		args = append(args, "config")
+		cmd := exec.CommandContext(ctx, "docker", args...)
+		if wd := strings.TrimSpace(workingDir); wd != "" {
+			cmd.Dir = wd
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("docker compose config failed: %w (%s)", err, truncateAuthorityOutput(string(out), 400))
+		}
+		return out, nil
+	}
 )
 
 func enforceComposeSourceAuthorityForAuto(
@@ -53,6 +77,9 @@ func resolveDeclaredComposeImageRef(ctx context.Context, summary gen.ContainerSu
 	if !isComposeManagedContainer(summary) {
 		return "", nil
 	}
+	if detectContainerOrchestrationMode(summary) == orchestrationModeDockerCompose {
+		return resolveDeclaredLocalComposeImageRef(ctx, summary)
+	}
 	service := strings.TrimSpace(summary.Labels["com.docker.compose.service"])
 	if service == "" {
 		return "", fmt.Errorf("%w: compose service label missing", ErrComposeSourceVerificationUnavailable)
@@ -75,6 +102,98 @@ func resolveDeclaredComposeImageRef(ctx context.Context, summary gen.ContainerSu
 		return "", fmt.Errorf("%w: %v", ErrComposeSourceVerificationUnavailable, err)
 	}
 	return imageRef, nil
+}
+
+func resolveDeclaredLocalComposeImageRef(ctx context.Context, summary gen.ContainerSummary) (string, error) {
+	project, service, workingDir, configFiles, ok := localComposeProjectMetadata(summary)
+	if !ok {
+		return "", fmt.Errorf("%w: compose labels missing", ErrComposeSourceVerificationUnavailable)
+	}
+	if len(configFiles) == 0 {
+		return "", fmt.Errorf("%w: local compose project %q has no config files", ErrComposeSourceVerificationUnavailable, project)
+	}
+	status := detectComposeSourceStatus(configFiles)
+	if status == composeSourceStatusUnverified {
+		return "", fmt.Errorf("%w: local compose source is %s", ErrComposeSourceVerificationUnavailable, status)
+	}
+	imageRef, err := extractComposeServiceImageRefFromFiles(configFiles, service)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrComposeSourceVerificationUnavailable, err)
+	}
+	if composeImageRefNeedsResolution(imageRef) {
+		resolved, err := resolveComposeServiceImageRefViaDockerConfig(ctx, workingDir, configFiles, service)
+		if err != nil {
+			return "", fmt.Errorf("%w: resolve interpolated compose image for %q: %v", ErrComposeSourceVerificationUnavailable, service, err)
+		}
+		if strings.TrimSpace(resolved) != "" {
+			return resolved, nil
+		}
+	}
+	return imageRef, nil
+}
+
+func extractComposeServiceImageRefFromFiles(configFiles []string, service string) (string, error) {
+	lastImage := ""
+	foundService := false
+	for _, path := range configFiles {
+		raw, err := os.ReadFile(strings.TrimSpace(path))
+		if err != nil {
+			return "", fmt.Errorf("read compose file %s: %w", path, err)
+		}
+		imageRef, found, err := extractComposeServiceImageRefOptional(string(raw), service)
+		if err != nil {
+			return "", err
+		}
+		if found {
+			foundService = true
+		}
+		if strings.TrimSpace(imageRef) != "" {
+			lastImage = strings.TrimSpace(imageRef)
+		}
+	}
+	if !foundService {
+		return "", fmt.Errorf("service %q not found in compose source", service)
+	}
+	if lastImage == "" {
+		return "", fmt.Errorf("service %q has no image field", service)
+	}
+	return lastImage, nil
+}
+
+func resolveComposeServiceImageRefViaDockerConfig(ctx context.Context, workingDir string, configFiles []string, service string) (string, error) {
+	if strings.TrimSpace(service) == "" {
+		return "", errors.New("missing compose service name")
+	}
+	if len(configFiles) == 0 {
+		return "", errors.New("compose config files required")
+	}
+	if strings.TrimSpace(workingDir) == "" {
+		workingDir = filepath.Dir(strings.TrimSpace(configFiles[0]))
+	}
+	out, err := dockerComposeConfigRunner(ctx, workingDir, configFiles)
+	if err != nil {
+		return "", err
+	}
+	imageRef, err := extractComposeServiceImageRef(string(out), service)
+	if err != nil {
+		return "", err
+	}
+	return imageRef, nil
+}
+
+func composeImageRefNeedsResolution(imageRef string) bool {
+	ref := strings.TrimSpace(imageRef)
+	return strings.Contains(ref, "${") || strings.Contains(ref, "$")
+}
+
+func truncateAuthorityOutput(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	if n < 4 {
+		return s[:n]
+	}
+	return s[:n-3] + "..."
 }
 
 func portainerStackIDFromLabels(labels map[string]string) (int, bool) {
@@ -102,31 +221,45 @@ func portainerStackIDFromLabels(labels map[string]string) (int, bool) {
 }
 
 func extractComposeServiceImageRef(stackYAML, serviceName string) (string, error) {
+	imageRef, found, err := extractComposeServiceImageRefOptional(stackYAML, serviceName)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("service %q not found in compose source", strings.TrimSpace(serviceName))
+	}
+	if strings.TrimSpace(imageRef) == "" {
+		return "", fmt.Errorf("service %q has no image field", strings.TrimSpace(serviceName))
+	}
+	return imageRef, nil
+}
+
+func extractComposeServiceImageRefOptional(stackYAML, serviceName string) (string, bool, error) {
 	serviceName = strings.TrimSpace(serviceName)
 	if serviceName == "" {
-		return "", errors.New("missing compose service name")
+		return "", false, errors.New("missing compose service name")
 	}
 	var root map[string]any
 	if err := yaml.Unmarshal([]byte(stackYAML), &root); err != nil {
-		return "", fmt.Errorf("parse stack yaml: %w", err)
+		return "", false, fmt.Errorf("parse stack yaml: %w", err)
 	}
 	services, ok := root["services"].(map[string]any)
 	if !ok || len(services) == 0 {
-		return "", errors.New("services map not found")
+		return "", false, nil
 	}
 	serviceDef, ok := services[serviceName]
 	if !ok {
-		return "", fmt.Errorf("service %q not found in compose source", serviceName)
+		return "", false, nil
 	}
 	serviceMap, ok := serviceDef.(map[string]any)
 	if !ok {
-		return "", fmt.Errorf("service %q definition is invalid", serviceName)
+		return "", false, fmt.Errorf("service %q definition is invalid", serviceName)
 	}
 	imageRef := strings.TrimSpace(fmt.Sprint(serviceMap["image"]))
-	if imageRef == "" || imageRef == "<nil>" {
-		return "", fmt.Errorf("service %q has no image field", serviceName)
+	if imageRef == "<nil>" {
+		imageRef = ""
 	}
-	return imageRef, nil
+	return imageRef, true, nil
 }
 
 func imageRefsEquivalent(a, b string) bool {

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
@@ -11,6 +12,51 @@ import (
 
 type stubSettingsService struct {
 	st settings.Settings
+}
+
+func TestBuildUpdateRequestForContainer_PortainerManualRejectsTargetThatRequiresStackChange(t *testing.T) {
+	container := gen.ContainerSummary{
+		ID:    "c-portainer",
+		Names: []string{"/app"},
+		Image: "ghcr.io/acme/app:1.2.3",
+		Labels: map[string]string{
+			"io.portainer.stack_id":                   "12",
+			"io.portainer.endpoint_id":                "1",
+			"com.docker.compose.project":              "app",
+			"com.docker.compose.service":              "web",
+			"com.docker.compose.project.config_files": "/data/compose/12/docker-compose.yml",
+		},
+	}
+	dockerClient := autoTaskDockerClient{
+		containers: []gen.ContainerSummary{container},
+		byID:       map[string]gen.ContainerSummary{container.ID: container},
+	}
+
+	_, err := buildUpdateRequestForContainer(
+		context.Background(),
+		container.ID,
+		"ghcr.io/acme/app:1.2.4",
+		"http://localhost:8080/health",
+		"",
+		0,
+		0,
+		false,
+		false,
+		dockerClient,
+		fakePortainerClient{yaml: "services:\n  web:\n    image: ghcr.io/acme/app:1.2.3\n"},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		updateRequestBuildOptions{},
+	)
+	if err == nil {
+		t.Fatalf("expected portainer manual update requiring stack change to be rejected")
+	}
+	if !errors.Is(err, ErrComposeTargetDivergesFromSource) {
+		t.Fatalf("expected ErrComposeTargetDivergesFromSource, got %v", err)
+	}
 }
 
 func (s stubSettingsService) Get(ctx context.Context) (settings.Settings, error)   { return s.st, nil }
