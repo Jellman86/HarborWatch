@@ -163,6 +163,7 @@
     };
 
     let settings = $state<Settings>({ ...defaultSettings });
+    let settingsSavedSignature = $state("");
     let schedules = $state<Schedule[]>([]);
     let scheduleDrafts = $state<Record<string, ScheduleDraft>>({});
     let updateCheckIntervalDrafts = $state<Record<string, UpdateCheckIntervalOption>>({});
@@ -411,6 +412,33 @@
     function scheduleById(id: string): Schedule | undefined {
         return schedules.find((s) => s.id === id);
     }
+
+    function cloneSettings(input: Settings): Settings {
+        return JSON.parse(JSON.stringify({ ...defaultSettings, ...input }));
+    }
+
+    function sanitizedSettingsForSave(input: Settings): Settings {
+        const next = cloneSettings(input);
+        next.aiBlockRiskThreshold = Math.max(0, Math.min(100, Number(next.aiBlockRiskThreshold || 80)));
+        next.autoUpgradeMaxConcurrency = Math.max(1, Math.min(20, Number(next.autoUpgradeMaxConcurrency || 1)));
+        next.autoUpgradeMinRetryMinutes = Math.max(1, Math.min(1440, Number(next.autoUpgradeMinRetryMinutes || 60)));
+        next.clamavSnapshotMaxBytes = Math.max(1, Number(next.clamavSnapshotMaxBytes || 2147483648));
+        next.retentionLogsDays = Math.max(1, Math.min(3650, Number(next.retentionLogsDays || 30)));
+        next.retentionMetricsDays = Math.max(1, Math.min(3650, Number(next.retentionMetricsDays || 14)));
+        next.retentionScanResultsDays = Math.max(1, Math.min(3650, Number(next.retentionScanResultsDays || 30)));
+        next.retentionScanJobsDays = Math.max(1, Math.min(3650, Number(next.retentionScanJobsDays || 30)));
+        next.retentionUpdateRunsDays = Math.max(1, Math.min(3650, Number(next.retentionUpdateRunsDays || 90)));
+        next.retentionComposeAuditDays = Math.max(1, Math.min(3650, Number(next.retentionComposeAuditDays || 90)));
+        next.retentionAIUsageDays = Math.max(1, Math.min(3650, Number(next.retentionAIUsageDays || 180)));
+        next.environmentOverrides = next.environmentOverrides || {};
+        return next;
+    }
+
+    function settingsSignature(input: Settings): string {
+        return JSON.stringify(sanitizedSettingsForSave(input));
+    }
+
+    const settingsDirty = $derived.by(() => !loading && settingsSavedSignature !== "" && settingsSignature(settings) !== settingsSavedSignature);
 
     function schedulesForDomain(domain: AutomationDomain): Schedule[] {
         let tasks = automationConfig[domain].tasks;
@@ -721,6 +749,7 @@
         const data = await res.json();
         data.environmentOverrides = data.environmentOverrides || {};
         settings = { ...defaultSettings, ...data };
+        settingsSavedSignature = settingsSignature(settings);
         retentionWindowPreset = detectRetentionWindowPreset();
     }
 
@@ -849,22 +878,13 @@
     async function saveSettings() {
         saving = true;
         try {
-            settings.aiBlockRiskThreshold = Math.max(0, Math.min(100, Number(settings.aiBlockRiskThreshold || 80)));
-            settings.autoUpgradeMaxConcurrency = Math.max(1, Math.min(20, Number(settings.autoUpgradeMaxConcurrency || 1)));
-            settings.autoUpgradeMinRetryMinutes = Math.max(1, Math.min(1440, Number(settings.autoUpgradeMinRetryMinutes || 60)));
-            settings.clamavSnapshotMaxBytes = Math.max(1, Number(settings.clamavSnapshotMaxBytes || 2147483648));
-            settings.retentionLogsDays = Math.max(1, Math.min(3650, Number(settings.retentionLogsDays || 30)));
-            settings.retentionMetricsDays = Math.max(1, Math.min(3650, Number(settings.retentionMetricsDays || 14)));
-            settings.retentionScanResultsDays = Math.max(1, Math.min(3650, Number(settings.retentionScanResultsDays || 30)));
-            settings.retentionScanJobsDays = Math.max(1, Math.min(3650, Number(settings.retentionScanJobsDays || 30)));
-            settings.retentionUpdateRunsDays = Math.max(1, Math.min(3650, Number(settings.retentionUpdateRunsDays || 90)));
-            settings.retentionComposeAuditDays = Math.max(1, Math.min(3650, Number(settings.retentionComposeAuditDays || 90)));
-            settings.retentionAIUsageDays = Math.max(1, Math.min(3650, Number(settings.retentionAIUsageDays || 180)));
+            const payload = sanitizedSettingsForSave(settings);
+            settings = payload;
             retentionWindowPreset = detectRetentionWindowPreset();
             const res = await fetch("/api/settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(settings)
+                body: JSON.stringify(payload)
             });
             if (!res.ok) throw new Error(`settings save failed (${res.status})`);
             toasts.success("Settings saved.");
@@ -1190,13 +1210,19 @@
             <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Settings</h2>
             <p class="text-sm text-slate-500 mt-1">Global configuration and automation policy control plane.</p>
         </div>
-        <button
-            onclick={saveSettings}
-            disabled={saving || loading}
-            class="px-6 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-500/20"
-        >
-            {saving ? "Saving..." : "Save Settings"}
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {saving ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-900/40 dark:bg-brand-900/20 dark:text-brand-300' : settingsDirty ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300'}">
+                <span class="w-1.5 h-1.5 rounded-full {saving ? 'bg-brand-500 animate-pulse' : settingsDirty ? 'bg-amber-500' : 'bg-emerald-500'}"></span>
+                {saving ? "Saving..." : settingsDirty ? "Pending" : "Saved"}
+            </span>
+            <button
+                onclick={saveSettings}
+                disabled={saving || loading || !settingsDirty}
+                class="px-6 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-500/20"
+            >
+                {saving ? "Saving..." : settingsDirty ? "Save Settings" : "Saved"}
+            </button>
+        </div>
     </div>
 
     <div class="settings-tab-strip flex flex-wrap gap-2 bg-slate-100/95 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit backdrop-blur">
@@ -1422,10 +1448,15 @@
                                 {#if activeAutomationTab === "upgrades"}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                         <div>
-                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Upgrade Runtime Controls</p>
+                                            <div class="flex items-center gap-2">
+                                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border border-sky-200/70 dark:border-sky-900/40">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                </span>
+                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">Upgrade Runtime Controls</p>
+                                            </div>
                                             <p class="text-[11px] text-slate-500 mt-1">Tune how aggressively auto-apply runs and how long failed containers wait before retry.</p>
                                         </div>
-                                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                        <div class="grid grid-cols-1 gap-4">
                                             <div class="space-y-4">
                                                 <div class="space-y-2">
                                                     <label for="auto-upgrade-min-retry" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retry Cooldown (minutes)</label>
@@ -1441,7 +1472,19 @@
                                                     <p class="text-[11px] text-slate-500">Minimum wait before a previously failed upgrade can be retried automatically.</p>
                                                 </div>
 
-                                                <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-700 space-y-4">
+                                                <div class="p-4 rounded-2xl border-2 border-amber-200 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/80 via-white to-white dark:from-amber-900/10 dark:via-slate-900/30 dark:to-slate-900/30 space-y-4">
+                                                    <div class="flex flex-wrap items-center justify-between gap-3">
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200/70 dark:border-amber-900/40">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" /></svg>
+                                                            </span>
+                                                            <div>
+                                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Default Policy</p>
+                                                                <p class="text-[11px] text-slate-500 mt-0.5">Applied to new containers and containers configured to follow global automation.</p>
+                                                            </div>
+                                                        </div>
+                                                        <span class="px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Defaults</span>
+                                                    </div>
                                                     {#if configStore.aiActive}
                                                         <div class="flex items-center justify-between">
                                                             <div>
@@ -1569,18 +1612,24 @@
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </div>
 
-                                            <div class="space-y-2 flex flex-col justify-end">
-                                                <button
-                                                    onclick={bulkSetAutoApply}
-                                                    disabled={bulkUpdating || !discoveredContainers.length}
-                                                    class="w-full px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/20"
-                                                >
-                                                    {bulkUpdating ? "Applying..." : "Bulk Enable Automatic Mode"}
-                                                </button>
-                                                <p class="text-[10px] text-slate-500 italic mt-1 text-center">Set all containers to follow global automation policy.</p>
+                                                    <div class="pt-3 border-t border-slate-200/60 dark:border-slate-700/60 space-y-2">
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-white dark:bg-slate-900/40 border border-amber-200/70 dark:border-amber-900/40 text-amber-700 dark:text-amber-300">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16M4 17h16" /></svg>
+                                                            </span>
+                                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Apply Default Policy</p>
+                                                        </div>
+                                                        <button
+                                                            onclick={bulkSetAutoApply}
+                                                            disabled={bulkUpdating || !discoveredContainers.length}
+                                                            class="w-full px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/20"
+                                                        >
+                                                            {bulkUpdating ? "Applying..." : "Set All Containers To Automatic"}
+                                                        </button>
+                                                        <p class="text-[10px] text-slate-500 italic">Set containers to follow the global automation policy. Scheduler tasks still determine if/when update jobs run.</p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1608,7 +1657,12 @@
                                 {#if activeAutomationTab === "remediation"}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                                         <div>
-                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Unhealthy Auto-Remediation</p>
+                                            <div class="flex items-center gap-2">
+                                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300 border border-pink-200/70 dark:border-pink-900/40">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                                                </span>
+                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">Unhealthy Auto-Remediation</p>
+                                            </div>
                                             <p class="text-[11px] text-slate-500 mt-1">Listen for Docker health events and automatically restart unhealthy containers (opt-in per container).</p>
                                         </div>
                                         <div class="flex items-center justify-between gap-4">

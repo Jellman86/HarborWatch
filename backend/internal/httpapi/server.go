@@ -1469,7 +1469,13 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 						req.DependentRestartDelaySec = incoming.DependentRestartDelaySec
 					}
 					req.UpdatePolicy = normalizeUpdatePolicy(req.UpdatePolicy)
-					req = effectiveContainerRules(r.Context(), summary, req, settingsService, diagService)
+					if req.UpdatePolicy == "" {
+						req.UpdatePolicy = "manual"
+					}
+					req.ValidateMode = normalizeValidateMode(req.ValidateMode)
+					if req.ValidateMode == "" {
+						req.ValidateMode = "both"
+					}
 					if err := rulesService.Save(r.Context(), req); err != nil {
 						writeError(w, http.StatusInternalServerError, "rules_save_failed", err.Error())
 						return

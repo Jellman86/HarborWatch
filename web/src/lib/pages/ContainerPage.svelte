@@ -103,6 +103,7 @@
     });
     let scanMessage = $state("");
     let lifecycleMessage = $state("");
+    let lifecycleSavedSignature = $state("");
     let lifecycleMode = $state<"global" | "manual">("global");
     let bypassAi = $state(false);
     let skipHealth = $state(false);
@@ -416,7 +417,31 @@
         unhealthyRestartCooldownSec = detail?.rules?.unhealthyRestartCooldownSec ?? 300;
         restartDependentsAfterUpgrade = !!(detail?.rules as any)?.restartDependentsAfterUpgrade;
         dependentRestartDelaySec = Number((detail?.rules as any)?.dependentRestartDelaySec ?? 20);
+        lifecycleSavedSignature = lifecycleDraftSignature();
     }
+
+    function lifecycleDraftSignature(): string {
+        return JSON.stringify({
+            lifecycleMode,
+            bypassAi: !!bypassAi,
+            skipHealth: !!skipHealth,
+            aiValidateLogs: !!aiValidateLogs,
+            autoRollback: !!autoRollback,
+            validateMode: String(validateMode || "both"),
+            validateUrl: String(validateUrl || "").trim(),
+            validateTimeoutSec: Math.max(1, Number(validateTimeoutSec || 45)),
+            validateIntervalSec: Math.max(1, Number(validateIntervalSec || 2)),
+            restartOnUnhealthy: !!restartOnUnhealthy,
+            unhealthyRestartCooldownSec: Number(unhealthyRestartCooldownSec ?? 300),
+            restartDependentsAfterUpgrade: !!restartDependentsAfterUpgrade,
+            dependentRestartDelaySec: Math.max(0, Number(dependentRestartDelaySec ?? 20))
+        });
+    }
+
+    const lifecycleDirty = $derived.by(() => {
+        if (!detail?.rules) return false;
+        return lifecycleDraftSignature() !== lifecycleSavedSignature;
+    });
 
     function applyLifecycleModeToRules(mode: "global" | "manual") {
         if (!detail?.rules) return;
@@ -1435,11 +1460,15 @@
                                     </div>
                                     <button
                                         onclick={saveRules}
-                                        disabled={savingRules}
+                                        disabled={savingRules || !lifecycleDirty}
                                         class="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-60"
                                     >
-                                        {savingRules ? "Saving..." : "Save Selection"}
+                                        {savingRules ? "Saving..." : lifecycleDirty ? "Save Selection" : "Saved"}
                                     </button>
+                                    <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {savingRules ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-900/40 dark:bg-brand-900/20 dark:text-brand-300' : lifecycleDirty ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300'}">
+                                        <span class="w-1.5 h-1.5 rounded-full {savingRules ? 'bg-brand-500 animate-pulse' : lifecycleDirty ? 'bg-amber-500' : 'bg-emerald-500'}"></span>
+                                        {savingRules ? "Saving..." : lifecycleDirty ? "Pending" : "Saved"}
+                                    </span>
                                     <button
                                         onclick={triggerManualUpdate}
                                         disabled={lifecycleUpgradeActionBlocked()}

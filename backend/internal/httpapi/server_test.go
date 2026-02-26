@@ -439,6 +439,27 @@ func (f *recordingRulesService) Save(ctx context.Context, r rules.ContainerRules
 	return nil
 }
 
+type recordingRulesServicePreserveExists struct {
+	getRule rules.ContainerRules
+	saved   rules.ContainerRules
+}
+
+func (f *recordingRulesServicePreserveExists) Get(ctx context.Context, id, name string) (rules.ContainerRules, error) {
+	out := f.getRule
+	if out.ContainerID == "" {
+		out.ContainerID = id
+	}
+	if out.ContainerName == "" {
+		out.ContainerName = name
+	}
+	return out, nil
+}
+
+func (f *recordingRulesServicePreserveExists) Save(ctx context.Context, r rules.ContainerRules) error {
+	f.saved = r
+	return nil
+}
+
 type fakeUpdateService struct {
 	startResp  gen.UpdateStartResponse
 	job        *gen.UpdateJobStatus
@@ -923,6 +944,36 @@ func TestRulesRoute_SaveMergesPartialPayloadWithoutClearingUnhealthyRestart(t *t
 	}
 	if rulesSvc.saved.UpdatePolicy != "auto" {
 		t.Fatalf("expected updatePolicy=auto, got %q", rulesSvc.saved.UpdatePolicy)
+	}
+}
+
+func TestRulesRoute_SavePreservesValidateModeForNewRule(t *testing.T) {
+	rulesSvc := &recordingRulesServicePreserveExists{
+		getRule: rules.ContainerRules{
+			Exists:                false,
+			ContainerID:           "c1",
+			ContainerName:         "web",
+			UpdatePolicy:          "manual",
+			ValidateMode:          "both",
+			ValidateTimeoutSec:    45,
+			ValidateIntervalSec:   2,
+			InheritAutomation:     true,
+			UpgradesAutomation:    true,
+			MaintenanceAutomation: true,
+			SecurityAutomation:    true,
+			AutoRollback:          true,
+		},
+	}
+	mux := NewMuxWithDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, rulesSvc, nil, nil)
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader(`{"validateMode":"docker","validateUrl":"","inheritAutomation":false,"upgradesAutomation":false,"maintenanceAutomation":false,"securityAutomation":false}`)
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/docker/c1/rules", body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rulesSvc.saved.ValidateMode != "docker" {
+		t.Fatalf("expected validateMode=docker to persist for new rule, got %q", rulesSvc.saved.ValidateMode)
 	}
 }
 
