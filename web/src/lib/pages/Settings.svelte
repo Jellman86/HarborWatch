@@ -164,12 +164,14 @@
 
     let settings = $state<Settings>({ ...defaultSettings });
     let settingsSavedSignature = $state("");
+    let settingsSaveErrorSignature = $state("");
     let schedules = $state<Schedule[]>([]);
     let scheduleDrafts = $state<Record<string, ScheduleDraft>>({});
     let updateCheckIntervalDrafts = $state<Record<string, UpdateCheckIntervalOption>>({});
     let discoveredContainers = $state<ContainerSummary[]>([]);
     let activeTab = $state("automations");
     let activeAutomationTab = $state<AutomationDomain>("general");
+    let activeAITab = $state<"settings" | "costs">("settings");
 
     let loading = $state(false);
     let saving = $state(false);
@@ -274,6 +276,12 @@
             subtitle: "Operational settings for metrics, ClamAV signatures, instance identity, and validation defaults.",
             accentClass: "from-amber-500/20 via-orange-500/10 to-transparent border-amber-200/60 dark:border-amber-900/40",
             badge: "Runtime"
+        },
+        backups: {
+            title: "Backup & Snapshot Controls",
+            subtitle: "Configure compose snapshot storage used before compose-managed upgrades and redeploy operations.",
+            accentClass: "from-emerald-500/20 via-teal-500/10 to-transparent border-emerald-200/60 dark:border-emerald-900/40",
+            badge: "Backups"
         },
         appearance: {
             title: "Interface Presentation",
@@ -439,6 +447,35 @@
     }
 
     const settingsDirty = $derived.by(() => !loading && settingsSavedSignature !== "" && settingsSignature(settings) !== settingsSavedSignature);
+
+    type SaveIndicatorState = "saving" | "error" | "pending" | "saved";
+
+    function indicatorToneClass(state: SaveIndicatorState): string {
+        switch (state) {
+            case "saving":
+                return "border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-900/40 dark:bg-brand-900/20 dark:text-brand-300";
+            case "error":
+                return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-300";
+            case "pending":
+                return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300";
+            default:
+                return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300";
+        }
+    }
+
+    function indicatorSymbol(state: SaveIndicatorState): string {
+        if (state === "saving") return "…";
+        if (state === "error") return "x";
+        if (state === "pending") return "!";
+        return "✓";
+    }
+
+    function settingsIndicatorState(): SaveIndicatorState {
+        if (saving) return "saving";
+        if (settingsSaveErrorSignature && settingsSaveErrorSignature === settingsSignature(settings)) return "error";
+        if (settingsDirty) return "pending";
+        return "saved";
+    }
 
     function schedulesForDomain(domain: AutomationDomain): Schedule[] {
         let tasks = automationConfig[domain].tasks;
@@ -750,6 +787,7 @@
         data.environmentOverrides = data.environmentOverrides || {};
         settings = { ...defaultSettings, ...data };
         settingsSavedSignature = settingsSignature(settings);
+        settingsSaveErrorSignature = "";
         retentionWindowPreset = detectRetentionWindowPreset();
     }
 
@@ -877,6 +915,7 @@
 
     async function saveSettings() {
         saving = true;
+        settingsSaveErrorSignature = "";
         try {
             const payload = sanitizedSettingsForSave(settings);
             settings = payload;
@@ -891,6 +930,7 @@
             await loadSettings();
             await loadAIUsage();
         } catch (e) {
+            settingsSaveErrorSignature = settingsSignature(settings);
             toasts.error(e instanceof Error ? e.message : "Failed to save settings");
         } finally {
             saving = false;
@@ -1211,9 +1251,11 @@
             <p class="text-sm text-slate-500 mt-1">Global configuration and automation policy control plane.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {saving ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-900/40 dark:bg-brand-900/20 dark:text-brand-300' : settingsDirty ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300'}">
-                <span class="w-1.5 h-1.5 rounded-full {saving ? 'bg-brand-500 animate-pulse' : settingsDirty ? 'bg-amber-500' : 'bg-emerald-500'}"></span>
-                {saving ? "Saving..." : settingsDirty ? "Pending" : "Saved"}
+            <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {indicatorToneClass(settingsIndicatorState())}">
+                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/30">
+                    {indicatorSymbol(settingsIndicatorState())}
+                </span>
+                {settingsIndicatorState() === "saving" ? "Saving..." : settingsIndicatorState() === "error" ? "Save Error" : settingsIndicatorState() === "pending" ? "Unsaved" : "Saved"}
             </span>
             <button
                 onclick={saveSettings}
@@ -1231,12 +1273,28 @@
             { id: "ai", label: "AI", status: configStore.initialized && !configStore.aiActive ? "Inactive" : "" },
             { id: "integrations", label: "Integrations", status: configStore.initialized && !configStore.portainerActive && settings.portainerEnabled ? "Portainer Error" : "" },
             { id: "system", label: "System" },
+            { id: "backups", label: "Backups" },
             { id: "appearance", label: "Appearance" }
         ] as tab}
             <button
                 onclick={() => activeTab = tab.id}
                 class="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
             >
+                <span class="inline-flex items-center justify-center w-4 h-4 rounded-md border border-current/15 bg-white/60 dark:bg-slate-800/70">
+                    {#if tab.id === "automations"}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6h10M4 6h2m4 12h10M4 18h2m10-6h4M4 12h8m-2-8v4m0 8v4m4-10v4" /></svg>
+                    {:else if tab.id === "ai"}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2m-9 4h12M7 21h10a2 2 0 002-2V9H5v10a2 2 0 002 2z" /></svg>
+                    {:else if tab.id === "integrations"}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h8m-4-4v8M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z" /></svg>
+                    {:else if tab.id === "system"}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3a2.25 2.25 0 00-2.122 1.5l-.223.665a2.25 2.25 0 01-1.423 1.423l-.665.223a2.25 2.25 0 000 4.278l.665.223a2.25 2.25 0 011.423 1.423l.223.665a2.25 2.25 0 004.278 0l.223-.665a2.25 2.25 0 011.423-1.423l.665-.223a2.25 2.25 0 000-4.278l-.665-.223a2.25 2.25 0 01-1.423-1.423l-.223-.665A2.25 2.25 0 009.75 3z" /></svg>
+                    {:else if tab.id === "backups"}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7zm0 0l2-3h12l2 3M12 11v6m0 0l-3-3m3 3l3-3" /></svg>
+                    {:else}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M6 3h12l1 4H5l1-4zm-1 4h14v14H5V7z" /></svg>
+                    {/if}
+                </span>
                 {tab.label}
                 {#if tab.status}
                     <span class="px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 text-[8px] font-black">{tab.status}</span>
@@ -1332,12 +1390,6 @@
                                 </p>
                             </div>
                             
-                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/25 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Task Status Overview</p>
-                                <p class="mt-1 text-[11px] text-slate-500">
-                                    Active means scheduled tasks are enabled. Partial means some are paused. Idle means no tasks are currently scheduled for this domain.
-                                </p>
-                            </div>
                         </div>
                     {/if}
 
@@ -1428,18 +1480,6 @@
                                             <p class="mt-1 text-[11px] text-slate-500">Supports container name, image text, or ID prefix tokens (comma/newline separated).</p>
                                         </details>
                                     </div>
-                                    <div class="space-y-2">
-                                        <label for="malware-ignore-mounts" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
-                                        <textarea
-                                            id="malware-ignore-mounts"
-                                            rows="3"
-                                            bind:value={settings.malwareIgnoredMounts}
-                                            disabled={isLocked("malwareIgnoredMounts")}
-                                            placeholder="/mnt/media, /srv/plex-library"
-                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                        ></textarea>
-                                        <p class="text-[11px] text-slate-500">These path patterns are skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1471,8 +1511,11 @@
                                                     />
                                                     <p class="text-[11px] text-slate-500">Minimum wait before a previously failed upgrade can be retried automatically.</p>
                                                 </div>
+                                            </div>
+                                        </div>
+                                    </div>
 
-                                                <div class="p-4 rounded-2xl border-2 border-amber-200 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/80 via-white to-white dark:from-amber-900/10 dark:via-slate-900/30 dark:to-slate-900/30 space-y-4">
+                                    <div class="p-4 rounded-2xl border-2 border-amber-200 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/80 via-white to-white dark:from-amber-900/10 dark:via-slate-900/30 dark:to-slate-900/30 space-y-4">
                                                     <div class="flex flex-wrap items-center justify-between gap-3">
                                                         <div class="flex items-center gap-2">
                                                             <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200/70 dark:border-amber-900/40">
@@ -1629,17 +1672,19 @@
                                                         </button>
                                                         <p class="text-[10px] text-slate-500 italic">Set containers to follow the global automation policy. Scheduler tasks still determine if/when update jobs run.</p>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        </div>
                                     </div>
                                 {/if}
 
                                 {#if activeAutomationTab === "security"}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
-                                        <div>
-                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Trivy Sweep Scope</p>
-                                            <p class="text-[11px] text-slate-500 mt-1">`running-only` avoids queue inflation by scanning only images currently in use.</p>
+                                        <div class="flex items-center gap-2">
+                                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200/70 dark:border-orange-900/40">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L6 20.75 2.25 17M6 20.75V3m8.25 4h7.5m-7.5 5h5.25m-5.25 5h3" /></svg>
+                                            </span>
+                                            <div>
+                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">Trivy</p>
+                                                <p class="text-[11px] text-slate-500 mt-1">Trivy sweep targeting and runtime preferences for vulnerability automation.</p>
+                                            </div>
                                         </div>
                                         <label for="trivy-sweep-mode" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Scan Target Selection</label>
                                         <select
@@ -1651,6 +1696,81 @@
                                             <option value="running-only">Running containers only (default)</option>
                                             <option value="all-images">All local images</option>
                                         </select>
+                                        <p class="text-[11px] text-slate-500">`running-only` avoids queue inflation by scanning only images currently in use.</p>
+                                    </div>
+
+                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                                        <div class="flex items-center gap-2">
+                                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-900/40">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            </span>
+                                            <div>
+                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">ClamAV</p>
+                                                <p class="text-[11px] text-slate-500 mt-1">Malware sweep exclusions, signature freshness, and snapshot caps for security automation.</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="space-y-2">
+                                            <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
+                                            <textarea
+                                                id="malware-ignore-mounts-security"
+                                                rows="3"
+                                                bind:value={settings.malwareIgnoredMounts}
+                                                disabled={isLocked("malwareIgnoredMounts")}
+                                                placeholder="/mnt/media, /srv/plex-library"
+                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                            ></textarea>
+                                            <p class="text-[11px] text-slate-500">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 xl:grid-cols-4 gap-3">
+                                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Engine</p>
+                                                <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1 break-all">{clamavStatus?.engineVersion || "Unavailable"}</p>
+                                            </div>
+                                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Signature Version</p>
+                                                <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databaseVersion || "Unknown"}</p>
+                                            </div>
+                                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Published</p>
+                                                <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databasePublished ? new Date(clamavStatus.databasePublished * 1000).toLocaleString() : (clamavStatus?.databaseTimestamp || "Unknown")}</p>
+                                            </div>
+                                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Local DB Updated</p>
+                                                <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.lastLocalUpdate ? new Date(clamavStatus.lastLocalUpdate * 1000).toLocaleString() : "Unknown"}</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <button
+                                                onclick={loadClamAVStatus}
+                                                disabled={clamavStatusLoading}
+                                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
+                                            >
+                                                {clamavStatusLoading ? "Refreshing..." : "Refresh Status"}
+                                            </button>
+                                            <button
+                                                onclick={updateClamAVSignaturesNow}
+                                                disabled={clamavUpdating}
+                                                class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                                            >
+                                                {clamavUpdating ? "Updating..." : "Update Signatures"}
+                                            </button>
+                                        </div>
+
+                                        <div class="space-y-2">
+                                            <label for="clamav-snapshot-max-bytes-security" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Container Snapshot Max Bytes</label>
+                                            <input
+                                                id="clamav-snapshot-max-bytes-security"
+                                                type="number"
+                                                min="1"
+                                                bind:value={settings.clamavSnapshotMaxBytes}
+                                                disabled={isLocked("clamavSnapshotMaxBytes")}
+                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                            />
+                                            <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>.</p>
+                                        </div>
                                     </div>
                                 {/if}
 
@@ -1944,20 +2064,6 @@
                                         </div>
                                     </div>
 
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
-                                        <div>
-                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Compose Snapshot Archive Path</p>
-                                            <p class="text-[11px] text-slate-500 mt-1">HarborWatch stores zipped snapshots of local Compose config files and the project <span class="font-mono">.env</span> before compose upgrades. Leave blank to use the default appliance path.</p>
-                                        </div>
-                                        <input
-                                            type="text"
-                                            bind:value={settings.composeSnapshotRootPath}
-                                            disabled={isLocked("composeSnapshotRootPath")}
-                                            placeholder="/data/compose-snapshots"
-                                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                        />
-                                    </div>
-
                                     <div class="rounded-2xl border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 p-4 space-y-3">
                                         <div>
                                             <p class="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Manual Data Wipe</p>
@@ -1992,6 +2098,23 @@
                         </div>
                     </div>
                 </div>
+                <div class="inline-flex flex-wrap gap-1 bg-slate-100/95 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit backdrop-blur">
+                    <button
+                        onclick={() => activeAITab = "settings"}
+                        class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeAITab === 'settings' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h10M4 17h16" /></svg>
+                        Settings
+                    </button>
+                    <button
+                        onclick={() => activeAITab = "costs"}
+                        class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeAITab === 'costs' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 1.12-3 2.5S10.343 13 12 13s3 1.12 3 2.5S13.657 18 12 18m0-10V6m0 12v-2M5 12a7 7 0 1014 0 7 7 0 10-14 0z" /></svg>
+                        Costs
+                    </button>
+                </div>
+                {#if activeAITab === "settings"}
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Features</p>
@@ -2041,7 +2164,9 @@
                     />
                     <p class="text-[11px] text-slate-500">Updates are blocked when AI release analysis risk score is greater than or equal to this value.</p>
                 </div>
+                {/if}
 
+                {#if activeAITab === "costs"}
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
@@ -2216,7 +2341,9 @@
                     ></textarea>
                     <p class="text-[11px] text-slate-500">If empty, HarborWatch displays token usage only. No external pricing lookup is performed.</p>
                 </div>
+                {/if}
 
+                {#if activeAITab === "settings"}
                 <div class="space-y-4">
                     <div class="flex items-center justify-between bg-white dark:bg-slate-900/30 p-6 rounded-3xl border border-slate-200 dark:border-slate-700">
                         <div class="flex items-center gap-4">
@@ -2282,6 +2409,7 @@
                         <button onclick={() => testProvider("gemini", settings.geminiModel || "")} disabled={testingProvider === "gemini" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "gemini" ? "Testing..." : "Test Gemini"}</button>
                     </div>
                 </div>
+                {/if}
             </div>
 
         {:else if activeTab === "integrations"}
@@ -2468,6 +2596,46 @@
                         <label for="validate-pattern" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation URL Pattern</label>
                         <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked("validateUrlPattern")} placeholder={"http://localhost:{{PORT}}/health"} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                         <p class="text-[11px] text-slate-500">Template for deriving per-container validation URLs.</p>
+                    </div>
+                </div>
+            </div>
+
+        {:else if activeTab === "backups"}
+            <div class="p-6 md:p-8 space-y-6 settings-pane">
+                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.backups.accentClass} p-5">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="max-w-3xl">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.backups.badge}</span>
+                            </div>
+                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.backups.title}</h3>
+                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.backups.subtitle}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-900/40">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7zm0 0l2-3h12l2 3" /></svg>
+                        </span>
+                        <div>
+                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Compose Backups</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Configure where HarborWatch stores zipped snapshots of Compose files and project <span class="font-mono">.env</span> before compose upgrades.</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label for="compose-snapshot-root" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Snapshot Archive Path</label>
+                        <input
+                            id="compose-snapshot-root"
+                            type="text"
+                            bind:value={settings.composeSnapshotRootPath}
+                            disabled={isLocked("composeSnapshotRootPath")}
+                            placeholder="/data/compose-snapshots"
+                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                        />
+                        <p class="text-[11px] text-slate-500">Leave blank to use the appliance default snapshot location.</p>
                     </div>
                 </div>
             </div>

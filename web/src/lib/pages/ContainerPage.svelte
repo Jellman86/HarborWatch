@@ -104,6 +104,7 @@
     let scanMessage = $state("");
     let lifecycleMessage = $state("");
     let lifecycleSavedSignature = $state("");
+    let lifecycleSaveErrorSignature = $state("");
     let lifecycleMode = $state<"global" | "manual">("global");
     let bypassAi = $state(false);
     let skipHealth = $state(false);
@@ -418,6 +419,7 @@
         restartDependentsAfterUpgrade = !!(detail?.rules as any)?.restartDependentsAfterUpgrade;
         dependentRestartDelaySec = Number((detail?.rules as any)?.dependentRestartDelaySec ?? 20);
         lifecycleSavedSignature = lifecycleDraftSignature();
+        lifecycleSaveErrorSignature = "";
     }
 
     function lifecycleDraftSignature(): string {
@@ -442,6 +444,35 @@
         if (!detail?.rules) return false;
         return lifecycleDraftSignature() !== lifecycleSavedSignature;
     });
+
+    type SaveIndicatorState = "saving" | "error" | "pending" | "saved";
+
+    function indicatorToneClass(state: SaveIndicatorState): string {
+        switch (state) {
+            case "saving":
+                return "border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-900/40 dark:bg-brand-900/20 dark:text-brand-300";
+            case "error":
+                return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-300";
+            case "pending":
+                return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300";
+            default:
+                return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300";
+        }
+    }
+
+    function indicatorSymbol(state: SaveIndicatorState): string {
+        if (state === "saving") return "…";
+        if (state === "error") return "x";
+        if (state === "pending") return "!";
+        return "✓";
+    }
+
+    function lifecycleIndicatorState(): SaveIndicatorState {
+        if (savingRules) return "saving";
+        if (lifecycleSaveErrorSignature && lifecycleSaveErrorSignature === lifecycleDraftSignature()) return "error";
+        if (lifecycleDirty) return "pending";
+        return "saved";
+    }
 
     function applyLifecycleModeToRules(mode: "global" | "manual") {
         if (!detail?.rules) return;
@@ -480,6 +511,7 @@
         
         lifecycleMessage = "";
         savingRules = true;
+        lifecycleSaveErrorSignature = "";
         try {
             const res = await fetch(`/api/docker/${encodeURIComponent(containerId)}/rules`, {
                 method: "POST",
@@ -491,12 +523,15 @@
                 lifecycleMessage = lifecycleMode === "global"
                     ? "Lifecycle mode set to Automatic (Follows global policy)."
                     : "Lifecycle mode set to Manual (User triggered only).";
+                lifecycleSaveErrorSignature = "";
                 toasts.success("Lifecycle policy updated.");
             } else {
                 const body = await res.json().catch(() => ({}));
+                lifecycleSaveErrorSignature = lifecycleDraftSignature();
                 toasts.error(body?.message || `Failed to save lifecycle policy (${res.status})`);
             }
         } catch (e) {
+            lifecycleSaveErrorSignature = lifecycleDraftSignature();
             toasts.error("Failed to save lifecycle policy.");
         } finally {
             savingRules = false;
@@ -1465,9 +1500,11 @@
                                     >
                                         {savingRules ? "Saving..." : lifecycleDirty ? "Save Selection" : "Saved"}
                                     </button>
-                                    <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {savingRules ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-900/40 dark:bg-brand-900/20 dark:text-brand-300' : lifecycleDirty ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300'}">
-                                        <span class="w-1.5 h-1.5 rounded-full {savingRules ? 'bg-brand-500 animate-pulse' : lifecycleDirty ? 'bg-amber-500' : 'bg-emerald-500'}"></span>
-                                        {savingRules ? "Saving..." : lifecycleDirty ? "Pending" : "Saved"}
+                                    <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {indicatorToneClass(lifecycleIndicatorState())}">
+                                        <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/30">
+                                            {indicatorSymbol(lifecycleIndicatorState())}
+                                        </span>
+                                        {lifecycleIndicatorState() === "saving" ? "Saving..." : lifecycleIndicatorState() === "error" ? "Save Error" : lifecycleIndicatorState() === "pending" ? "Unsaved" : "Saved"}
                                     </span>
                                     <button
                                         onclick={triggerManualUpdate}
@@ -1517,6 +1554,7 @@
                             {/if}
                         </div>
 
+                        <div class="space-y-6">
                         {#if configStore.aiActive}
                             <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Breaking Change Signals</h3>
@@ -1538,7 +1576,6 @@
                                 </div>
                             </div>
                         {/if}
-                    </div>
 
                     <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                         <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700">
@@ -1592,6 +1629,8 @@
                                     {/if}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
                         </div>
                     </div>
                 </div>

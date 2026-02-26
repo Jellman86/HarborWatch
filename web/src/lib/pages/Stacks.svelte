@@ -44,6 +44,7 @@
     let composeError = $state("");
     let pageIndex = $state(0);
     const pageSize = 12;
+    let activeSourceTab = $state<"compose" | "portainer">("compose");
 
     async function loadStacks() {
         loading = true;
@@ -250,12 +251,30 @@
         </button>
     </div>
 
+    <div class="inline-flex flex-wrap gap-1 bg-slate-100/95 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit backdrop-blur">
+        <button
+            onclick={() => activeSourceTab = "compose"}
+            class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'compose' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+        >
+            Compose Files
+            <span class="px-1.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-600 dark:text-slate-300">{composeProjects.length}</span>
+        </button>
+        <button
+            onclick={() => activeSourceTab = "portainer"}
+            class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'portainer' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+        >
+            Portainer Stacks
+            <span class="px-1.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-600 dark:text-slate-300">{stacks.length}</span>
+        </button>
+    </div>
+
     {#if loading}
         <div class="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
             <div class="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
             <span class="text-sm font-black uppercase tracking-widest">Discovering Orchestration Sources...</span>
         </div>
     {:else}
+        {#if activeSourceTab === "compose"}
         <section class="space-y-4">
             <div class="flex items-center justify-between gap-3">
                 <div>
@@ -365,7 +384,9 @@
                 </div>
             {/if}
         </section>
+        {/if}
 
+        {#if activeSourceTab === "portainer"}
         <section class="space-y-4 pt-2">
             <div class="flex items-center justify-between gap-3">
                 <div>
@@ -463,5 +484,6 @@
                 </div>
             {/if}
         </section>
+        {/if}
     {/if}
 </div>

@@ -28,8 +28,8 @@
         accent?: string;
     }>();
 
-    const GRID_ROW_GAP = 22;
-    const CONNECTOR_GAP_Y = 8;
+    const GRID_ROW_GAP = 30;
+    const CONNECTOR_GAP_Y = 12;
 
     let host = $state<HTMLDivElement | null>(null);
     let connectorPaths = $state<string[]>([]);
