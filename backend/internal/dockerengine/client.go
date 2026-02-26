@@ -137,6 +137,21 @@ func (c *Client) GetContainer(ctx context.Context, id string) (gen.ContainerSumm
 		health = strings.ToLower(item.State.Health.Status)
 	}
 
+	bindMounts := make([]gen.ContainerBindMount, 0, len(item.Mounts))
+	for _, m := range item.Mounts {
+		if strings.ToLower(strings.TrimSpace(m.Type)) != "bind" {
+			continue
+		}
+		bindMounts = append(bindMounts, gen.ContainerBindMount{
+			Type:        m.Type,
+			Source:      m.Source,
+			Destination: m.Destination,
+			RW:          m.RW,
+			Mode:        m.Mode,
+			Propagation: m.Propagation,
+		})
+	}
+
 	return gen.ContainerSummary{
 		ID:              item.ID,
 		Names:           names,
@@ -146,6 +161,7 @@ func (c *Client) GetContainer(ctx context.Context, id string) (gen.ContainerSumm
 		Health:          health,
 		Labels:          labels,
 		UpdateAvailable: globalUpdateStore.Get(item.Config.Image),
+		BindMounts:      bindMounts,
 	}, nil
 }
 
@@ -482,6 +498,14 @@ type containerJSON struct {
 type containerInspectJSON struct {
 	ID    string `json:"Id"`
 	Name  string `json:"Name"`
+	Mounts []struct {
+		Type        string `json:"Type"`
+		Source      string `json:"Source"`
+		Destination string `json:"Destination"`
+		Mode        string `json:"Mode"`
+		RW          bool   `json:"RW"`
+		Propagation string `json:"Propagation"`
+	} `json:"Mounts"`
 	State struct {
 		Status  string `json:"Status"`
 		Running bool   `json:"Running"`

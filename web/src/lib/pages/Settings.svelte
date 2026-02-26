@@ -1676,6 +1676,12 @@
                                 {/if}
 
                                 {#if activeAutomationTab === "security"}
+                                    {@const trivyTask = scheduleById("security_sweep_trivy")}
+                                    {@const trivyDraft = trivyTask ? draftForTask(trivyTask) : null}
+                                    {@const malwareTask = scheduleById("malware_sweep_clamav")}
+                                    {@const malwareDraft = malwareTask ? draftForTask(malwareTask) : null}
+                                    {@const clamSigTask = scheduleById("clamav_signature_update")}
+                                    {@const clamSigDraft = clamSigTask ? draftForTask(clamSigTask) : null}
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
                                         <div class="flex items-center gap-2">
                                             <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200/70 dark:border-orange-900/40">
@@ -1697,6 +1703,90 @@
                                             <option value="all-images">All local images</option>
                                         </select>
                                         <p class="text-[11px] text-slate-500">`running-only` avoids queue inflation by scanning only images currently in use.</p>
+                                        {#if trivyTask && trivyDraft}
+                                            <div class="mt-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                                    <div>
+                                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Scheduler Task</p>
+                                                        <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1">{taskCronLabel(trivyTask)} | Last run: {formatTime(trivyTask.lastRun)}</p>
+                                                    </div>
+                                                    <div class="flex items-center gap-2">
+                                                        <button
+                                                            onclick={() => runTask(trivyTask.id)}
+                                                            class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
+                                                        >Run Now</button>
+                                                        <button
+                                                            onclick={() => toggleTask(trivyTask.id, trivyTask.enabled)}
+                                                            class="w-10 h-5 rounded-full relative transition-colors {trivyTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                            aria-label="Toggle Trivy task"
+                                                        >
+                                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {trivyTask.enabled ? 'right-1' : 'left-1'}"></div>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                                                    <div class="space-y-1">
+                                                        <label for="cadence-security-sweep-trivy" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
+                                                        <select
+                                                            id="cadence-security-sweep-trivy"
+                                                            value={trivyDraft.cadence}
+                                                            onchange={(e) => patchScheduleDraft(trivyTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
+                                                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                        >
+                                                            <option value="daily">Daily</option>
+                                                            <option value="weekly">Weekly</option>
+                                                            <option value="monthly">Monthly</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="space-y-1">
+                                                        <label for="time-security-sweep-trivy" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
+                                                        <input
+                                                            id="time-security-sweep-trivy"
+                                                            type="time"
+                                                            value={trivyDraft.time}
+                                                            onchange={(e) => patchScheduleDraft(trivyTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onclick={() => saveTaskSchedule(trivyTask.id)}
+                                                        disabled={!scheduleDirty(trivyTask) || savingScheduleId === trivyTask.id}
+                                                        class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
+                                                    >
+                                                        {savingScheduleId === trivyTask.id ? "Saving..." : "Save Schedule"}
+                                                    </button>
+                                                </div>
+                                                {#if trivyDraft.cadence === "weekly"}
+                                                    <div class="space-y-1">
+                                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
+                                                        <div class="flex flex-wrap gap-2">
+                                                            {#each weekdayOptions as day}
+                                                                <button
+                                                                    onclick={() => toggleWeeklyDay(trivyTask.id, day.value)}
+                                                                    class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {trivyDraft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                                >
+                                                                    {day.label}
+                                                                </button>
+                                                            {/each}
+                                                        </div>
+                                                    </div>
+                                                {:else if trivyDraft.cadence === "monthly"}
+                                                    <div class="space-y-1">
+                                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
+                                                        <div class="flex flex-wrap gap-1.5">
+                                                            {#each monthDayOptions as day}
+                                                                <button
+                                                                    onclick={() => toggleMonthDay(trivyTask.id, day)}
+                                                                    class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {trivyDraft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                                >
+                                                                    {day}
+                                                                </button>
+                                                            {/each}
+                                                        </div>
+                                                    </div>
+                                                {/if}
+                                            </div>
+                                        {/if}
                                     </div>
 
                                     <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
@@ -1770,6 +1860,152 @@
                                                 class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                             />
                                             <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>.</p>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                            {#if malwareTask && malwareDraft}
+                                                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                                        <div>
+                                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">ClamAV Malware Sweep</p>
+                                                            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1">{taskCronLabel(malwareTask)} | Last run: {formatTime(malwareTask.lastRun)}</p>
+                                                        </div>
+                                                        <div class="flex items-center gap-2">
+                                                            <button onclick={() => runTask(malwareTask.id)} class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800">Run Now</button>
+                                                            <button
+                                                                onclick={() => toggleTask(malwareTask.id, malwareTask.enabled)}
+                                                                class="w-10 h-5 rounded-full relative transition-colors {malwareTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                                aria-label="Toggle ClamAV malware sweep task"
+                                                            >
+                                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {malwareTask.enabled ? 'right-1' : 'left-1'}"></div>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                                                        <div class="space-y-1">
+                                                            <label for="cadence-malware-sweep-clamav" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
+                                                            <select
+                                                                id="cadence-malware-sweep-clamav"
+                                                                value={malwareDraft.cadence}
+                                                                onchange={(e) => patchScheduleDraft(malwareTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
+                                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            >
+                                                                <option value="daily">Daily</option>
+                                                                <option value="weekly">Weekly</option>
+                                                                <option value="monthly">Monthly</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="space-y-1">
+                                                            <label for="time-malware-sweep-clamav" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
+                                                            <input
+                                                                id="time-malware-sweep-clamav"
+                                                                type="time"
+                                                                value={malwareDraft.time}
+                                                                onchange={(e) => patchScheduleDraft(malwareTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            onclick={() => saveTaskSchedule(malwareTask.id)}
+                                                            disabled={!scheduleDirty(malwareTask) || savingScheduleId === malwareTask.id}
+                                                            class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
+                                                        >
+                                                            {savingScheduleId === malwareTask.id ? "Saving..." : "Save Schedule"}
+                                                        </button>
+                                                    </div>
+                                                    {#if malwareDraft.cadence === "weekly"}
+                                                        <div class="flex flex-wrap gap-2">
+                                                            {#each weekdayOptions as day}
+                                                                <button
+                                                                    onclick={() => toggleWeeklyDay(malwareTask.id, day.value)}
+                                                                    class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {malwareDraft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                                >{day.label}</button>
+                                                            {/each}
+                                                        </div>
+                                                    {:else if malwareDraft.cadence === "monthly"}
+                                                        <div class="flex flex-wrap gap-1.5">
+                                                            {#each monthDayOptions as day}
+                                                                <button
+                                                                    onclick={() => toggleMonthDay(malwareTask.id, day)}
+                                                                    class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {malwareDraft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                                >{day}</button>
+                                                            {/each}
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            {/if}
+
+                                            {#if clamSigTask && clamSigDraft}
+                                                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                                        <div>
+                                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">ClamAV Signature Update</p>
+                                                            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1">{taskCronLabel(clamSigTask)} | Last run: {formatTime(clamSigTask.lastRun)}</p>
+                                                        </div>
+                                                        <div class="flex items-center gap-2">
+                                                            <button onclick={() => runTask(clamSigTask.id)} class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800">Run Now</button>
+                                                            <button
+                                                                onclick={() => toggleTask(clamSigTask.id, clamSigTask.enabled)}
+                                                                class="w-10 h-5 rounded-full relative transition-colors {clamSigTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                                                aria-label="Toggle ClamAV signature update task"
+                                                            >
+                                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {clamSigTask.enabled ? 'right-1' : 'left-1'}"></div>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                                                        <div class="space-y-1">
+                                                            <label for="cadence-clamav-signature-update" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
+                                                            <select
+                                                                id="cadence-clamav-signature-update"
+                                                                value={clamSigDraft.cadence}
+                                                                onchange={(e) => patchScheduleDraft(clamSigTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
+                                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            >
+                                                                <option value="daily">Daily</option>
+                                                                <option value="weekly">Weekly</option>
+                                                                <option value="monthly">Monthly</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="space-y-1">
+                                                            <label for="time-clamav-signature-update" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
+                                                            <input
+                                                                id="time-clamav-signature-update"
+                                                                type="time"
+                                                                value={clamSigDraft.time}
+                                                                onchange={(e) => patchScheduleDraft(clamSigTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            onclick={() => saveTaskSchedule(clamSigTask.id)}
+                                                            disabled={!scheduleDirty(clamSigTask) || savingScheduleId === clamSigTask.id}
+                                                            class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
+                                                        >
+                                                            {savingScheduleId === clamSigTask.id ? "Saving..." : "Save Schedule"}
+                                                        </button>
+                                                    </div>
+                                                    {#if clamSigDraft.cadence === "weekly"}
+                                                        <div class="flex flex-wrap gap-2">
+                                                            {#each weekdayOptions as day}
+                                                                <button
+                                                                    onclick={() => toggleWeeklyDay(clamSigTask.id, day.value)}
+                                                                    class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {clamSigDraft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                                >{day.label}</button>
+                                                            {/each}
+                                                        </div>
+                                                    {:else if clamSigDraft.cadence === "monthly"}
+                                                        <div class="flex flex-wrap gap-1.5">
+                                                            {#each monthDayOptions as day}
+                                                                <button
+                                                                    onclick={() => toggleMonthDay(clamSigTask.id, day)}
+                                                                    class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {clamSigDraft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                                                >{day}</button>
+                                                            {/each}
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            {/if}
                                         </div>
                                     </div>
                                 {/if}
@@ -1908,7 +2144,7 @@
                                     </div>
                                 {/if}
 
-                                {#if activeAutomationTab !== "remediation"}
+                                {#if activeAutomationTab !== "remediation" && activeAutomationTab !== "security"}
                                     {#each schedulesForDomain(activeAutomationTab) as task, i (task.id + i)}
                                         {@const draft = draftForTask(task)}
                                         <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">

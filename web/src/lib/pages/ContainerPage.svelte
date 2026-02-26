@@ -1115,6 +1115,47 @@
                         <DiskUsagePanel diskUsage={detail.diskUsage} />
                     </div>
 
+                    <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div class="flex items-center justify-between gap-3 mb-4">
+                            <h3 class="text-sm font-black uppercase tracking-tight text-slate-400">Bind Mounts</h3>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">
+                                {(detail.summary.bindMounts || []).length} Mounts
+                            </span>
+                        </div>
+                        {#if (detail.summary.bindMounts || []).length > 0}
+                            <div class="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
+                                <table class="w-full text-left text-sm">
+                                    <thead>
+                                        <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                                            <th class="px-4 py-3">Source</th>
+                                            <th class="px-4 py-3">Destination</th>
+                                            <th class="px-4 py-3">Access</th>
+                                            <th class="px-4 py-3">Mode</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                                        {#each detail.summary.bindMounts || [] as mount}
+                                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors align-top">
+                                                <td class="px-4 py-3 text-[11px] font-mono text-slate-700 dark:text-slate-200 break-all">{mount.source || "unknown"}</td>
+                                                <td class="px-4 py-3 text-[11px] font-mono text-slate-600 dark:text-slate-300 break-all">{mount.destination || "unknown"}</td>
+                                                <td class="px-4 py-3">
+                                                    <span class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase {(mount.rw ?? false) ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}">
+                                                        {(mount.rw ?? false) ? "Read/Write" : "Read-Only"}
+                                                    </span>
+                                                </td>
+                                                <td class="px-4 py-3 text-[11px] text-slate-500">{mount.mode || mount.propagation || "-"}</td>
+                                            </tr>
+                                        {/each}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {:else}
+                            <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-center text-[11px] text-slate-500 italic">
+                                No bind mounts detected for this container.
+                            </div>
+                        {/if}
+                    </div>
+
                     <!-- Moved Execution History here -->
                     <div class="lg:col-span-2">
                         <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 ml-2">Execution History</h3>
