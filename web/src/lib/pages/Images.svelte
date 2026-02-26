@@ -9,9 +9,14 @@
     let loading = $state(false);
     let error = $state("");
     let pruning = $state(false);
-    let cleanupLogVisible = $state(false);
+    let activeCleanupAction = $state<"" | "standard" | "unused">("");
+    let cleanupConsoleExpanded = $state(true);
+    let cleanupJobsExpanded = $state(true);
+    let cleanupJobsLoading = $state(false);
+    let cleanupJobsError = $state("");
     let cleanupLog = $state<Array<{ ts: number; level: "info" | "success" | "error"; message: string }>>([]);
     let cleanupSeen = $state(new Set<string>());
+    let cleanupSchedulerRows = $state<SchedulerLogRow[]>([]);
 
     interface ImageIntelligenceRow extends ImageSummary {
         primaryRef?: string;
@@ -35,24 +40,84 @@
     interface SchedulerLogRow {
         id?: number;
         timestamp?: number;
+        level?: string;
         source?: string;
         message?: string;
     }
 
+    interface CleanupJobHistory {
+        id: string;
+        taskId: string;
+        taskLabel: string;
+        mode: "dangling-only" | "all-unused" | "unknown";
+        startedAt: number;
+        updatedAt: number;
+        status: "running" | "completed" | "failed";
+        summary: string;
+        events: Array<{ ts: number; level: "info" | "success" | "error"; message: string }>;
+    }
+
+    function isCleanupTaskID(taskId: string): boolean {
+        const id = String(taskId || "").trim().toLowerCase();
+        return id === "docker_system_prune" || id === "docker_prune_unused_images";
+    }
+
+    function cleanupTaskLabel(taskId: string): string {
+        return String(taskId || "").trim().toLowerCase() === "docker_prune_unused_images"
+            ? "Delete Unused Images"
+            : "Docker Cleanup";
+    }
+
+    function isCleanupSchedulerMessage(message: string): boolean {
+        const text = String(message || "").toLowerCase();
+        return /docker_system_prune|docker_prune_unused_images|docker system prune task|pruned .*images|pruned .*containers|image prune failed|container prune failed/.test(text);
+    }
+
+    function cleanupModeFromMessage(message: string): "dangling-only" | "all-unused" | "unknown" {
+        const match = /image_mode=([a-z-]+)/i.exec(String(message || ""));
+        const mode = String(match?.[1] || "").toLowerCase();
+        if (mode === "dangling-only") return "dangling-only";
+        if (mode === "all-unused") return "all-unused";
+        return "unknown";
+    }
+
     function cleanupEventRank(message: string): number {
         const text = message.toLowerCase();
-        if (text.includes("manually triggering task: docker_system_prune")) return 10;
+        if (text.includes("manually triggering task: docker_system_prune") || text.includes("manually triggering task: docker_prune_unused_images")) return 10;
+        if (text.includes("executing scheduled task: docker_system_prune")) return 12;
         if (text.includes("starting docker system prune task")) return 20;
         if (/pruned .*images/i.test(message)) return 30;
         if (/pruned .*containers/i.test(message)) return 40;
-        if (text.includes("manual task completed: docker_system_prune")) return 90;
-        if (text.includes("manual task docker_system_prune failed")) return 90;
+        if (text.includes("scheduled task completed: docker_system_prune")) return 88;
+        if (text.includes("error executing task docker_system_prune")) return 89;
+        if (text.includes("manual task completed: docker_system_prune") || text.includes("manual task completed: docker_prune_unused_images")) return 90;
+        if (text.includes("manual task docker_system_prune failed") || text.includes("manual task docker_prune_unused_images failed")) return 90;
         return 50;
+    }
+
+    function mergeSchedulerRows(rows: SchedulerLogRow[]) {
+        if (!rows.length) return;
+        const map = new Map<string, SchedulerLogRow>();
+        for (const row of cleanupSchedulerRows) {
+            const key = row.id != null ? `id:${row.id}` : `${row.timestamp || 0}:${row.message || ""}`;
+            map.set(key, row);
+        }
+        for (const row of rows) {
+            const key = row.id != null ? `id:${row.id}` : `${row.timestamp || 0}:${row.message || ""}`;
+            map.set(key, row);
+        }
+        cleanupSchedulerRows = Array.from(map.values()).sort((a, b) => {
+            const tsA = Number(a?.timestamp || 0);
+            const tsB = Number(b?.timestamp || 0);
+            if (tsA !== tsB) return tsA - tsB;
+            return Number(a?.id || 0) - Number(b?.id || 0);
+        });
     }
 
     function consumeSchedulerLogs(rows: SchedulerLogRow[]): { sawOutcome: boolean; sawTerminal: boolean } {
         let sawOutcome = false;
         let sawTerminal = false;
+        mergeSchedulerRows(rows);
         const ordered = [...rows].sort((a, b) => {
             const tsA = Number(a?.timestamp || 0);
             const tsB = Number(b?.timestamp || 0);
@@ -66,7 +131,7 @@
             const message = String(entry?.message || "").trim();
             const source = String(entry?.source || "").toLowerCase();
             if (!message || !source.includes("scheduler")) continue;
-            const tracked = /prune|docker_system_prune|space reclaimed/i.test(message);
+            const tracked = isCleanupSchedulerMessage(message);
             if (!tracked) continue;
             const id = Number(entry?.id || 0);
             const ts = Number(entry?.timestamp || Math.floor(Date.now() / 1000));
@@ -81,12 +146,122 @@
             if (/Pruned .*images|Pruned .*containers|image prune failed|container prune failed/i.test(message)) {
                 sawOutcome = true;
             }
-            if (/Manual task completed: docker_system_prune|Manual task docker_system_prune failed/i.test(message)) {
+            if (/Manual task completed: docker_system_prune|Manual task docker_system_prune failed|Manual task completed: docker_prune_unused_images|Manual task docker_prune_unused_images failed/i.test(message)) {
                 sawTerminal = true;
             }
         }
         return { sawOutcome, sawTerminal };
     }
+
+    function buildCleanupJobs(rows: SchedulerLogRow[]): CleanupJobHistory[] {
+        const ordered = [...rows]
+            .filter((row) => {
+                const source = String(row?.source || "").toLowerCase();
+                return source.includes("scheduler") && isCleanupSchedulerMessage(String(row?.message || ""));
+            })
+            .sort((a, b) => {
+                const tsA = Number(a?.timestamp || 0);
+                const tsB = Number(b?.timestamp || 0);
+                if (tsA !== tsB) return tsA - tsB;
+                return Number(a?.id || 0) - Number(b?.id || 0);
+            });
+
+        const jobs: CleanupJobHistory[] = [];
+        let seq = 0;
+
+        const newJob = (taskId: string, ts: number): CleanupJobHistory => ({
+            id: `cleanup-${++seq}-${ts}`,
+            taskId,
+            taskLabel: cleanupTaskLabel(taskId),
+            mode: "unknown",
+            startedAt: ts,
+            updatedAt: ts,
+            status: "running",
+            summary: "Cleanup job started",
+            events: []
+        });
+
+        const appendEvent = (job: CleanupJobHistory, row: SchedulerLogRow, message: string) => {
+            const ts = Number(row?.timestamp || Math.floor(Date.now() / 1000));
+            const rawLevel = String(row?.level || "").toLowerCase();
+            const level: "info" | "success" | "error" =
+                rawLevel === "error" || /failed|error/i.test(message) ? "error"
+                : /completed/i.test(message) ? "success"
+                : "info";
+            job.events.push({ ts, level, message });
+            job.updatedAt = ts;
+            const mode = cleanupModeFromMessage(message);
+            if (mode !== "unknown") job.mode = mode;
+            if (/pruned .*images/i.test(message)) job.summary = message;
+            if (/manual task .* failed|error executing task docker_system_prune/i.test(message)) {
+                job.status = "failed";
+                job.summary = message;
+            }
+            if (/manual task completed|scheduled task completed/i.test(message)) {
+                if (job.status !== "failed") job.status = "completed";
+                if (job.summary === "Cleanup job started") job.summary = message;
+            }
+        };
+
+        const findOpenJob = (taskId?: string): CleanupJobHistory | undefined => {
+            for (let i = jobs.length - 1; i >= 0; i--) {
+                const job = jobs[i];
+                if (job.status !== "running") continue;
+                if (!taskId || job.taskId === taskId) return job;
+            }
+            return undefined;
+        };
+
+        for (const row of ordered) {
+            const message = String(row?.message || "").trim();
+            const text = message.toLowerCase();
+            const ts = Number(row?.timestamp || 0);
+
+            let taskId = "";
+            let match = /manually triggering task:\s*([a-z0-9_:-]+)/i.exec(message);
+            if (match?.[1]) {
+                taskId = match[1];
+                if (isCleanupTaskID(taskId)) {
+                    const job = newJob(taskId, ts);
+                    appendEvent(job, row, message);
+                    jobs.push(job);
+                    continue;
+                }
+            }
+
+            match = /manual task (?:completed:\s*|)([a-z0-9_:-]+)\b/i.exec(message);
+            if (!taskId && match?.[1]) taskId = match[1];
+            match = /manual task ([a-z0-9_:-]+) failed/i.exec(message);
+            if (!taskId && match?.[1]) taskId = match[1];
+            match = /executing scheduled task:\s*([a-z0-9_:-]+)/i.exec(message);
+            if (!taskId && match?.[1]) taskId = match[1];
+            match = /scheduled task completed:\s*([a-z0-9_:-]+)/i.exec(message);
+            if (!taskId && match?.[1]) taskId = match[1];
+            match = /error executing task\s+([a-z0-9_:-]+):/i.exec(message);
+            if (!taskId && match?.[1]) taskId = match[1];
+
+            if (!isCleanupTaskID(taskId) && text.includes("starting docker system prune task")) {
+                taskId = findOpenJob()?.taskId || "docker_system_prune";
+            }
+
+            if (!isCleanupTaskID(taskId) && (/pruned .*images/i.test(message) || /pruned .*containers/i.test(message) || /image prune failed|container prune failed/i.test(message))) {
+                taskId = findOpenJob()?.taskId || "docker_system_prune";
+            }
+
+            if (!isCleanupTaskID(taskId)) continue;
+
+            let job = findOpenJob(taskId);
+            if (!job) {
+                job = newJob(taskId, ts || Math.floor(Date.now() / 1000));
+                jobs.push(job);
+            }
+            appendEvent(job, row, message);
+        }
+
+        return jobs.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+
+    let cleanupJobs = $derived(buildCleanupJobs(cleanupSchedulerRows));
 
     async function pollCleanupFeedback(startedAt: number) {
         let sawOutcome = false;
@@ -95,8 +270,9 @@
             try {
                 const res = await fetch(`/api/system/logs?limit=250&source=scheduler&since=${startedAt}`);
                 if (!res.ok) continue;
-                const logs = await res.json();
-                const result = consumeSchedulerLogs(Array.isArray(logs) ? logs : []);
+                const payload = await res.json().catch(() => ({}));
+                const rows = Array.isArray(payload?.logs) ? payload.logs : [];
+                const result = consumeSchedulerLogs(rows);
                 if (result.sawOutcome) sawOutcome = true;
                 if (result.sawTerminal) {
                     appendCleanupLog("success", "Cleanup workflow completed.");
@@ -111,6 +287,27 @@
             return;
         }
         appendCleanupLog("info", "Cleanup still running in background. Refresh logs shortly.");
+    }
+
+    async function loadCleanupHistory() {
+        cleanupJobsLoading = true;
+        cleanupJobsError = "";
+        try {
+            const res = await fetch("/api/system/logs?limit=500&source=scheduler&search=prune");
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(payload?.message || `cleanup history failed (${res.status})`);
+            }
+            const rows = Array.isArray(payload?.logs) ? payload.logs : [];
+            cleanupLog = [];
+            cleanupSeen = new Set<string>();
+            cleanupSchedulerRows = [];
+            consumeSchedulerLogs(rows);
+        } catch (e) {
+            cleanupJobsError = e instanceof Error ? e.message : "Failed to load cleanup history";
+        } finally {
+            cleanupJobsLoading = false;
+        }
     }
 
     async function loadImages(opts?: { silent?: boolean }) {
@@ -142,22 +339,27 @@
         }
     }
 
-    async function pruneImages() {
-        if (!confirm("Are you sure you want to trigger a system-wide image prune? This will remove all unused images.")) return;
+    async function triggerCleanup(endpoint: "/api/docker/prune" | "/api/docker/prune-unused", action: "standard" | "unused") {
         const startedAt = Math.floor(Date.now() / 1000);
-        cleanupLogVisible = true;
-        cleanupLog = [];
-        cleanupSeen = new Set<string>();
-        appendCleanupLog("info", "Submitting cleanup request...");
+        activeCleanupAction = action;
+        if (cleanupLog.length === 0) {
+            cleanupSeen = new Set<string>();
+            cleanupSchedulerRows = [];
+        }
+        appendCleanupLog("info", action === "unused"
+            ? "Submitting unused-image cleanup request..."
+            : "Submitting standard Docker cleanup request...");
 
         pruning = true;
         try {
-            const res = await fetch("/api/docker/prune", { method: "POST" });
+            const res = await fetch(endpoint, { method: "POST" });
             if (res.ok) {
-                appendCleanupLog("success", "Cleanup task triggered (docker_system_prune).");
+                const body = await res.json().catch(() => ({}));
+                appendCleanupLog("success", `Cleanup task triggered (${body?.task || "docker_system_prune"}).`);
                 await pollCleanupFeedback(startedAt);
                 await loadImages();
-                toasts.success("Repository cleanup triggered.");
+                await loadCleanupHistory();
+                toasts.success(action === "unused" ? "Unused image cleanup triggered." : "Docker cleanup triggered.");
             } else {
                 const body = await res.json().catch(() => ({}));
                 const msg = body?.message || `Cleanup request failed (${res.status})`;
@@ -169,10 +371,22 @@
             toasts.error("Cleanup request failed.");
         } finally {
             pruning = false;
+            activeCleanupAction = "";
         }
     }
 
+    async function pruneImages() {
+        if (!confirm("Trigger standard Docker cleanup? This uses Docker prune behavior (dangling images + stopped containers).")) return;
+        await triggerCleanup("/api/docker/prune", "standard");
+    }
+
+    async function pruneUnusedImages() {
+        if (!confirm("Delete unused tagged images now? This is more aggressive than standard Docker prune and can remove orphaned tagged images (for example old Watchtower images).")) return;
+        await triggerCleanup("/api/docker/prune-unused", "unused");
+    }
+
     onMount(() => {
+        void loadCleanupHistory();
         if (images.length > 0) {
             imageRows = images as ImageIntelligenceRow[];
             void loadImages({ silent: true });
@@ -331,7 +545,18 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    {pruning ? 'Pruning...' : 'Cleanup'}
+                    {pruning && activeCleanupAction === "standard" ? 'Running...' : 'Cleanup'}
+                </button>
+                <button
+                    onclick={pruneUnusedImages}
+                    disabled={pruning}
+                    class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                    title="Delete unused tagged images (more aggressive than standard Docker cleanup)"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-10v12m9-6a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {pruning && activeCleanupAction === "unused" ? 'Running...' : 'Delete Unused Images'}
                 </button>
             </div>
         </div>
@@ -357,29 +582,96 @@
         </div>
     </div>
 
-    {#if cleanupLogVisible}
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/70 p-4 space-y-3 shadow-xl">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 opacity-0 animate-reveal" style="animation-delay: 0.08s">
+        <section class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/70 p-4 space-y-3 shadow-xl">
             <div class="flex items-center justify-between gap-3">
-                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Cleanup Log</p>
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Cleanup Console</p>
+                    <p class="text-[11px] text-slate-500 mt-1">Persisted scheduler cleanup logs + live updates from this page session.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button
+                        onclick={() => loadCleanupHistory()}
+                        disabled={cleanupJobsLoading}
+                        class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-900/40 disabled:opacity-60"
+                    >{cleanupJobsLoading ? "..." : "Refresh"}</button>
+                    <button
+                        onclick={() => cleanupConsoleExpanded = !cleanupConsoleExpanded}
+                        class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                    >{cleanupConsoleExpanded ? "Collapse" : "Expand"}</button>
+                </div>
+            </div>
+            {#if cleanupJobsError}
+                <p class="text-[11px] text-rose-600 dark:text-rose-300">{cleanupJobsError}</p>
+            {/if}
+            {#if cleanupConsoleExpanded}
+                <div class="max-h-[220px] overflow-y-auto rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                    {#if cleanupLog.length === 0}
+                        <p class="text-[11px] text-slate-500 italic">No cleanup events recorded yet.</p>
+                    {:else}
+                        {#each cleanupLog.slice().reverse() as entry}
+                            <div class="text-[11px] flex items-start gap-2">
+                                <span class="font-mono text-slate-400 min-w-[72px]">{new Date(entry.ts * 1000).toLocaleTimeString()}</span>
+                                <span class={entry.level === "error" ? "text-rose-600 dark:text-rose-300" : entry.level === "success" ? "text-emerald-600 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}>{entry.message}</span>
+                            </div>
+                        {/each}
+                    {/if}
+                </div>
+            {/if}
+        </section>
+
+        <section class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/70 p-4 space-y-3 shadow-xl">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Cleanup Jobs</p>
+                    <p class="text-[11px] text-slate-500 mt-1">Discrete cleanup runs reconstructed from persisted scheduler diagnostics logs.</p>
+                </div>
                 <button
-                    onclick={() => cleanupLogVisible = false}
+                    onclick={() => cleanupJobsExpanded = !cleanupJobsExpanded}
                     class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-900/40"
-                >Hide</button>
+                >{cleanupJobsExpanded ? "Collapse" : "Expand"}</button>
             </div>
-            <div class="max-h-[160px] overflow-y-auto rounded-xl bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 p-3 space-y-2">
-                {#if cleanupLog.length === 0}
-                    <p class="text-[11px] text-slate-500 italic">No cleanup events yet.</p>
-                {:else}
-                    {#each cleanupLog as entry}
-                        <div class="text-[11px] flex items-start gap-2">
-                            <span class="font-mono text-slate-400 min-w-[72px]">{new Date(entry.ts * 1000).toLocaleTimeString()}</span>
-                            <span class={entry.level === "error" ? "text-rose-600 dark:text-rose-300" : entry.level === "success" ? "text-emerald-600 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}>{entry.message}</span>
-                        </div>
-                    {/each}
-                {/if}
-            </div>
-        </div>
-    {/if}
+            {#if cleanupJobsExpanded}
+                <div class="max-h-[220px] overflow-y-auto space-y-2 pr-1">
+                    {#if cleanupJobsLoading && cleanupJobs.length === 0}
+                        <p class="text-[11px] text-slate-500 italic">Loading cleanup history...</p>
+                    {:else if cleanupJobs.length === 0}
+                        <p class="text-[11px] text-slate-500 italic">No cleanup jobs recorded yet.</p>
+                    {:else}
+                        {#each cleanupJobs as job}
+                            <details class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3" open={false}>
+                                <summary class="cursor-pointer list-none">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <div class="min-w-0">
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">{job.taskLabel}</p>
+                                            <p class="text-[11px] text-slate-500 mt-1 truncate">{job.summary}</p>
+                                        </div>
+                                        <div class="flex items-center gap-2 flex-wrap justify-end">
+                                            <span class="px-2 py-1 rounded-lg text-[9px] font-black uppercase {job.mode === 'all-unused' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : job.mode === 'dangling-only' ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}">
+                                                {job.mode === "all-unused" ? "All Unused" : job.mode === "dangling-only" ? "Dangling Only" : "Unknown Mode"}
+                                            </span>
+                                            <span class="px-2 py-1 rounded-lg text-[9px] font-black uppercase {job.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : job.status === 'failed' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' : 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'}">
+                                                {job.status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 mt-2">{new Date(job.startedAt * 1000).toLocaleString()}</p>
+                                </summary>
+                                <div class="mt-3 border-t border-slate-200 dark:border-slate-700 pt-3 space-y-2">
+                                    {#each job.events as evt}
+                                        <div class="text-[11px] flex items-start gap-2">
+                                            <span class="font-mono text-slate-400 min-w-[72px]">{new Date(evt.ts * 1000).toLocaleTimeString()}</span>
+                                            <span class={evt.level === "error" ? "text-rose-600 dark:text-rose-300" : evt.level === "success" ? "text-emerald-600 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}>{evt.message}</span>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </details>
+                        {/each}
+                    {/if}
+                </div>
+            {/if}
+        </section>
+    </div>
 
     {#if loading}
         <div class="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">

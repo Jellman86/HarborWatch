@@ -503,13 +503,39 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to init raw docker client for scheduled tasks: %v", err))
 			}
 		} else if rawDocker != nil {
+			newScheduledDockerPruneTask := func() *scheduler.DockerPruneTask {
+				task := scheduler.NewDockerPruneTask(rawDocker).WithLogger(diagService)
+					if settingsStore != nil {
+						task = task.WithImagePruneModeResolver(func(ctx context.Context) string {
+							st, err := settingsStore.Get(ctx)
+							if err != nil {
+								if diagService != nil {
+									diagService.Log("WARN", "Scheduler", fmt.Sprintf("Falling back to default image prune mode (settings read failed): %v", err))
+							}
+							return scheduler.ImagePruneModeDanglingOnly
+						}
+						if st.DockerPruneIncludeUnusedTaggedImages {
+							return scheduler.ImagePruneModeAllUnused
+						}
+						return scheduler.ImagePruneModeDanglingOnly
+					})
+				}
+				return task
+			}
+
 			// Maintenance: Weekly Prune
 			schedSvc.RegisterTask("docker_system_prune", func() scheduler.Task {
-				return scheduler.NewDockerPruneTask(rawDocker).WithLogger(diagService)
+				return newScheduledDockerPruneTask()
 			})
-			if err := schedSvc.AddTask("0 0 3 * * 0", scheduler.NewDockerPruneTask(rawDocker).WithLogger(diagService), false); err != nil && diagService != nil {
+			if err := schedSvc.AddTask("0 0 3 * * 0", newScheduledDockerPruneTask(), false); err != nil && diagService != nil {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task docker_system_prune: %v", err))
 			}
+			// Manual-only aggressive cleanup task (no schedule entry)
+			schedSvc.RegisterTask("docker_prune_unused_images", func() scheduler.Task {
+				return scheduler.NewDockerPruneTask(rawDocker).
+					WithLogger(diagService).
+					WithImagePruneMode(scheduler.ImagePruneModeAllUnused)
+			})
 
 			newUpdateCheckTask := func() *dockerengine.UpdateCheckTask {
 				task := dockerengine.NewUpdateCheckTask(rawDocker, func(ctx context.Context, containerID string) bool {
@@ -1053,6 +1079,18 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 					return
 				}
 				writeJSON(w, http.StatusAccepted, map[string]string{"status": "triggered", "task": "docker_system_prune"})
+			})
+
+			r.Post("/prune-unused", func(w http.ResponseWriter, r *http.Request) {
+				if schedSvc == nil {
+					writeError(w, http.StatusServiceUnavailable, "scheduler_unavailable", "Scheduler not initialized")
+					return
+				}
+				if err := schedSvc.RunTask(r.Context(), "docker_prune_unused_images"); err != nil {
+					writeError(w, http.StatusInternalServerError, "prune_trigger_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusAccepted, map[string]string{"status": "triggered", "task": "docker_prune_unused_images"})
 			})
 
 			r.Get("/events", func(w http.ResponseWriter, r *http.Request) {

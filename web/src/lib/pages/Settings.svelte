@@ -136,6 +136,7 @@
         autoUpgradeMaxConcurrency: 1,
         autoUpgradeMinRetryMinutes: 60,
         trivySweepMode: "running-only",
+        dockerPruneIncludeUnusedTaggedImages: false,
         clamavSnapshotMaxBytes: 2147483648,
         dataRetentionDays: 30,
         retentionLogsDays: 30,
@@ -1867,6 +1868,27 @@
                                 {/if}
 
                                 {#if activeAutomationTab === "maintenance"}
+                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
+                                        <div>
+                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Docker Image Prune Policy</p>
+                                            <p class="text-[11px] text-slate-500 mt-1">Controls how the scheduled <span class="font-mono">docker_system_prune</span> task handles images. Default matches standard Docker prune behavior (dangling only).</p>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 px-3 py-2">
+                                            <div class="flex-1">
+                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Include Unused Tagged Images</p>
+                                                <p class="text-[11px] text-slate-500 mt-1">When enabled, scheduled cleanup also deletes unused tagged images (for example orphaned images like old Watchtower deployments).</p>
+                                            </div>
+                                            <button
+                                                onclick={() => settings.dockerPruneIncludeUnusedTaggedImages = !settings.dockerPruneIncludeUnusedTaggedImages}
+                                                disabled={isLocked("dockerPruneIncludeUnusedTaggedImages")}
+                                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.dockerPruneIncludeUnusedTaggedImages ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                aria-label="Toggle scheduled prune of unused tagged images"
+                                            >
+                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.dockerPruneIncludeUnusedTaggedImages ? 'right-1' : 'left-1'}"></div>
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div class="rounded-2xl border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 p-4 space-y-3">
                                         <div>
                                             <p class="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Manual Data Wipe</p>

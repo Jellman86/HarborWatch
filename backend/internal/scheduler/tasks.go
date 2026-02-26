@@ -26,22 +26,36 @@ type ContainerAutomationPolicy func(ctx context.Context, containerID string) boo
 type MalwareMountPolicy func(ctx context.Context, containerID, sourcePath string) bool
 
 const (
-	TrivySweepModeRunningOnly = "running-only"
-	TrivySweepModeAllImages   = "all-images"
+	TrivySweepModeRunningOnly  = "running-only"
+	TrivySweepModeAllImages    = "all-images"
+	ImagePruneModeDanglingOnly = "dangling-only"
+	ImagePruneModeAllUnused    = "all-unused"
 )
 
 // DockerPruneTask cleans up dangling images and stopped containers.
 type DockerPruneTask struct {
-	docker *client.Client
-	logger Logger
+	docker         *client.Client
+	logger         Logger
+	imagePruneMode string
+	modeResolver   func(ctx context.Context) string
 }
 
 func NewDockerPruneTask(cli *client.Client) *DockerPruneTask {
-	return &DockerPruneTask{docker: cli}
+	return &DockerPruneTask{docker: cli, imagePruneMode: ImagePruneModeDanglingOnly}
 }
 
 func (t *DockerPruneTask) WithLogger(logger Logger) *DockerPruneTask {
 	t.logger = logger
+	return t
+}
+
+func (t *DockerPruneTask) WithImagePruneMode(mode string) *DockerPruneTask {
+	t.imagePruneMode = normalizeImagePruneMode(mode)
+	return t
+}
+
+func (t *DockerPruneTask) WithImagePruneModeResolver(fn func(ctx context.Context) string) *DockerPruneTask {
+	t.modeResolver = fn
 	return t
 }
 
@@ -55,15 +69,19 @@ func (t *DockerPruneTask) log(level, message string) {
 func (t *DockerPruneTask) Name() string { return "docker_system_prune" }
 
 func (t *DockerPruneTask) Run(ctx context.Context) error {
-	t.log("INFO", "Starting Docker system prune task...")
+	mode := t.imagePruneMode
+	if t.modeResolver != nil {
+		mode = normalizeImagePruneMode(t.modeResolver(ctx))
+	}
+	t.log("INFO", fmt.Sprintf("Starting Docker system prune task (image_mode=%s)...", mode))
 
 	// Prune Images
-	report, err := t.docker.ImagesPrune(ctx, filters.NewArgs(filters.Arg("dangling", "true")))
+	report, err := t.docker.ImagesPrune(ctx, imagePruneFilters(mode))
 	if err != nil {
 		t.log("ERROR", fmt.Sprintf("Image prune failed: %v", err))
 		return fmt.Errorf("image prune failed: %w", err)
 	}
-	t.log("INFO", fmt.Sprintf("Pruned %d images, space reclaimed: %d bytes", len(report.ImagesDeleted), report.SpaceReclaimed))
+	t.log("INFO", fmt.Sprintf("Pruned %d images, space reclaimed: %d bytes (image_mode=%s)", len(report.ImagesDeleted), report.SpaceReclaimed, mode))
 
 	// Prune Containers
 	cReport, err := t.docker.ContainersPrune(ctx, filters.Args{})
@@ -74,6 +92,24 @@ func (t *DockerPruneTask) Run(ctx context.Context) error {
 	t.log("INFO", fmt.Sprintf("Pruned %d containers, space reclaimed: %d bytes", len(cReport.ContainersDeleted), cReport.SpaceReclaimed))
 
 	return nil
+}
+
+func normalizeImagePruneMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case ImagePruneModeAllUnused:
+		return ImagePruneModeAllUnused
+	default:
+		return ImagePruneModeDanglingOnly
+	}
+}
+
+func imagePruneFilters(mode string) filters.Args {
+	switch normalizeImagePruneMode(mode) {
+	case ImagePruneModeAllUnused:
+		return filters.NewArgs(filters.Arg("dangling", "false"))
+	default:
+		return filters.NewArgs(filters.Arg("dangling", "true"))
+	}
 }
 
 // TrivySweepTask scans container images for vulnerabilities.
@@ -263,8 +299,8 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 	queueErrors := 0
 
 	type scanTarget struct {
-		label string
-		source string
+		label         string
+		source        string
 		containerName string
 	}
 	// Deduplicate by host source path to avoid redundant scans
@@ -296,7 +332,7 @@ func (t *ClamAVSweepTask) Run(ctx context.Context) error {
 			if dest == "" {
 				dest = source
 			}
-			
+
 			// We use the first container/mount we find as the primary label for this source path
 			if _, exists := uniqueSources[source]; !exists {
 				targetLabel := fmt.Sprintf("container:%s:mount:%s", strings.TrimSpace(c.ID), dest)

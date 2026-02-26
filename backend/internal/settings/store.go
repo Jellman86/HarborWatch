@@ -32,37 +32,38 @@ type Settings struct {
 	AIPricingJSON        string `json:"aiPricingJson"`
 
 	// System
-	InstanceURL                        string `json:"instanceUrl"`
-	ValidateURLPattern                 string `json:"validateUrlPattern"`
-	UIAnimationsEnabled                bool   `json:"uiAnimationsEnabled"`
-	AutomationIgnoredContainers        string `json:"automationIgnoredContainers"`
-	MalwareIgnoredMounts               string `json:"malwareIgnoredMounts"`
-	AutoUpgradeMaxConcurrency          int    `json:"autoUpgradeMaxConcurrency"`
-	AutoUpgradeMinRetryMinutes         int    `json:"autoUpgradeMinRetryMinutes"`
-	TrivySweepMode                     string `json:"trivySweepMode"`
-	ClamAVSnapshotMaxBytes             int64  `json:"clamavSnapshotMaxBytes"`
-	DataRetentionDays                  int    `json:"dataRetentionDays"`
-	RetentionLogsDays                  int    `json:"retentionLogsDays"`
-	RetentionMetricsDays               int    `json:"retentionMetricsDays"`
-	RetentionScanResultsDays           int    `json:"retentionScanResultsDays"`
-	RetentionScanJobsDays              int    `json:"retentionScanJobsDays"`
-	RetentionUpdateRunsDays            int    `json:"retentionUpdateRunsDays"`
-	RetentionComposeAuditDays          int    `json:"retentionComposeAuditDays"`
-	RetentionAIUsageDays               int    `json:"retentionAIUsageDays"`
-	MetricsNormalized                  bool   `json:"metricsNormalized"`
-	GlobalBypassAI                     bool   `json:"globalBypassAi"`
-	GlobalSkipHealthCheck              bool   `json:"globalSkipHealthCheck"`
-	DefaultValidateMode                string `json:"defaultValidateMode"`
-	DefaultValidateTimeoutSec          int    `json:"defaultValidateTimeoutSec"`
-	DefaultValidateIntervalSec         int    `json:"defaultValidateIntervalSec"`
-	DefaultAIValidateLogs              bool   `json:"defaultAiValidateLogs"`
-	DefaultAutoRollback                bool   `json:"defaultAutoRollback"`
-	DefaultRestartOnUnhealthy          bool   `json:"defaultRestartOnUnhealthy"`
-	UnhealthyAutoRemediationEnabled    bool   `json:"unhealthyAutoRemediationEnabled"`
-	UnhealthyRestartCooldownSecDefault int    `json:"unhealthyRestartCooldownSecDefault"`
-	MaxRestartsPerWindow               int    `json:"maxRestartsPerWindow"`
-	AITestingPassed                    bool   `json:"aiTestingPassed"`
-	PortainerTestingPassed             bool   `json:"portainerTestingPassed"`
+	InstanceURL                          string `json:"instanceUrl"`
+	ValidateURLPattern                   string `json:"validateUrlPattern"`
+	UIAnimationsEnabled                  bool   `json:"uiAnimationsEnabled"`
+	AutomationIgnoredContainers          string `json:"automationIgnoredContainers"`
+	MalwareIgnoredMounts                 string `json:"malwareIgnoredMounts"`
+	AutoUpgradeMaxConcurrency            int    `json:"autoUpgradeMaxConcurrency"`
+	AutoUpgradeMinRetryMinutes           int    `json:"autoUpgradeMinRetryMinutes"`
+	TrivySweepMode                       string `json:"trivySweepMode"`
+	DockerPruneIncludeUnusedTaggedImages bool   `json:"dockerPruneIncludeUnusedTaggedImages"`
+	ClamAVSnapshotMaxBytes               int64  `json:"clamavSnapshotMaxBytes"`
+	DataRetentionDays                    int    `json:"dataRetentionDays"`
+	RetentionLogsDays                    int    `json:"retentionLogsDays"`
+	RetentionMetricsDays                 int    `json:"retentionMetricsDays"`
+	RetentionScanResultsDays             int    `json:"retentionScanResultsDays"`
+	RetentionScanJobsDays                int    `json:"retentionScanJobsDays"`
+	RetentionUpdateRunsDays              int    `json:"retentionUpdateRunsDays"`
+	RetentionComposeAuditDays            int    `json:"retentionComposeAuditDays"`
+	RetentionAIUsageDays                 int    `json:"retentionAIUsageDays"`
+	MetricsNormalized                    bool   `json:"metricsNormalized"`
+	GlobalBypassAI                       bool   `json:"globalBypassAi"`
+	GlobalSkipHealthCheck                bool   `json:"globalSkipHealthCheck"`
+	DefaultValidateMode                  string `json:"defaultValidateMode"`
+	DefaultValidateTimeoutSec            int    `json:"defaultValidateTimeoutSec"`
+	DefaultValidateIntervalSec           int    `json:"defaultValidateIntervalSec"`
+	DefaultAIValidateLogs                bool   `json:"defaultAiValidateLogs"`
+	DefaultAutoRollback                  bool   `json:"defaultAutoRollback"`
+	DefaultRestartOnUnhealthy            bool   `json:"defaultRestartOnUnhealthy"`
+	UnhealthyAutoRemediationEnabled      bool   `json:"unhealthyAutoRemediationEnabled"`
+	UnhealthyRestartCooldownSecDefault   int    `json:"unhealthyRestartCooldownSecDefault"`
+	MaxRestartsPerWindow                 int    `json:"maxRestartsPerWindow"`
+	AITestingPassed                      bool   `json:"aiTestingPassed"`
+	PortainerTestingPassed               bool   `json:"portainerTestingPassed"`
 
 	// Metadata (read-only info for UI)
 	DashboardLastUpdateDetectedCount int             `json:"dashboardLastUpdateDetectedCount"`
@@ -191,6 +192,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 			st.AutoUpgradeMinRetryMinutes = parseStoredInt(value, st.AutoUpgradeMinRetryMinutes, 1, 24*60)
 		case "trivy_sweep_mode":
 			st.TrivySweepMode = normalizeTrivySweepMode(value)
+		case "docker_prune_include_unused_tagged_images":
+			st.DockerPruneIncludeUnusedTaggedImages = parseStoredBool(value, st.DockerPruneIncludeUnusedTaggedImages)
 		case "clamav_snapshot_max_bytes":
 			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
 		case "data_retention_days":
@@ -284,13 +287,14 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		ptr    *bool
 		envKey string
 	}{
-		"aiEnabled":             {&st.AIEnabled, "HW_AI_ENABLED"},
-		"discordEnabled":        {&st.DiscordEnabled, "HW_DISCORD_ENABLED"},
-		"portainerEnabled":      {&st.PortainerEnabled, "HW_PORTAINER_ENABLED"},
-		"uiAnimationsEnabled":   {&st.UIAnimationsEnabled, "HW_UI_ANIMATIONS_ENABLED"},
-		"metricsNormalized":     {&st.MetricsNormalized, "HW_METRICS_NORMALIZED"},
-		"globalBypassAi":        {&st.GlobalBypassAI, "HW_GLOBAL_BYPASS_AI"},
-		"globalSkipHealthCheck": {&st.GlobalSkipHealthCheck, "HW_GLOBAL_SKIP_HEALTH_CHECK"},
+		"aiEnabled":                            {&st.AIEnabled, "HW_AI_ENABLED"},
+		"discordEnabled":                       {&st.DiscordEnabled, "HW_DISCORD_ENABLED"},
+		"portainerEnabled":                     {&st.PortainerEnabled, "HW_PORTAINER_ENABLED"},
+		"uiAnimationsEnabled":                  {&st.UIAnimationsEnabled, "HW_UI_ANIMATIONS_ENABLED"},
+		"metricsNormalized":                    {&st.MetricsNormalized, "HW_METRICS_NORMALIZED"},
+		"globalBypassAi":                       {&st.GlobalBypassAI, "HW_GLOBAL_BYPASS_AI"},
+		"globalSkipHealthCheck":                {&st.GlobalSkipHealthCheck, "HW_GLOBAL_SKIP_HEALTH_CHECK"},
+		"dockerPruneIncludeUnusedTaggedImages": {&st.DockerPruneIncludeUnusedTaggedImages, "HW_DOCKER_PRUNE_INCLUDE_UNUSED_TAGGED_IMAGES"},
 	}
 	for jsonKey, mapping := range boolEnvMap {
 		if val := strings.TrimSpace(os.Getenv(mapping.envKey)); val != "" {
@@ -377,101 +381,103 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	defer tx.Rollback()
 
 	keys := map[string]string{
-		"discord_webhook_url":                    st.DiscordWebhookURL,
-		"discord_enabled":                        boolString(st.DiscordEnabled),
-		"portainer_url":                          st.PortainerURL,
-		"portainer_api_key":                      st.PortainerApiKey,
-		"portainer_enabled":                      boolString(st.PortainerEnabled),
-		"ai_enabled":                             boolString(st.AIEnabled),
-		"ai_provider":                            st.AIProvider,
-		"ai_block_risk_threshold":                intString(st.AIBlockRiskThreshold),
-		"openai_key":                             st.OpenAIKey,
-		"openai_model":                           st.OpenAIModel,
-		"anthropic_key":                          st.AnthropicKey,
-		"anthropic_model":                        st.AnthropicModel,
-		"gemini_key":                             st.GeminiKey,
-		"gemini_model":                           st.GeminiModel,
-		"ai_pricing_json":                        st.AIPricingJSON,
-		"instance_url":                           st.InstanceURL,
-		"validate_url_pattern":                   st.ValidateURLPattern,
-		"ui_animations_enabled":                  boolString(st.UIAnimationsEnabled),
-		"automation_ignored_containers":          st.AutomationIgnoredContainers,
-		"malware_ignored_mounts":                 st.MalwareIgnoredMounts,
-		"auto_upgrade_max_concurrency":           intString(st.AutoUpgradeMaxConcurrency),
-		"auto_upgrade_min_retry_minutes":         intString(st.AutoUpgradeMinRetryMinutes),
-		"trivy_sweep_mode":                       st.TrivySweepMode,
-		"clamav_snapshot_max_bytes":              int64String(st.ClamAVSnapshotMaxBytes),
-		"data_retention_days":                    intString(st.DataRetentionDays),
-		"retention_logs_days":                    intString(st.RetentionLogsDays),
-		"retention_metrics_days":                 intString(st.RetentionMetricsDays),
-		"retention_scan_results_days":            intString(st.RetentionScanResultsDays),
-		"retention_scan_jobs_days":               intString(st.RetentionScanJobsDays),
-		"retention_update_runs_days":             intString(st.RetentionUpdateRunsDays),
-		"retention_compose_audit_days":           intString(st.RetentionComposeAuditDays),
-		"retention_ai_usage_days":                intString(st.RetentionAIUsageDays),
-		"metrics_normalized":                     boolString(st.MetricsNormalized),
-		"global_bypass_ai":                       boolString(st.GlobalBypassAI),
-		"global_skip_health_check":               boolString(st.GlobalSkipHealthCheck),
-		"default_validate_mode":                  st.DefaultValidateMode,
-		"default_validate_timeout_sec":           intString(st.DefaultValidateTimeoutSec),
-		"default_validate_interval_sec":          intString(st.DefaultValidateIntervalSec),
-		"default_ai_validate_logs":               boolString(st.DefaultAIValidateLogs),
-		"default_auto_rollback":                  boolString(st.DefaultAutoRollback),
-		"default_restart_on_unhealthy":           boolString(st.DefaultRestartOnUnhealthy),
-		"unhealthy_auto_remediation_enabled":     boolString(st.UnhealthyAutoRemediationEnabled),
-		"unhealthy_restart_cooldown_sec_default": intString(st.UnhealthyRestartCooldownSecDefault),
-		"max_restarts_per_window":                intString(st.MaxRestartsPerWindow),
-		"ai_testing_passed":                      boolString(st.AITestingPassed),
-		"portainer_testing_passed":               boolString(st.PortainerTestingPassed),
+		"discord_webhook_url":                       st.DiscordWebhookURL,
+		"discord_enabled":                           boolString(st.DiscordEnabled),
+		"portainer_url":                             st.PortainerURL,
+		"portainer_api_key":                         st.PortainerApiKey,
+		"portainer_enabled":                         boolString(st.PortainerEnabled),
+		"ai_enabled":                                boolString(st.AIEnabled),
+		"ai_provider":                               st.AIProvider,
+		"ai_block_risk_threshold":                   intString(st.AIBlockRiskThreshold),
+		"openai_key":                                st.OpenAIKey,
+		"openai_model":                              st.OpenAIModel,
+		"anthropic_key":                             st.AnthropicKey,
+		"anthropic_model":                           st.AnthropicModel,
+		"gemini_key":                                st.GeminiKey,
+		"gemini_model":                              st.GeminiModel,
+		"ai_pricing_json":                           st.AIPricingJSON,
+		"instance_url":                              st.InstanceURL,
+		"validate_url_pattern":                      st.ValidateURLPattern,
+		"ui_animations_enabled":                     boolString(st.UIAnimationsEnabled),
+		"automation_ignored_containers":             st.AutomationIgnoredContainers,
+		"malware_ignored_mounts":                    st.MalwareIgnoredMounts,
+		"auto_upgrade_max_concurrency":              intString(st.AutoUpgradeMaxConcurrency),
+		"auto_upgrade_min_retry_minutes":            intString(st.AutoUpgradeMinRetryMinutes),
+		"trivy_sweep_mode":                          st.TrivySweepMode,
+		"docker_prune_include_unused_tagged_images": boolString(st.DockerPruneIncludeUnusedTaggedImages),
+		"clamav_snapshot_max_bytes":                 int64String(st.ClamAVSnapshotMaxBytes),
+		"data_retention_days":                       intString(st.DataRetentionDays),
+		"retention_logs_days":                       intString(st.RetentionLogsDays),
+		"retention_metrics_days":                    intString(st.RetentionMetricsDays),
+		"retention_scan_results_days":               intString(st.RetentionScanResultsDays),
+		"retention_scan_jobs_days":                  intString(st.RetentionScanJobsDays),
+		"retention_update_runs_days":                intString(st.RetentionUpdateRunsDays),
+		"retention_compose_audit_days":              intString(st.RetentionComposeAuditDays),
+		"retention_ai_usage_days":                   intString(st.RetentionAIUsageDays),
+		"metrics_normalized":                        boolString(st.MetricsNormalized),
+		"global_bypass_ai":                          boolString(st.GlobalBypassAI),
+		"global_skip_health_check":                  boolString(st.GlobalSkipHealthCheck),
+		"default_validate_mode":                     st.DefaultValidateMode,
+		"default_validate_timeout_sec":              intString(st.DefaultValidateTimeoutSec),
+		"default_validate_interval_sec":             intString(st.DefaultValidateIntervalSec),
+		"default_ai_validate_logs":                  boolString(st.DefaultAIValidateLogs),
+		"default_auto_rollback":                     boolString(st.DefaultAutoRollback),
+		"default_restart_on_unhealthy":              boolString(st.DefaultRestartOnUnhealthy),
+		"unhealthy_auto_remediation_enabled":        boolString(st.UnhealthyAutoRemediationEnabled),
+		"unhealthy_restart_cooldown_sec_default":    intString(st.UnhealthyRestartCooldownSecDefault),
+		"max_restarts_per_window":                   intString(st.MaxRestartsPerWindow),
+		"ai_testing_passed":                         boolString(st.AITestingPassed),
+		"portainer_testing_passed":                  boolString(st.PortainerTestingPassed),
 	}
 
 	jsonToDbKey := map[string]string{
-		"discordWebhookUrl":                  "discord_webhook_url",
-		"discordEnabled":                     "discord_enabled",
-		"portainerUrl":                       "portainer_url",
-		"portainerApiKey":                    "portainer_api_key",
-		"portainerEnabled":                   "portainer_enabled",
-		"aiEnabled":                          "ai_enabled",
-		"aiProvider":                         "ai_provider",
-		"aiBlockRiskThreshold":               "ai_block_risk_threshold",
-		"openaiKey":                          "openai_key",
-		"openaiModel":                        "openai_model",
-		"anthropicKey":                       "anthropic_key",
-		"anthropicModel":                     "anthropic_model",
-		"geminiKey":                          "gemini_key",
-		"geminiModel":                        "gemini_model",
-		"aiPricingJson":                      "ai_pricing_json",
-		"instanceUrl":                        "instance_url",
-		"validateUrlPattern":                 "validate_url_pattern",
-		"uiAnimationsEnabled":                "ui_animations_enabled",
-		"automationIgnoredContainers":        "automation_ignored_containers",
-		"malwareIgnoredMounts":               "malware_ignored_mounts",
-		"autoUpgradeMaxConcurrency":          "auto_upgrade_max_concurrency",
-		"autoUpgradeMinRetryMinutes":         "auto_upgrade_min_retry_minutes",
-		"trivySweepMode":                     "trivy_sweep_mode",
-		"clamavSnapshotMaxBytes":             "clamav_snapshot_max_bytes",
-		"dataRetentionDays":                  "data_retention_days",
-		"retentionLogsDays":                  "retention_logs_days",
-		"retentionMetricsDays":               "retention_metrics_days",
-		"retentionScanResultsDays":           "retention_scan_results_days",
-		"retentionScanJobsDays":              "retention_scan_jobs_days",
-		"retentionUpdateRunsDays":            "retention_update_runs_days",
-		"retentionComposeAuditDays":          "retention_compose_audit_days",
-		"retentionAIUsageDays":               "retention_ai_usage_days",
-		"metricsNormalized":                  "metrics_normalized",
-		"globalBypassAi":                     "global_bypass_ai",
-		"globalSkipHealthCheck":              "global_skip_health_check",
-		"defaultValidateMode":                "default_validate_mode",
-		"defaultValidateTimeoutSec":          "default_validate_timeout_sec",
-		"defaultValidateIntervalSec":         "default_validate_interval_sec",
-		"defaultAiValidateLogs":              "default_ai_validate_logs",
-		"defaultAutoRollback":                "default_auto_rollback",
-		"defaultRestartOnUnhealthy":          "default_restart_on_unhealthy",
-		"unhealthyAutoRemediationEnabled":    "unhealthy_auto_remediation_enabled",
-		"unhealthyRestartCooldownSecDefault": "unhealthy_restart_cooldown_sec_default",
-		"maxRestartsPerWindow":               "max_restarts_per_window",
-		"aiTestingPassed":                    "ai_testing_passed",
-		"portainerTestingPassed":             "portainer_testing_passed",
+		"discordWebhookUrl":                    "discord_webhook_url",
+		"discordEnabled":                       "discord_enabled",
+		"portainerUrl":                         "portainer_url",
+		"portainerApiKey":                      "portainer_api_key",
+		"portainerEnabled":                     "portainer_enabled",
+		"aiEnabled":                            "ai_enabled",
+		"aiProvider":                           "ai_provider",
+		"aiBlockRiskThreshold":                 "ai_block_risk_threshold",
+		"openaiKey":                            "openai_key",
+		"openaiModel":                          "openai_model",
+		"anthropicKey":                         "anthropic_key",
+		"anthropicModel":                       "anthropic_model",
+		"geminiKey":                            "gemini_key",
+		"geminiModel":                          "gemini_model",
+		"aiPricingJson":                        "ai_pricing_json",
+		"instanceUrl":                          "instance_url",
+		"validateUrlPattern":                   "validate_url_pattern",
+		"uiAnimationsEnabled":                  "ui_animations_enabled",
+		"automationIgnoredContainers":          "automation_ignored_containers",
+		"malwareIgnoredMounts":                 "malware_ignored_mounts",
+		"autoUpgradeMaxConcurrency":            "auto_upgrade_max_concurrency",
+		"autoUpgradeMinRetryMinutes":           "auto_upgrade_min_retry_minutes",
+		"trivySweepMode":                       "trivy_sweep_mode",
+		"dockerPruneIncludeUnusedTaggedImages": "docker_prune_include_unused_tagged_images",
+		"clamavSnapshotMaxBytes":               "clamav_snapshot_max_bytes",
+		"dataRetentionDays":                    "data_retention_days",
+		"retentionLogsDays":                    "retention_logs_days",
+		"retentionMetricsDays":                 "retention_metrics_days",
+		"retentionScanResultsDays":             "retention_scan_results_days",
+		"retentionScanJobsDays":                "retention_scan_jobs_days",
+		"retentionUpdateRunsDays":              "retention_update_runs_days",
+		"retentionComposeAuditDays":            "retention_compose_audit_days",
+		"retentionAIUsageDays":                 "retention_ai_usage_days",
+		"metricsNormalized":                    "metrics_normalized",
+		"globalBypassAi":                       "global_bypass_ai",
+		"globalSkipHealthCheck":                "global_skip_health_check",
+		"defaultValidateMode":                  "default_validate_mode",
+		"defaultValidateTimeoutSec":            "default_validate_timeout_sec",
+		"defaultValidateIntervalSec":           "default_validate_interval_sec",
+		"defaultAiValidateLogs":                "default_ai_validate_logs",
+		"defaultAutoRollback":                  "default_auto_rollback",
+		"defaultRestartOnUnhealthy":            "default_restart_on_unhealthy",
+		"unhealthyAutoRemediationEnabled":      "unhealthy_auto_remediation_enabled",
+		"unhealthyRestartCooldownSecDefault":   "unhealthy_restart_cooldown_sec_default",
+		"maxRestartsPerWindow":                 "max_restarts_per_window",
+		"aiTestingPassed":                      "ai_testing_passed",
+		"portainerTestingPassed":               "portainer_testing_passed",
 	}
 
 	for jsonKey, dbKey := range jsonToDbKey {
