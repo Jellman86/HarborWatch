@@ -18,6 +18,7 @@
     }
 
     type ScheduleCadence = "daily" | "weekly" | "monthly";
+    type UpdateCheckIntervalOption = "10m" | "30m" | "60m" | "5h" | "12h" | "24h";
 
     interface ScheduleDraft {
         cadence: ScheduleCadence;
@@ -102,6 +103,14 @@
         { value: 6, label: "Sat" }
     ];
     const monthDayOptions = Array.from({ length: 31 }, (_, idx) => idx + 1);
+    const updateCheckIntervalOptions: Array<{ value: UpdateCheckIntervalOption; label: string }> = [
+        { value: "10m", label: "Every 10 minutes" },
+        { value: "30m", label: "Every 30 minutes" },
+        { value: "60m", label: "Every 60 minutes" },
+        { value: "5h", label: "Every 5 hours" },
+        { value: "12h", label: "Every 12 hours" },
+        { value: "24h", label: "Every 24 hours" }
+    ];
 
     const defaultSettings: Settings = {
         discordWebhookUrl: "",
@@ -154,6 +163,7 @@
     let settings = $state<Settings>({ ...defaultSettings });
     let schedules = $state<Schedule[]>([]);
     let scheduleDrafts = $state<Record<string, ScheduleDraft>>({});
+    let updateCheckIntervalDrafts = $state<Record<string, UpdateCheckIntervalOption>>({});
     let discoveredContainers = $state<ContainerSummary[]>([]);
     let activeTab = $state("automations");
     let activeAutomationTab = $state<AutomationDomain>("general");
@@ -504,6 +514,47 @@
         return String(spec || "").trim();
     }
 
+    function isUpdateCheckIntervalTask(id: string): boolean {
+        return id === "container_update_check";
+    }
+
+    function updateCheckIntervalToCronSpec(interval: UpdateCheckIntervalOption): string {
+        switch (interval) {
+            case "10m": return "0 */10 * * * *";
+            case "30m": return "0 */30 * * * *";
+            case "60m": return "0 0 */1 * * *";
+            case "5h": return "0 0 */5 * * *";
+            case "12h": return "0 0 */12 * * *";
+            case "24h": return "0 0 0 * * *";
+            default: return "0 0 0 * * *";
+        }
+    }
+
+    function updateCheckIntervalFromCronSpec(spec: string): UpdateCheckIntervalOption | null {
+        const normalized = normalizeCronSpecClient(spec);
+        switch (normalized) {
+            case "0 */10 * * * *":
+                return "10m";
+            case "0 */30 * * * *":
+                return "30m";
+            case "0 0 */1 * * *":
+            case "0 0 * * * *":
+                return "60m";
+            case "0 0 */5 * * *":
+                return "5h";
+            case "0 0 */12 * * *":
+                return "12h";
+            case "0 0 0 * * *":
+                return "24h";
+            default:
+                return null;
+        }
+    }
+
+    function updateCheckIntervalLabel(interval: UpdateCheckIntervalOption): string {
+        return updateCheckIntervalOptions.find((opt) => opt.value === interval)?.label || "Every 24 hours";
+    }
+
     function parseCronFieldValues(field: string, min: number, max: number): number[] {
         const out = new Set<number>();
         const cleaned = String(field || "").trim();
@@ -602,14 +653,34 @@
 
     function syncScheduleDrafts() {
         const next: Record<string, ScheduleDraft> = {};
+        const intervalNext: Record<string, UpdateCheckIntervalOption> = {};
         for (const schedule of schedules) {
             next[schedule.id] = parseScheduleDraft(schedule.cronSpec);
+            if (isUpdateCheckIntervalTask(schedule.id)) {
+                intervalNext[schedule.id] = updateCheckIntervalFromCronSpec(schedule.cronSpec) || "24h";
+            }
         }
         scheduleDrafts = next;
+        updateCheckIntervalDrafts = intervalNext;
     }
 
     function draftForTask(task: Schedule): ScheduleDraft {
         return scheduleDrafts[task.id] ?? parseScheduleDraft(task.cronSpec);
+    }
+
+    function updateCheckIntervalDraftForTask(task: Schedule): UpdateCheckIntervalOption {
+        return updateCheckIntervalDrafts[task.id] ?? updateCheckIntervalFromCronSpec(task.cronSpec) ?? "24h";
+    }
+
+    function patchUpdateCheckIntervalDraft(id: string, interval: UpdateCheckIntervalOption) {
+        updateCheckIntervalDrafts = { ...updateCheckIntervalDrafts, [id]: interval };
+    }
+
+    async function handleUpdateCheckIntervalChange(task: Schedule, interval: UpdateCheckIntervalOption) {
+        patchUpdateCheckIntervalDraft(task.id, interval);
+        const nextCron = updateCheckIntervalToCronSpec(interval);
+        if (nextCron === normalizeCronSpecClient(task.cronSpec)) return;
+        await saveTaskSchedule(task.id, interval);
     }
 
     function patchScheduleDraft(id: string, patch: Partial<ScheduleDraft>) {
@@ -633,6 +704,10 @@
     }
 
     function scheduleDirty(task: Schedule): boolean {
+        if (isUpdateCheckIntervalTask(task.id)) {
+            const interval = updateCheckIntervalDraftForTask(task);
+            return updateCheckIntervalToCronSpec(interval) !== normalizeCronSpecClient(task.cronSpec);
+        }
         const draft = scheduleDrafts[task.id];
         if (!draft) return false;
         return draftToCronSpec(draft) !== normalizeCronSpecClient(task.cronSpec);
@@ -841,10 +916,13 @@
         }
     }
 
-    async function saveTaskSchedule(id: string) {
+    async function saveTaskSchedule(id: string, updateCheckIntervalOverride?: UpdateCheckIntervalOption) {
+        const isUpdateCheckTask = isUpdateCheckIntervalTask(id);
         const draft = scheduleDrafts[id];
-        if (!draft) return;
-        const cronSpec = draftToCronSpec(draft);
+        if (!isUpdateCheckTask && !draft) return;
+        const cronSpec = isUpdateCheckTask
+            ? updateCheckIntervalToCronSpec(updateCheckIntervalOverride ?? updateCheckIntervalDrafts[id] ?? "24h")
+            : draftToCronSpec(draft as ScheduleDraft);
         savingScheduleId = id;
         try {
             const res = await fetch("/api/scheduler/update", {
@@ -858,6 +936,12 @@
             }
             schedules = schedules.map((s) => (s.id === id ? { ...s, cronSpec } : s));
             scheduleDrafts = { ...scheduleDrafts, [id]: parseScheduleDraft(cronSpec) };
+            if (isUpdateCheckTask) {
+                updateCheckIntervalDrafts = {
+                    ...updateCheckIntervalDrafts,
+                    [id]: updateCheckIntervalFromCronSpec(cronSpec) || "24h"
+                };
+            }
             
             if (id === "history_retention_prune") {
                 // Sync internal sub-tasks to the same schedule
@@ -924,6 +1008,14 @@
             return `Monthly (Day ${days || "1"} ${draft.time})`;
         }
         return `Daily (${draft.time})`;
+    }
+
+    function taskCronLabel(task: Schedule): string {
+        if (isUpdateCheckIntervalTask(task.id)) {
+            const interval = updateCheckIntervalFromCronSpec(task.cronSpec);
+            if (interval) return updateCheckIntervalLabel(interval);
+        }
+        return cronLabel(task.cronSpec);
     }
 
     function taskLabel(id: string): string {
@@ -1648,7 +1740,7 @@
                                                 <div>
                                                     <p class="text-sm font-black text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
                                                     <p class="text-[11px] text-slate-500 mt-1">{taskDescription(task.id)}</p>
-                                                    <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{cronLabel(task.cronSpec)} | Last run: {formatTime(task.lastRun)}</p>
+                                                    <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{taskCronLabel(task)} | Last run: {formatTime(task.lastRun)}</p>
                                                 </div>
                                                 <div class="flex items-center gap-2">
                                                     <button
@@ -1665,44 +1757,77 @@
                                                 </div>
                                             </div>
 
-                                            <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                                                <div class="space-y-1">
-                                                    <label for={"cadence-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
-                                                    <select
-                                                        id={"cadence-" + task.id}
-                                                        value={draft.cadence}
-                                                        onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                            {#if task.id === "container_update_check"}
+                                                {@const intervalDraft = updateCheckIntervalDraftForTask(task)}
+                                                <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+                                                    <div class="space-y-1">
+                                                        <label for={"update-check-interval-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Check Interval</label>
+                                                        <select
+                                                            id={"update-check-interval-" + task.id}
+                                                            value={intervalDraft}
+                                                            onchange={(e) => handleUpdateCheckIntervalChange(task, (e.currentTarget as HTMLSelectElement).value as UpdateCheckIntervalOption)}
+                                                            disabled={savingScheduleId === task.id}
+                                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                        >
+                                                            {#each updateCheckIntervalOptions as option}
+                                                                <option value={option.value}>{option.label}</option>
+                                                            {/each}
+                                                        </select>
+                                                        <p class="text-[11px] text-slate-500">
+                                                            Controls how often HarborWatch checks registries for newer container images. Changes save automatically.
+                                                        </p>
+                                                    </div>
+
+                                                    <div class="flex items-center justify-end">
+                                                        <span
+                                                            class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {savingScheduleId === task.id ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-900/40 dark:bg-brand-900/20 dark:text-brand-300' : scheduleDirty(task) ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300'}"
+                                                            aria-live="polite"
+                                                        >
+                                                            <span class="w-1.5 h-1.5 rounded-full {savingScheduleId === task.id ? 'bg-brand-500 animate-pulse' : scheduleDirty(task) ? 'bg-amber-500' : 'bg-emerald-500'}"></span>
+                                                            {savingScheduleId === task.id ? "Saving..." : scheduleDirty(task) ? "Pending" : "Saved"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            {:else}
+                                                <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                                                    <div class="space-y-1">
+                                                        <label for={"cadence-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
+                                                        <select
+                                                            id={"cadence-" + task.id}
+                                                            value={draft.cadence}
+                                                            onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
+                                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                        >
+                                                            <option value="daily">Daily</option>
+                                                            <option value="weekly">Weekly</option>
+                                                            <option value="monthly">Monthly</option>
+                                                        </select>
+                                                        <p class="text-[11px] text-slate-500">Defines how often this task is eligible to run.</p>
+                                                    </div>
+
+                                                    <div class="space-y-1">
+                                                        <label for={"time-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
+                                                        <input
+                                                            id={"time-" + task.id}
+                                                            type="time"
+                                                            value={draft.time}
+                                                            onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                        />
+                                                        <p class="text-[11px] text-slate-500">Local time used by the scheduler for this task.</p>
+                                                    </div>
+
+                                                    <button
+                                                        onclick={() => saveTaskSchedule(task.id)}
+                                                        disabled={!scheduleDirty(task) || savingScheduleId === task.id}
+                                                        class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
                                                     >
-                                                        <option value="daily">Daily</option>
-                                                        <option value="weekly">Weekly</option>
-                                                        <option value="monthly">Monthly</option>
-                                                    </select>
-                                                    <p class="text-[11px] text-slate-500">Defines how often this task is eligible to run.</p>
+                                                        {savingScheduleId === task.id ? "Saving..." : "Save Schedule"}
+                                                    </button>
                                                 </div>
+                                            {/if}
 
-                                                <div class="space-y-1">
-                                                    <label for={"time-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
-                                                    <input
-                                                        id={"time-" + task.id}
-                                                        type="time"
-                                                        value={draft.time}
-                                                        onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                    />
-                                                    <p class="text-[11px] text-slate-500">Local time used by the scheduler for this task.</p>
-                                                </div>
-
-                                                <button
-                                                    onclick={() => saveTaskSchedule(task.id)}
-                                                    disabled={!scheduleDirty(task) || savingScheduleId === task.id}
-                                                    class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
-                                                >
-                                                    {savingScheduleId === task.id ? "Saving..." : "Save Schedule"}
-                                                </button>
-                                            </div>
-
-                                            {#if draft.cadence === "weekly"}
+                                            {#if task.id !== "container_update_check" && draft.cadence === "weekly"}
                                                 <div class="space-y-1">
                                                     <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
                                                     <div class="flex flex-wrap gap-2">
@@ -1717,7 +1842,7 @@
                                                     </div>
                                                     <p class="text-[11px] text-slate-500">Select one or more weekdays for weekly execution.</p>
                                                 </div>
-                                            {:else if draft.cadence === "monthly"}
+                                            {:else if task.id !== "container_update_check" && draft.cadence === "monthly"}
                                                 <div class="space-y-1">
                                                     <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
                                                     <div class="flex flex-wrap gap-1.5">

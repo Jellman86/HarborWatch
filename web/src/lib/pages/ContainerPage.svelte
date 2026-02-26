@@ -53,6 +53,11 @@
         configNote?: string;
     }
 
+    interface AILifecycleBlockState {
+        job: UpdateJobStatus;
+        reason: string;
+    }
+
     let { id, params, onNavigate } = $props<{
         id: string;
         params?: { tab?: string };
@@ -708,13 +713,49 @@
         return "Action Needed";
     }
 
-    async function triggerManualUpdate() {
+    function extractAIBlockedReason(job: UpdateJobStatus | null | undefined): string {
+        if (!job) return "";
+        const direct = String(job.error || "").trim();
+        const directMatch = /ai blocked update:\s*(.+)$/i.exec(direct);
+        if (directMatch?.[1]) return directMatch[1].trim();
+
+        for (const step of job.steps || []) {
+            if (String(step?.step || "").trim() !== "release_analysis") continue;
+            if (String(step?.status || "").trim().toLowerCase() !== "failed") continue;
+            const msg = String(step?.message || "").trim();
+            const match = /ai blocked update:\s*(.+)$/i.exec(msg);
+            if (match?.[1]) return match[1].trim();
+        }
+        return "";
+    }
+
+    function latestLifecycleJob(): UpdateJobStatus | null {
+        const candidates: UpdateJobStatus[] = [];
+        if (activeUpdateJob) candidates.push(activeUpdateJob);
+        if (Array.isArray(updateHistory)) candidates.push(...updateHistory);
+        if (!candidates.length) return null;
+
+        return [...candidates].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))[0] || null;
+    }
+
+    function latestAILifecycleBlockState(): AILifecycleBlockState | null {
+        const job = latestLifecycleJob();
+        if (!job) return null;
+        const reason = extractAIBlockedReason(job);
+        if (!reason) return null;
+        return { job, reason };
+    }
+
+    async function triggerManualUpdate(options?: { forceBypassAiOnce?: boolean }) {
         if (!detail || updateJobPolling) return;
+        const forceBypassAiOnce = !!options?.forceBypassAiOnce;
         
         updateJobError = "";
         activeUpdateJob = null;
         updateJobPolling = true;
-        toasts.info(`Starting upgrade flow for ${detail.summary.names?.[0] || id}...`);
+        toasts.info(forceBypassAiOnce
+            ? `Starting one-time forced upgrade flow for ${detail.summary.names?.[0] || id}...`
+            : `Starting upgrade flow for ${detail.summary.names?.[0] || id}...`);
 
         try {
             const res = await fetch("/api/updates/run", {
@@ -727,7 +768,7 @@
                     validateMode: validateMode,
                     validateTimeoutSec: Math.max(1, Number(validateTimeoutSec || 45)),
                     validateIntervalSec: Math.max(1, Number(validateIntervalSec || 2)),
-                    bypassAi: bypassAi,
+                    bypassAi: forceBypassAiOnce ? true : bypassAi,
                     skipHealthCheck: skipHealth
                 })
             });
@@ -744,6 +785,20 @@
             toasts.error(updateJobError);
             updateJobPolling = false;
         }
+    }
+
+    async function triggerForceUpgradeOnce() {
+        if (!detail || updateJobPolling) return;
+        const blocked = latestAILifecycleBlockState();
+        if (!blocked) return;
+
+        const targetName = detail.summary.names?.[0]?.replace(/^\//, "") || id;
+        const confirmed = confirm(
+            `Force a one-time upgrade for ${targetName} and ignore AI breaking-change signals for this run only?\n\nReason: ${blocked.reason}`
+        );
+        if (!confirmed) return;
+
+        await triggerManualUpdate({ forceBypassAiOnce: true });
     }
 
     async function pollUpdateStatus(jobId: string) {
@@ -1255,6 +1310,40 @@
                                     </div>
                                 </div>
 
+                                {@const aiBlockedLifecycle = latestAILifecycleBlockState()}
+                                {#if aiBlockedLifecycle}
+                                    <div class="rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-4 space-y-3">
+                                        <div class="flex items-start gap-3">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                            </svg>
+                                            <div class="min-w-0">
+                                                <p class="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Upgrade Blocked By AI</p>
+                                                <p class="text-[11px] text-amber-900 dark:text-amber-100 mt-1 leading-relaxed">
+                                                    {aiBlockedLifecycle.reason}
+                                                </p>
+                                                <p class="text-[10px] text-amber-700/80 dark:text-amber-200/80 mt-2">
+                                                    Target: <span class="font-mono break-all">{aiBlockedLifecycle.job.targetImage}</span>
+                                                    | {new Date(aiBlockedLifecycle.job.updatedAt * 1000).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-wrap items-center gap-3">
+                                            <button
+                                                onclick={triggerForceUpgradeOnce}
+                                                disabled={updateJobPolling || (intel?.portainerManaged && !intel?.portainerConfigured)}
+                                                class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:scale-105 transition-all"
+                                                title={intel?.portainerManaged && !intel?.portainerConfigured ? "Portainer integration required" : "Ignore AI breaking-change block for one run only"}
+                                            >
+                                                {updateJobPolling ? "Updating..." : "Force Upgrade Once"}
+                                            </button>
+                                            <p class="text-[10px] text-amber-700/80 dark:text-amber-200/80">
+                                                One-time override only. Your saved "Ignore Breaking Change Signals" lifecycle setting is unchanged.
+                                            </p>
+                                        </div>
+                                    </div>
+                                {/if}
+
                                 <div class="flex flex-wrap gap-3 pt-2">
                                     <button
                                         onclick={saveRules}
@@ -1355,12 +1444,23 @@
                                         </tr>
                                     {:else}
                                         {#each updateHistory as job}
+                                            {@const aiBlockedReason = extractAIBlockedReason(job)}
                                             <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors align-top">
                                                 <td class="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-300 break-all">{job.targetImage}</td>
                                                 <td class="px-6 py-4">
-                                                    <span class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase {job.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : job.status === 'failed' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}">
-                                                        {job.status}
-                                                    </span>
+                                                    <div class="flex flex-wrap items-center gap-2">
+                                                        <span class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase {job.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : job.status === 'failed' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}">
+                                                            {job.status}
+                                                        </span>
+                                                        {#if aiBlockedReason}
+                                                            <span
+                                                                class="px-2 py-1 rounded-lg font-bold text-[10px] uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                                                                title={aiBlockedReason}
+                                                            >
+                                                                AI Blocked
+                                                            </span>
+                                                        {/if}
+                                                    </div>
                                                 </td>
                                                 <td class="px-6 py-4 text-[11px] text-slate-500">
                                                     {job.aiAnalysis ? `${job.aiAnalysis.riskLevel} (${job.aiAnalysis.riskScore})` : "n/a"}
