@@ -43,6 +43,7 @@
     let portainerError = $state("");
     let composeError = $state("");
     let pageIndex = $state(0);
+    let composePageIndex = $state(0);
     const pageSize = 12;
     let activeSourceTab = $state<"compose" | "portainer">("compose");
 
@@ -137,11 +138,22 @@
     const pagedStacks = $derived(stacks.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize));
     const pageStart = $derived(stacks.length === 0 ? 0 : (pageIndex * pageSize) + 1);
     const pageEnd = $derived(Math.min((pageIndex + 1) * pageSize, stacks.length));
+    const composeTotalPages = $derived(Math.max(1, Math.ceil(composeProjects.length / pageSize)));
+    const pagedComposeProjects = $derived(composeProjects.slice(composePageIndex * pageSize, (composePageIndex + 1) * pageSize));
+    const composePageStart = $derived(composeProjects.length === 0 ? 0 : (composePageIndex * pageSize) + 1);
+    const composePageEnd = $derived(Math.min((composePageIndex + 1) * pageSize, composeProjects.length));
 
     $effect(() => {
         stacks.length;
         if (pageIndex > totalPages - 1) {
             pageIndex = Math.max(0, totalPages - 1);
+        }
+    });
+
+    $effect(() => {
+        composeProjects.length;
+        if (composePageIndex > composeTotalPages - 1) {
+            composePageIndex = Math.max(0, composeTotalPages - 1);
         }
     });
 
@@ -295,12 +307,24 @@
                     <p class="text-slate-400 italic font-medium">No local Docker Compose projects discovered from running containers.</p>
                 </div>
             {:else}
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    {#each composeProjects as p}
-                        <article class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-5 space-y-4 shadow-sm">
+                <PaginationBar
+                    summaryText={`Showing ${composePageStart}-${composePageEnd} of ${composeProjects.length}`}
+                    pageText={`Page ${composePageIndex + 1}/${composeTotalPages}`}
+                    canPrev={composePageIndex > 0}
+                    canNext={composePageIndex < composeTotalPages - 1}
+                    onPrev={() => composePageIndex = Math.max(0, composePageIndex - 1)}
+                    onNext={() => composePageIndex = Math.min(composeTotalPages - 1, composePageIndex + 1)}
+                />
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-10 opacity-0 animate-reveal stagger-1">
+                    {#each pagedComposeProjects as p, i}
+                        <div
+                            class="stack-card-container opacity-0 animate-reveal"
+                            style="animation-delay: {0.08 + (i * 0.04)}s"
+                        >
+                        <article class="bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 p-5 space-y-4 shadow-sm h-full group hover:border-brand-500 transition-all">
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white truncate" title={p.projectName}>{p.projectName}</h3>
+                                    <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white truncate group-hover:text-brand-600 transition-colors" title={p.projectName}>{p.projectName}</h3>
                                     <p class="text-[10px] font-mono text-slate-400 mt-1 break-all">{p.workingDir || (p.configFiles && p.configFiles[0]) || "Path unavailable"}</p>
                                 </div>
                                 <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest {composeSourceStatusClass(p.sourceStatus)}">
@@ -380,6 +404,7 @@
                                 </div>
                             </div>
                         </article>
+                        </div>
                     {/each}
                 </div>
             {/if}

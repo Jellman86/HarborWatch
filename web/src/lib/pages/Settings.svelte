@@ -1084,6 +1084,7 @@
         switch (id) {
             case "container_update_check": return "Container Update Check";
             case "container_update_apply": return "Container Auto-Apply";
+            case "compose_snapshot_on_change": return "Compose Snapshot Sweep (On Change)";
             case "docker_system_prune": return "Docker System Prune";
             case "history_retention_prune": return "Historical Data Retention";
             case "security_sweep_trivy": return "Trivy Security Sweep";
@@ -1099,6 +1100,8 @@
                 return "Scans registries for newer image tags and prepares upgrade candidates.";
             case "container_update_apply":
                 return "Applies approved upgrades with policy gating, retry limits, and health checks.";
+            case "compose_snapshot_on_change":
+                return "Scans local Compose projects and writes a snapshot only when Compose files or project .env changed since the last snapshot.";
             case "docker_system_prune":
                 return "Reclaims disk by removing eligible Docker artifacts based on prune policy.";
             case "metrics_prune":
@@ -1280,7 +1283,7 @@
                 onclick={() => activeTab = tab.id}
                 class="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
             >
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-md border border-current/15 bg-white/60 dark:bg-slate-800/70">
+                <span class="inline-flex items-center justify-center w-4 h-4 rounded-md bg-white/60 dark:bg-slate-800/70">
                     {#if tab.id === "automations"}
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6h10M4 6h2m4 12h10M4 18h2m10-6h4M4 12h8m-2-8v4m0 8v4m4-10v4" /></svg>
                     {:else if tab.id === "ai"}
@@ -1406,7 +1409,7 @@
                         {/if}
 
                         {#if activeAutomationTab === "general"}
-                            <div class="space-y-4">
+                            <div class="flex flex-col gap-4">
                                 <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
                                     <div class="mb-4">
                                         <p class="text-sm font-black text-slate-800 dark:text-slate-100">Global Task Concurrency</p>
@@ -1515,7 +1518,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="p-4 rounded-2xl border-2 border-amber-200 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/80 via-white to-white dark:from-amber-900/10 dark:via-slate-900/30 dark:to-slate-900/30 space-y-4">
+                                    <div class="order-last p-4 rounded-2xl border-2 border-amber-200 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/80 via-white to-white dark:from-amber-900/10 dark:via-slate-900/30 dark:to-slate-900/30 space-y-4">
                                                     <div class="flex flex-wrap items-center justify-between gap-3">
                                                         <div class="flex items-center gap-2">
                                                             <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200/70 dark:border-amber-900/40">
@@ -2837,6 +2840,9 @@
             </div>
 
         {:else if activeTab === "backups"}
+            {@const composeAutoApplyTask = scheduleById("container_update_apply")}
+            {@const composeBackupSweepTask = scheduleById("compose_snapshot_on_change")}
+            {@const composeBackupSweepDraft = composeBackupSweepTask ? draftForTask(composeBackupSweepTask) : null}
             <div class="p-6 md:p-8 space-y-6 settings-pane">
                 <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.backups.accentClass} p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
@@ -2845,7 +2851,62 @@
                                 <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.backups.badge}</span>
                             </div>
                             <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.backups.title}</h3>
-                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.backups.subtitle}</p>
+                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">
+                                {settingsTabChrome.backups.subtitle}
+                                Compose snapshots can run automatically before compose-managed upgrades/redeploys, and optionally as a scheduled on-change sweep.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v8m-4-4h8M4 7h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" /></svg>
+                        </span>
+                        <div>
+                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">When Compose Backups Run</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Two independent triggers can create compose snapshots. Use both if you want baseline backups and pre-upgrade protection.</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Before Compose Auto-Apply</p>
+                                <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {(composeAutoApplyTask?.enabled ?? false) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">
+                                    {(composeAutoApplyTask?.enabled ?? false) ? "Enabled" : "Disabled"}
+                                </span>
+                            </div>
+                            <p class="text-[11px] text-slate-600 dark:text-slate-300">Snapshots are created immediately before compose-managed upgrade/redeploy actions run through the upgrade automation pipeline.</p>
+                            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                                {#if composeAutoApplyTask}
+                                    Upgrade schedule: {cronLabel(composeAutoApplyTask.cronSpec)} | Last run: {formatTime(composeAutoApplyTask.lastRun)}
+                                {:else}
+                                    Upgrade auto-apply scheduler task is not registered.
+                                {/if}
+                            </p>
+                            <button
+                                onclick={() => { activeTab = "automations"; activeAutomationTab = "upgrades"; }}
+                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
+                            >Open Upgrades Schedule</button>
+                        </div>
+
+                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Scheduled Compose Backup Sweep</p>
+                                <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {(composeBackupSweepTask?.enabled ?? false) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">
+                                    {(composeBackupSweepTask?.enabled ?? false) ? "Enabled" : "Disabled"}
+                                </span>
+                            </div>
+                            <p class="text-[11px] text-slate-600 dark:text-slate-300">Runs on a cron schedule and creates snapshots only when local Compose project files changed (includes project <span class="font-mono">.env</span> when present).</p>
+                            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                                {#if composeBackupSweepTask}
+                                    {cronLabel(composeBackupSweepTask.cronSpec)} | Last run: {formatTime(composeBackupSweepTask.lastRun)}
+                                {:else}
+                                    Compose backup scheduler task is not registered.
+                                {/if}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -2874,6 +2935,89 @@
                         <p class="text-[11px] text-slate-500">Leave blank to use the appliance default snapshot location.</p>
                     </div>
                 </div>
+
+                {#if composeBackupSweepTask && composeBackupSweepDraft}
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    </span>
+                                    <p class="text-sm font-black text-slate-800 dark:text-slate-100">Scheduled Compose Backup Sweep</p>
+                                </div>
+                                <p class="text-[11px] text-slate-500 mt-1">Mode is <span class="font-bold">on change</span>: unchanged projects are skipped. This task only applies to local Compose projects with readable compose files.</p>
+                                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{taskCronLabel(composeBackupSweepTask)} | Last run: {formatTime(composeBackupSweepTask.lastRun)}</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button
+                                    onclick={() => runTask(composeBackupSweepTask.id)}
+                                    class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
+                                >Run Now</button>
+                                <button
+                                    onclick={() => toggleTask(composeBackupSweepTask.id, composeBackupSweepTask.enabled)}
+                                    class="w-10 h-5 rounded-full relative transition-colors {composeBackupSweepTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                    aria-label="Toggle scheduled compose backup sweep"
+                                >
+                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {composeBackupSweepTask.enabled ? 'right-1' : 'left-1'}"></div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                            <div class="space-y-1">
+                                <label for="cadence-compose-backup-sweep" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
+                                <select
+                                    id="cadence-compose-backup-sweep"
+                                    value={composeBackupSweepDraft.cadence}
+                                    onchange={(e) => patchScheduleDraft(composeBackupSweepTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
+                                    class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                >
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label for="time-compose-backup-sweep" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
+                                <input
+                                    id="time-compose-backup-sweep"
+                                    type="time"
+                                    value={composeBackupSweepDraft.time}
+                                    onchange={(e) => patchScheduleDraft(composeBackupSweepTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
+                                    class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                />
+                            </div>
+                            <button
+                                onclick={() => saveTaskSchedule(composeBackupSweepTask.id)}
+                                disabled={!scheduleDirty(composeBackupSweepTask) || savingScheduleId === composeBackupSweepTask.id}
+                                class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
+                            >
+                                {savingScheduleId === composeBackupSweepTask.id ? "Saving..." : "Save Schedule"}
+                            </button>
+                        </div>
+
+                        {#if composeBackupSweepDraft.cadence === "weekly"}
+                            <div class="flex flex-wrap gap-2">
+                                {#each weekdayOptions as day}
+                                    <button
+                                        onclick={() => toggleWeeklyDay(composeBackupSweepTask.id, day.value)}
+                                        class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {composeBackupSweepDraft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                    >{day.label}</button>
+                                {/each}
+                            </div>
+                        {:else if composeBackupSweepDraft.cadence === "monthly"}
+                            <div class="flex flex-wrap gap-1.5">
+                                {#each monthDayOptions as day}
+                                    <button
+                                        onclick={() => toggleMonthDay(composeBackupSweepTask.id, day)}
+                                        class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {composeBackupSweepDraft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
+                                    >{day}</button>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
             </div>
 
         {:else if activeTab === "appearance"}

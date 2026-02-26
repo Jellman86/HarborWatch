@@ -595,6 +595,13 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task container_update_apply: %v", err))
 			}
 
+			schedSvc.RegisterTask(composeSnapshotOnChangeTaskID, func() scheduler.Task {
+				return newComposeSnapshotOnChangeTask(dockerClient, settingsStore, diagService)
+			})
+			if err := schedSvc.AddTask("0 45 0 * * *", newComposeSnapshotOnChangeTask(dockerClient, settingsStore, diagService), false); err != nil && diagService != nil {
+				diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task %s: %v", composeSnapshotOnChangeTaskID, err))
+			}
+
 			// Trigger immediate update check on boot
 			go func() {
 				time.Sleep(5 * time.Second)
