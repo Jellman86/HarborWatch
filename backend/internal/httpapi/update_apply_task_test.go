@@ -53,6 +53,10 @@ func (f autoTaskDockerClient) OpenEventStream(ctx context.Context) (io.ReadClose
 	return io.NopCloser(strings.NewReader("")), nil
 }
 
+func (f autoTaskDockerClient) GetNetworkTopology(ctx context.Context) (dockerengine.NetworkTopologySnapshot, error) {
+	return dockerengine.NetworkTopologySnapshot{}, nil
+}
+
 type recordingUpdateService struct {
 	started     []updates.Request
 	listByID    map[string][]gen.UpdateJobStatus

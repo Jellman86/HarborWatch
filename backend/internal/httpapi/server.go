@@ -46,6 +46,7 @@ type DockerClient interface {
 	RestartContainer(ctx context.Context, id string) error
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 	OpenEventStream(ctx context.Context) (io.ReadCloser, error)
+	GetNetworkTopology(ctx context.Context) (dockerengine.NetworkTopologySnapshot, error)
 }
 
 type ScanService interface {
@@ -2071,6 +2072,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 		registerUpdateRoutes(r, adminDeps)
 		registerAuditRoutes(r, adminDeps)
 		registerComposeRoutes(r, adminDeps)
+		registerNetworkRoutes(r, adminDeps)
 		registerPortainerRoutes(r, adminDeps)
 	})
 

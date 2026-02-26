@@ -217,6 +217,10 @@
         {#await import("./lib/pages/Stacks.svelte") then Mod}
           <Mod.default onNavigate={navigate} />
         {/await}
+      {:else if currentRoute === 'networks'}
+        {#await import("./lib/pages/Networks.svelte") then Mod}
+          <Mod.default onNavigate={navigate} />
+        {/await}
       {:else if currentRoute === 'images'}
         {#await import("./lib/pages/Images.svelte") then Mod}
           <Mod.default {images} />

@@ -31,11 +31,13 @@ import (
 )
 
 type fakeDockerClient struct {
-	containers []gen.ContainerSummary
-	images     []gen.ImageSummary
-	events     string
-	logs       dockerengine.ContainerLogs
-	logErr     error
+	containers  []gen.ContainerSummary
+	images      []gen.ImageSummary
+	events      string
+	logs        dockerengine.ContainerLogs
+	logErr      error
+	topology    dockerengine.NetworkTopologySnapshot
+	topologyErr error
 }
 
 func (f fakeDockerClient) ListContainers(ctx context.Context) ([]gen.ContainerSummary, error) {
@@ -70,6 +72,12 @@ func (f fakeDockerClient) ListImages(ctx context.Context) ([]gen.ImageSummary, e
 }
 func (f fakeDockerClient) OpenEventStream(ctx context.Context) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(f.events)), nil
+}
+func (f fakeDockerClient) GetNetworkTopology(ctx context.Context) (dockerengine.NetworkTopologySnapshot, error) {
+	if f.topologyErr != nil {
+		return dockerengine.NetworkTopologySnapshot{}, f.topologyErr
+	}
+	return f.topology, nil
 }
 
 type fakeScanService struct {
@@ -1133,6 +1141,41 @@ func TestDiagnosticsSnapshotDedupesActiveJobsByID(t *testing.T) {
 	}
 	if snapshot.ActiveJobs[0].ID != "j1" || snapshot.ActiveJobs[1].ID != "j2" {
 		t.Fatalf("unexpected activeJobs order/content: %#v", snapshot.ActiveJobs)
+	}
+}
+
+func TestNetworksTopologyRoute(t *testing.T) {
+	mux := NewMuxWithDeps(nil, fakeDockerClient{
+		topology: dockerengine.NetworkTopologySnapshot{
+			GeneratedAt: 1700000000,
+			Networks: []dockerengine.NetworkTopologyNetwork{
+				{ID: "n1", Name: "app_net", Driver: "bridge"},
+			},
+			Containers: []dockerengine.NetworkTopologyContainer{
+				{ID: "c1", Name: "web"},
+			},
+			Edges: []dockerengine.NetworkTopologyEdge{
+				{NetworkID: "n1", ContainerID: "c1", IPv4Address: "172.20.0.2/16"},
+			},
+		},
+	}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fakePortainerClient{}, fakeRulesService{}, nil, nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/networks/topology", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Networks []map[string]any `json:"networks"`
+		Edges    []map[string]any `json:"edges"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload.Networks) != 1 || len(payload.Edges) != 1 {
+		t.Fatalf("unexpected topology payload: %s", rec.Body.String())
 	}
 }
 
