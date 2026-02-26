@@ -741,12 +741,12 @@
         const mode = String(intel.orchestrationMode || "").trim();
         if (mode === "portainer_stack") {
             if (!intel.portainerConfigured) return "Portainer stack detected. Configure Portainer integration to enable safe upgrades.";
-            return "Portainer stack detected. HarborWatch redeploys through Portainer and respects the stack definition as the source of truth (no stack file edits).";
+            return "Portainer stack detected. HarborWatch redeploys through Portainer and respects the stack definition as the source of truth (no stack file edits). Mutable-tag refreshes are supported; pinned image ref changes must be made in the Portainer stack source.";
         }
         if (mode === "docker_compose") {
             const status = String(intel.composeSourceStatus || "").trim();
             if (status === "verified_writable" || status === "verified_readonly") {
-                return "Local Compose service detected. HarborWatch uses compose-aware pull/up actions and will not edit compose files or .env files.";
+                return "Local Compose service detected. HarborWatch uses compose-aware pull/up actions and will not edit compose files or .env files. Mutable-tag refreshes are supported; pinned image ref changes must be made in the compose source.";
             }
             return "Local Compose service detected. Compose source could not be verified from this appliance (check mounts/path mapping).";
         }
@@ -755,6 +755,23 @@
 
     function composeUpgradeBlockedInUI(): boolean {
         return intel?.orchestrationMode === "docker_compose" && intel?.composeSourceVerified === false;
+    }
+
+    function supportsAutomaticRollbackForUpgrade(): boolean {
+        return String(intel?.orchestrationMode || "").trim() === "plain_docker";
+    }
+
+    function rollbackCapabilityNote(): string {
+        if (supportsAutomaticRollbackForUpgrade()) {
+            return "Rollback automatically if validation fails after an upgrade.";
+        }
+        if (String(intel?.orchestrationMode || "").trim() === "docker_compose") {
+            return "Automatic rollback is not available for Compose mode. HarborWatch preserves compose source files and fails safely instead.";
+        }
+        if (String(intel?.orchestrationMode || "").trim() === "portainer_stack") {
+            return "Automatic rollback is not available for Portainer stacks. Recovery should be performed from the stack source in Portainer/Git.";
+        }
+        return "Rollback automatically if validation fails after an upgrade.";
     }
 
     function lifecycleUpgradeActionBlocked(): boolean {
@@ -1173,11 +1190,11 @@
                                 </div>
 
                                 <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-700 space-y-2">
-                                    {#if lifecycleMode === "global"}
-                                        <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                                            Follows global automation settings. Updates will be applied automatically if the "Container Auto-Apply" schedule is enabled.
-                                        </p>
-                                    {:else}
+                                        {#if lifecycleMode === "global"}
+                                            <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                                                Follows global automation settings. Updates will be applied automatically if the "Container Auto-Apply" schedule is enabled, subject to orchestration/source constraints shown below.
+                                            </p>
+                                        {:else}
                                         <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
                                             Automation is paused. This container will not be included in scheduled auto-upgrades; upgrades must be triggered manually.
                                         </p>
@@ -1263,12 +1280,14 @@
                                         <div class="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
                                             <div>
                                                 <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Auto Rollback</p>
-                                                <p class="text-[11px] text-slate-500">Rollback automatically if validation fails after an upgrade.</p>
+                                                <p class="text-[11px] text-slate-500">{rollbackCapabilityNote()}</p>
                                             </div>
                                             <button
                                                 onclick={() => autoRollback = !autoRollback}
-                                                class="w-10 h-5 rounded-full transition-colors relative {autoRollback ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                disabled={!supportsAutomaticRollbackForUpgrade()}
+                                                class="w-10 h-5 rounded-full transition-colors relative disabled:opacity-50 {autoRollback ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}"
                                                 aria-label="Toggle Auto Rollback"
+                                                title={!supportsAutomaticRollbackForUpgrade() ? "Automatic rollback currently applies only to the plain Docker upgrade pipeline" : undefined}
                                             >
                                                 <div class="absolute top-1 left-1 w-3 h-3 rounded-full bg-white transition-transform {autoRollback ? 'translate-x-5' : ''}"></div>
                                             </button>

@@ -43,6 +43,13 @@
     type PositionedNetwork = NetworkNode & { x: number; y: number; width: number; height: number };
     type PositionedContainer = ContainerNode & { x: number; y: number; width: number; height: number };
     type PositionedEdge = Edge & { key: string; path: string; midX: number; midY: number };
+    type NetworkAccent = {
+        solid: string;
+        stroke: string;
+        fill: string;
+        labelStroke: string;
+        labelFill: string;
+    };
     type ConnectionRow = {
         key: string;
         edge: PositionedEdge;
@@ -65,6 +72,17 @@
     let networkSearch = $state("");
     let containerSearch = $state("");
     let driverFilter = $state("all");
+
+    const NETWORK_ACCENTS: NetworkAccent[] = [
+        { solid: "rgb(14 165 233)", stroke: "rgba(14,165,233,0.42)", fill: "rgba(14,165,233,0.11)", labelStroke: "rgba(14,165,233,0.45)", labelFill: "rgba(240,249,255,0.95)" },
+        { solid: "rgb(16 185 129)", stroke: "rgba(16,185,129,0.42)", fill: "rgba(16,185,129,0.11)", labelStroke: "rgba(16,185,129,0.45)", labelFill: "rgba(236,253,245,0.95)" },
+        { solid: "rgb(245 158 11)", stroke: "rgba(245,158,11,0.42)", fill: "rgba(245,158,11,0.11)", labelStroke: "rgba(245,158,11,0.45)", labelFill: "rgba(255,251,235,0.95)" },
+        { solid: "rgb(236 72 153)", stroke: "rgba(236,72,153,0.42)", fill: "rgba(236,72,153,0.10)", labelStroke: "rgba(236,72,153,0.42)", labelFill: "rgba(253,242,248,0.95)" },
+        { solid: "rgb(139 92 246)", stroke: "rgba(139,92,246,0.42)", fill: "rgba(139,92,246,0.10)", labelStroke: "rgba(139,92,246,0.42)", labelFill: "rgba(245,243,255,0.95)" },
+        { solid: "rgb(239 68 68)", stroke: "rgba(239,68,68,0.40)", fill: "rgba(239,68,68,0.10)", labelStroke: "rgba(239,68,68,0.42)", labelFill: "rgba(254,242,242,0.95)" },
+        { solid: "rgb(20 184 166)", stroke: "rgba(20,184,166,0.42)", fill: "rgba(20,184,166,0.10)", labelStroke: "rgba(20,184,166,0.42)", labelFill: "rgba(240,253,250,0.95)" },
+        { solid: "rgb(99 102 241)", stroke: "rgba(99,102,241,0.42)", fill: "rgba(99,102,241,0.10)", labelStroke: "rgba(99,102,241,0.42)", labelFill: "rgba(238,242,255,0.95)" }
+    ];
 
     async function loadTopology(options?: { quiet?: boolean }) {
         const quiet = !!options?.quiet;
@@ -351,19 +369,32 @@
         return "bridge";
     }
 
-    function networkFill(driver: string | undefined): string {
-        const kind = networkDriverClass(driver);
-        if (kind === "overlay") return "rgba(6,182,212,0.10)";
-        if (kind === "l2") return "rgba(245,158,11,0.10)";
-        return "rgba(16,185,129,0.10)";
+    function hashString(input: string): number {
+        let h = 2166136261;
+        for (let i = 0; i < input.length; i++) {
+            h ^= input.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+        }
+        return Math.abs(h >>> 0);
     }
 
-    function networkStroke(driver: string | undefined, selected: boolean): string {
-        if (selected) return "rgb(6 182 212)";
-        const kind = networkDriverClass(driver);
-        if (kind === "overlay") return "rgba(6,182,212,0.35)";
-        if (kind === "l2") return "rgba(245,158,11,0.35)";
-        return "rgba(16,185,129,0.35)";
+    function networkAccent(idLike: string | undefined): NetworkAccent {
+        const key = String(idLike || "").trim() || "network";
+        return NETWORK_ACCENTS[hashString(key) % NETWORK_ACCENTS.length];
+    }
+
+    function networkFill(networkID: string | undefined): string {
+        return networkAccent(networkID).fill;
+    }
+
+    function networkStroke(networkID: string | undefined, selected: boolean): string {
+        const accent = networkAccent(networkID);
+        return selected ? accent.solid : accent.stroke;
+    }
+
+    function edgeStrokeColor(e: Edge, active: boolean): string {
+        const accent = networkAccent(e.networkId);
+        return active ? accent.solid : accent.stroke;
     }
 
     $effect(() => {
@@ -501,7 +532,7 @@
                 <div class="relative p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Graph</p>
-                        <p class="text-xs text-slate-500">Networks on the left, containers on the right. Hover or click links to reveal endpoint addressing.</p>
+                        <p class="text-xs text-slate-500">Networks on the left, containers on the right. Connector lines inherit the network color. Hover or click links to reveal endpoint addressing.</p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2 text-[10px]">
                         {#if hasActiveFilters}
@@ -539,6 +570,7 @@
                         <text x={graphMetrics.width - 220} y="28" class="fill-slate-400 text-[12px] font-black uppercase tracking-[0.2em]">Containers</text>
 
                         {#each positioned.edges as e}
+                            {@const edgeAccent = networkAccent(e.networkId)}
                             {@const isSelected = selectedKind === "edge" && selectedEdgeKey === e.key}
                             {@const isHovered = hoveredEdgeKey === e.key}
                             {@const related = relatedEdgeKeys.has(e.key)}
@@ -547,8 +579,8 @@
                                 <path
                                     d={e.path}
                                     fill="none"
-                                    stroke={isSelected || isHovered ? "rgb(6 182 212)" : "rgb(148 163 184)"}
-                                    stroke-opacity={dimmed ? 0.18 : (isSelected || isHovered ? 0.95 : 0.45)}
+                                    stroke={edgeStrokeColor(e, isSelected || isHovered)}
+                                    stroke-opacity={dimmed ? 0.14 : (isSelected || isHovered ? 0.95 : 0.7)}
                                     stroke-width={isSelected || isHovered ? "3.25" : "2"}
                                     filter={isSelected || isHovered ? "url(#glowEdge)" : undefined}
                                     class="transition-all duration-200 cursor-pointer"
@@ -562,7 +594,16 @@
                                 />
                                 {#if isSelected || isHovered}
                                     <g transform={`translate(${e.midX}, ${e.midY - 12})`}>
-                                        <rect x="-170" y="-14" width="340" height="28" rx="10" class="fill-white/95 dark:fill-slate-900/95 stroke-cyan-300/60 dark:stroke-cyan-800/50" />
+                                        <rect
+                                            x="-170"
+                                            y="-14"
+                                            width="340"
+                                            height="28"
+                                            rx="10"
+                                            class="dark:fill-slate-900/95"
+                                            fill={edgeAccent.labelFill}
+                                            stroke={edgeAccent.labelStroke}
+                                        />
                                         <text text-anchor="middle" dominant-baseline="middle" class="fill-slate-700 dark:fill-slate-200 text-[10px] font-bold">
                                             {edgeLabel(e)}
                                         </text>
@@ -572,6 +613,7 @@
                         {/each}
 
                         {#each positioned.networks as n}
+                            {@const accent = networkAccent(n.id)}
                             {@const selected = selectedKind === "network" && selectedId === n.id}
                             {@const related = relatedNetworkIDs.has(n.id)}
                             {@const dimmed = selectedKind !== null && !related}
@@ -589,18 +631,19 @@
                                     height={n.height}
                                     rx="18"
                                     stroke-width="2"
-                                    fill={networkFill(n.driver)}
-                                    stroke={networkStroke(n.driver, selected)}
+                                    fill={networkFill(n.id)}
+                                    stroke={networkStroke(n.id, selected)}
                                     opacity={dimmed ? "0.28" : "1"}
                                 />
-                                <text x="16" y="26" class="fill-slate-900 dark:fill-white text-[15px] font-black tracking-tight">
+                                <rect x="10" y="10" width="6" height={n.height - 20} rx="3" fill={accent.solid} opacity={dimmed ? "0.4" : "0.95"} />
+                                <text x="24" y="26" class="fill-slate-900 dark:fill-white text-[15px] font-black tracking-tight">
                                     {n.name}
                                 </text>
-                                <text x="16" y="44" class="fill-slate-500 dark:fill-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                                <text x="24" y="44" class="fill-slate-500 dark:fill-slate-400 text-[10px] font-bold uppercase tracking-widest">
                                     {n.driver || "driver?"} {n.scope ? ` | ${n.scope}` : ""}
                                 </text>
                                 {#if n.ipam && n.ipam[0]?.subnet}
-                                    <text x="16" y="60" class="fill-slate-400 dark:fill-slate-500 text-[10px] font-mono">
+                                    <text x="24" y="60" class="fill-slate-400 dark:fill-slate-500 text-[10px] font-mono">
                                         {n.ipam[0].subnet}
                                     </text>
                                 {/if}
@@ -667,16 +710,21 @@
                                     </div>
                                     <div class="divide-y divide-slate-100 dark:divide-slate-800">
                                         {#each connectionRows as row}
+                                            {@const rowAccent = networkAccent(row.edge.networkId)}
                                             {@const edgeSelected = selectedKind === "edge" && selectedEdgeKey === row.key}
                                             <div
                                                 onclick={() => selectEdge(row.key)}
                                                 onkeydown={(evt) => (evt.key === "Enter" || evt.key === " ") && (evt.preventDefault(), selectEdge(row.key))}
                                                 role="button"
                                                 tabindex="0"
+                                                style={`border-left: 4px solid ${rowAccent.solid};`}
                                                 class={`w-full text-left grid grid-cols-[minmax(0,1.2fr)_120px_minmax(0,1.25fr)_110px_minmax(0,1.5fr)] gap-3 px-4 py-3 transition-colors cursor-pointer ${edgeSelected ? 'bg-cyan-50/70 dark:bg-cyan-900/10' : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/30'}`}
                                             >
                                                 <div class="min-w-0">
-                                                    <p class="text-[11px] font-black text-slate-900 dark:text-white truncate">{row.networkName}</p>
+                                                    <p class="text-[11px] font-black text-slate-900 dark:text-white truncate flex items-center gap-2">
+                                                        <span class="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={`background-color: ${rowAccent.solid};`}></span>
+                                                        <span class="truncate">{row.networkName}</span>
+                                                    </p>
                                                     <p class="text-[10px] text-slate-500 font-mono truncate">{row.network?.id || row.edge.networkId}</p>
                                                 </div>
                                                 <div class="min-w-0">
@@ -740,11 +788,16 @@
                 </div>
 
                 {#if selectedNetwork}
+                    {@const selectedAccent = networkAccent(selectedNetwork.id)}
                     <div class="space-y-4">
-                        <div class="rounded-2xl border border-emerald-200/70 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-900/10 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Network</p>
-                            <p class="mt-1 text-lg font-black text-slate-900 dark:text-white break-all">{selectedNetwork.name}</p>
-                            <p class="mt-1 text-[10px] font-mono text-slate-500 break-all">{selectedNetwork.id}</p>
+                        <div
+                            class="relative overflow-hidden rounded-2xl border p-4"
+                            style={`border-color: ${selectedAccent.stroke}; background-color: ${selectedAccent.fill};`}
+                        >
+                            <div class="absolute inset-y-0 left-0 w-1.5" style={`background-color: ${selectedAccent.solid};`}></div>
+                            <p class="text-[10px] font-black uppercase tracking-widest pl-2" style={`color: ${selectedAccent.solid};`}>Network</p>
+                            <p class="mt-1 text-lg font-black text-slate-900 dark:text-white break-all pl-2">{selectedNetwork.name}</p>
+                            <p class="mt-1 text-[10px] font-mono text-slate-500 break-all pl-2">{selectedNetwork.id}</p>
                         </div>
                         <div class="grid grid-cols-2 gap-3 text-[11px]">
                             <div class="rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 p-3">

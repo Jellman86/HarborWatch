@@ -1462,7 +1462,7 @@
                                                     <div class="flex items-center justify-between pt-3 border-t border-slate-200/50 dark:border-slate-700/50">
                                                         <div>
                                                             <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Watchtower Mode (Skip Health)</p>
-                                                            <p class="text-[11px] text-slate-500 mt-0.5 italic">Disable health checks and rollbacks globally.</p>
+                                                                <p class="text-[11px] text-slate-500 mt-0.5 italic">Disable health checks globally and suppress plain-Docker automatic rollback behavior.</p>
                                                         </div>
                                                         <button
                                                             onclick={() => settings.globalSkipHealthCheck = !settings.globalSkipHealthCheck}
@@ -1526,7 +1526,7 @@
                                                             <div class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2">
                                                                 <div class="pr-3">
                                                                     <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Auto Rollback</p>
-                                                                    <p class="text-[10px] text-slate-500">Default for new containers</p>
+                                                                    <p class="text-[10px] text-slate-500">Default for new containers (plain Docker rollback pipeline)</p>
                                                                 </div>
                                                                 <button
                                                                     onclick={() => settings.defaultAutoRollback = !settings.defaultAutoRollback}
