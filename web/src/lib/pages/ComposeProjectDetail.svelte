@@ -65,6 +65,28 @@
         !!project?.envFile && envDraft !== (project.envFile.content || "")
     );
     const hasAnyChanges = $derived(hasComposeChanges || hasEnvChanges);
+    const activeComposeFile = $derived(
+        (project?.composeFiles || []).find((f) => f.path === activeComposePath) || null
+    );
+    const nonWritableComposePaths = $derived(
+        (project?.composeFiles || [])
+            .filter((f) => !f.writable)
+            .map((f) => f.path)
+    );
+    const envFileNotWritable = $derived(!!project?.envFile && !project.envFile.writable);
+    const saveBlockedReason = $derived((() => {
+        if (!project) return "";
+        if (!project.sourceWritable) {
+            return "Compose source is read-only for this project.";
+        }
+        if (nonWritableComposePaths.length > 0) {
+            return "One or more compose files are not writable.";
+        }
+        if (envFileNotWritable) {
+            return "Project .env is not writable.";
+        }
+        return "";
+    })());
 
     function setActiveComposeDraft(value: string) {
         if (!activeComposePath) return;
@@ -181,6 +203,10 @@
 
     async function saveDraft() {
         if (!project) return;
+        if (saveBlockedReason) {
+            toasts.error(saveBlockedReason);
+            return;
+        }
         saving = true;
         try {
             const payload: any = {
@@ -206,9 +232,13 @@
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
+                diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : diagnostics;
+                if (Array.isArray(data.diagnostics) && data.diagnostics.length > 0) {
+                    toasts.error("Save blocked by validation errors. Review diagnostics.");
+                    return;
+                }
                 const message = data.message || "Failed to save compose draft.";
                 toasts.error(message);
-                diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : diagnostics;
                 return;
             }
             const updatedComposeFiles = Array.isArray(data.composeFiles) ? data.composeFiles : [];
@@ -290,13 +320,30 @@
                     </button>
                     <button
                         onclick={saveDraft}
-                        disabled={saving || !hasAnyChanges}
+                        disabled={saving || !hasAnyChanges || !!saveBlockedReason}
                         class="px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
                     >
                         {saving ? "Saving..." : "Save"}
                     </button>
                 </div>
             </div>
+
+            {#if saveBlockedReason}
+                <div class="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 space-y-1">
+                    <p class="font-black uppercase tracking-widest text-[10px]">Save Blocked</p>
+                    <p>{saveBlockedReason}</p>
+                    {#if nonWritableComposePaths.length > 0}
+                        <ul class="list-disc pl-4 font-mono text-[10px]">
+                            {#each nonWritableComposePaths as path}
+                                <li>{path}</li>
+                            {/each}
+                        </ul>
+                    {/if}
+                    {#if envFileNotWritable && project.envFile}
+                        <p class="font-mono text-[10px]">{project.envFile.path}</p>
+                    {/if}
+                </div>
+            {/if}
 
             <div class="flex flex-wrap gap-2">
                 {#each project.composeFiles as file}
@@ -305,6 +352,9 @@
                         class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border {activeComposePath === file.path ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100' : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
                     >
                         {file.path.split("/").pop() || file.path}
+                        {#if !file.writable}
+                            (readonly)
+                        {/if}
                     </button>
                 {/each}
             </div>
@@ -313,8 +363,12 @@
                 <textarea
                     class="w-full min-h-[24rem] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-3 text-xs font-mono text-slate-800 dark:text-slate-100"
                     value={activeComposeDraft}
+                    readonly={!!activeComposeFile && !activeComposeFile.writable}
                     oninput={(event) => setActiveComposeDraft((event.target as HTMLTextAreaElement).value)}
                 ></textarea>
+                {#if activeComposeFile && !activeComposeFile.writable}
+                    <p class="text-[10px] text-amber-600 dark:text-amber-300">This compose file is read-only from HarborWatch.</p>
+                {/if}
             {/if}
         </section>
 
@@ -322,12 +376,16 @@
             <section class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                 <div>
                     <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Project .env</p>
-                    <p class="text-xs text-slate-500">{project.envFile.path}</p>
+                    <p class="text-xs text-slate-500">{project.envFile.path} {project.envFile.writable ? "" : "(readonly)"}</p>
                 </div>
                 <textarea
                     class="w-full min-h-[12rem] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-3 text-xs font-mono text-slate-800 dark:text-slate-100"
+                    readonly={!project.envFile.writable}
                     bind:value={envDraft}
                 ></textarea>
+                {#if !project.envFile.writable}
+                    <p class="text-[10px] text-amber-600 dark:text-amber-300">This .env file is read-only from HarborWatch.</p>
+                {/if}
             </section>
         {/if}
 

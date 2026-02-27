@@ -146,6 +146,107 @@ func TestSaveDraft_SucceedsComposeAndEnv(t *testing.T) {
 	}
 }
 
+func TestSaveDraft_FailsOnNonWritableEnvFile(t *testing.T) {
+	skipIfRoot(t)
+
+	workdir := t.TempDir()
+	lockedDir := filepath.Join(workdir, "locked")
+	if err := os.MkdirAll(lockedDir, 0o755); err != nil {
+		t.Fatalf("mkdir locked dir: %v", err)
+	}
+	composeFile := filepath.Join(workdir, "docker-compose.yml")
+	envFile := filepath.Join(lockedDir, ".env")
+	if err := os.WriteFile(composeFile, []byte("services:\n  app:\n    image: nginx:1.25\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+	if err := os.WriteFile(envFile, []byte("APP_ENV=prod\n"), 0o600); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
+	if err := os.Chmod(lockedDir, 0o555); err != nil {
+		t.Fatalf("chmod dir readonly: %v", err)
+	}
+	defer func() { _ = os.Chmod(lockedDir, 0o755) }()
+
+	svc := NewService()
+	_, env, err := svc.LoadProjectFiles(ProjectDescriptor{
+		ProjectName: "demo",
+		WorkingDir:  lockedDir,
+		ConfigFiles: []string{composeFile},
+	})
+	if err != nil {
+		t.Fatalf("load files: %v", err)
+	}
+	if env == nil {
+		t.Fatalf("expected env state")
+	}
+
+	_, err = svc.SaveDraft(ProjectDescriptor{
+		ProjectName: "demo",
+		WorkingDir:  lockedDir,
+		ConfigFiles: []string{composeFile},
+	}, nil, &EnvDraft{
+		Path:           envFile,
+		Content:        "APP_ENV=staging\n",
+		Exists:         true,
+		ExpectedSHA256: env.SHA256,
+	})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !errors.Is(err, ErrFileNotWritable) {
+		t.Fatalf("expected ErrFileNotWritable, got %v", err)
+	}
+}
+
+func TestSaveDraft_FailsOnNonWritableComposeFile(t *testing.T) {
+	skipIfRoot(t)
+
+	workdir := t.TempDir()
+	lockedDir := filepath.Join(workdir, "locked")
+	if err := os.MkdirAll(lockedDir, 0o755); err != nil {
+		t.Fatalf("mkdir locked dir: %v", err)
+	}
+	composeFile := filepath.Join(lockedDir, "docker-compose.yml")
+	if err := os.WriteFile(composeFile, []byte("services:\n  app:\n    image: nginx:1.25\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+	if err := os.Chmod(lockedDir, 0o555); err != nil {
+		t.Fatalf("chmod dir readonly: %v", err)
+	}
+	defer func() { _ = os.Chmod(lockedDir, 0o755) }()
+
+	svc := NewService()
+	files, _, err := svc.LoadProjectFiles(ProjectDescriptor{
+		ProjectName: "demo",
+		WorkingDir:  lockedDir,
+		ConfigFiles: []string{composeFile},
+	})
+	if err != nil {
+		t.Fatalf("load files: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected compose file state")
+	}
+
+	_, err = svc.SaveDraft(ProjectDescriptor{
+		ProjectName: "demo",
+		WorkingDir:  lockedDir,
+		ConfigFiles: []string{composeFile},
+	}, []DraftFile{
+		{
+			Path:           composeFile,
+			Content:        "services:\n  app:\n    image: nginx:1.26\n",
+			ExpectedSHA256: files[0].SHA256,
+		},
+	}, nil)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !errors.Is(err, ErrFileNotWritable) {
+		t.Fatalf("expected ErrFileNotWritable, got %v", err)
+	}
+}
+
 func TestPrettifyComposeDrafts(t *testing.T) {
 	svc := NewService()
 	formatted, err := svc.PrettifyComposeDrafts([]DraftFile{
@@ -162,5 +263,12 @@ func TestPrettifyComposeDrafts(t *testing.T) {
 	}
 	if formatted[0].Content == "" || formatted[0].Content == "services: {app: {image: nginx:1.25, restart: unless-stopped}}" {
 		t.Fatalf("expected formatted yaml output, got %q", formatted[0].Content)
+	}
+}
+
+func skipIfRoot(t *testing.T) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("permission test is not reliable as root")
 	}
 }

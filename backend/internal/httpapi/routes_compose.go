@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -157,7 +158,11 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 			}
 
 			if err := preflightComposeHashConflicts(project, req); err != nil {
-				writeError(w, http.StatusConflict, "compose_hash_conflict", err.Error())
+				if errors.Is(err, composeeditor.ErrHashConflict) {
+					writeError(w, http.StatusConflict, "compose_hash_conflict", err.Error())
+					return
+				}
+				writeError(w, http.StatusBadGateway, "compose_preflight_failed", err.Error())
 				return
 			}
 
@@ -192,6 +197,9 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 						return
 					case errors.Is(saveErr.Err, composeeditor.ErrPathNotAllowed):
 						writeError(w, http.StatusBadRequest, "compose_path_not_allowed", saveErr.Error())
+						return
+					case errors.Is(saveErr.Err, composeeditor.ErrFileNotWritable):
+						writeError(w, http.StatusConflict, "compose_file_not_writable", saveErr.Error())
 						return
 					}
 				}
@@ -243,12 +251,12 @@ func preflightComposeHashConflicts(project *localComposeProject, req composeProj
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			return fmt.Errorf("read compose file %s: %w", path, err)
 		}
 		sum := sha256.Sum256(raw)
 		actual := hex.EncodeToString(sum[:])
 		if actual != expected {
-			return errors.New("compose file hash mismatch for " + path)
+			return fmt.Errorf("%w: compose file hash mismatch for %s", composeeditor.ErrHashConflict, path)
 		}
 	}
 
@@ -261,12 +269,12 @@ func preflightComposeHashConflicts(project *localComposeProject, req composeProj
 			}
 			raw, err := os.ReadFile(path)
 			if err != nil {
-				return err
+				return fmt.Errorf("read env file %s: %w", path, err)
 			}
 			sum := sha256.Sum256(raw)
 			actual := hex.EncodeToString(sum[:])
 			if actual != expected {
-				return errors.New("env file hash mismatch for " + path)
+				return fmt.Errorf("%w: env file hash mismatch for %s", composeeditor.ErrHashConflict, path)
 			}
 		}
 	}

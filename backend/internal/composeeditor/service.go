@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	ErrPathNotAllowed = errors.New("path not allowed for compose editor")
-	ErrHashConflict   = errors.New("file hash conflict")
+	ErrPathNotAllowed  = errors.New("path not allowed for compose editor")
+	ErrHashConflict    = errors.New("file hash conflict")
+	ErrFileNotWritable = errors.New("file is not writable")
 )
 
 type SaveError struct {
@@ -246,6 +247,12 @@ func (s *Service) SaveDraft(project ProjectDescriptor, composeDrafts []DraftFile
 		allowedEnvPath = filepath.Join(wd, ".env")
 	}
 
+	type pendingWrite struct {
+		path    string
+		content []byte
+	}
+	writes := make([]pendingWrite, 0, len(composeDrafts)+1)
+
 	for _, draft := range composeDrafts {
 		path := strings.TrimSpace(draft.Path)
 		if _, ok := allowedCompose[path]; !ok {
@@ -254,9 +261,10 @@ func (s *Service) SaveDraft(project ProjectDescriptor, composeDrafts []DraftFile
 		if err := verifyExpectedHash(path, strings.TrimSpace(draft.ExpectedSHA256)); err != nil {
 			return SaveResult{}, &SaveError{Path: path, Err: err}
 		}
-		if err := writeFileAtomic(path, []byte(draft.Content)); err != nil {
+		if err := ensurePathWritable(path); err != nil {
 			return SaveResult{}, &SaveError{Path: path, Err: err}
 		}
+		writes = append(writes, pendingWrite{path: path, content: []byte(draft.Content)})
 	}
 
 	if envDraft != nil {
@@ -271,9 +279,16 @@ func (s *Service) SaveDraft(project ProjectDescriptor, composeDrafts []DraftFile
 			if err := verifyExpectedHash(envPath, strings.TrimSpace(envDraft.ExpectedSHA256)); err != nil {
 				return SaveResult{}, &SaveError{Path: envPath, Err: err}
 			}
-			if err := writeFileAtomic(envPath, []byte(envDraft.Content)); err != nil {
+			if err := ensurePathWritable(envPath); err != nil {
 				return SaveResult{}, &SaveError{Path: envPath, Err: err}
 			}
+			writes = append(writes, pendingWrite{path: envPath, content: []byte(envDraft.Content)})
+		}
+	}
+
+	for _, w := range writes {
+		if err := writeFileAtomic(w.path, w.content); err != nil {
+			return SaveResult{}, &SaveError{Path: w.path, Err: classifyWriteError(err)}
 		}
 	}
 
@@ -381,23 +396,7 @@ func verifyExpectedHash(path string, expected string) error {
 }
 
 func fileWritable(path string) bool {
-	f, err := os.OpenFile(path, os.O_RDWR, 0)
-	if err == nil {
-		_ = f.Close()
-		return true
-	}
-	if os.IsNotExist(err) {
-		dir := filepath.Dir(path)
-		tf, terr := os.CreateTemp(dir, ".harborwatch-write-test-*")
-		if terr != nil {
-			return false
-		}
-		name := tf.Name()
-		_ = tf.Close()
-		_ = os.Remove(name)
-		return true
-	}
-	return false
+	return ensurePathWritable(path) == nil
 }
 
 func writeFileAtomic(path string, content []byte) error {
@@ -428,4 +427,45 @@ func writeFileAtomic(path string, content []byte) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+func ensurePathWritable(path string) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".harborwatch-write-check-*")
+	if err != nil {
+		if os.IsPermission(err) || os.IsNotExist(err) {
+			return fmt.Errorf("%w: %v", ErrFileNotWritable, err)
+		}
+		return err
+	}
+	tmpName := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	renamed := tmpName + ".renamed"
+	if err := os.Rename(tmpName, renamed); err != nil {
+		_ = os.Remove(tmpName)
+		if os.IsPermission(err) || os.IsNotExist(err) {
+			return fmt.Errorf("%w: %v", ErrFileNotWritable, err)
+		}
+		return err
+	}
+	if err := os.Remove(renamed); err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("%w: %v", ErrFileNotWritable, err)
+		}
+		return err
+	}
+	return nil
+}
+
+func classifyWriteError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if os.IsPermission(err) {
+		return fmt.Errorf("%w: %v", ErrFileNotWritable, err)
+	}
+	return err
 }
