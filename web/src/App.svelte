@@ -217,6 +217,10 @@
         {#await import("./lib/pages/Stacks.svelte") then Mod}
           <Mod.default onNavigate={navigate} />
         {/await}
+      {:else if currentRoute === 'compose-project-detail'}
+        {#await import("./lib/pages/ComposeProjectDetail.svelte") then Mod}
+          <Mod.default params={routeParams} onNavigate={navigate} />
+        {/await}
       {:else if currentRoute === 'networks'}
         {#await import("./lib/pages/Networks.svelte") then Mod}
           <Mod.default onNavigate={navigate} />

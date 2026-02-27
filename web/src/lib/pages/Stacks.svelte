@@ -17,6 +17,7 @@
     }
 
     interface LocalComposeProject {
+        projectKey?: string;
         projectName: string;
         workingDir?: string;
         configFiles?: string[];
@@ -184,6 +185,12 @@
         if (value === "unchanged") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
         return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
     }
+
+    function openComposeEditor(project: LocalComposeProject) {
+        onNavigate("compose-project-detail", {
+            projectKey: project.projectKey || project.projectName
+        });
+    }
 </script>
 
 <style>
@@ -324,7 +331,13 @@
                         <article class="bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 p-5 space-y-4 shadow-sm h-full group hover:border-brand-500 transition-all">
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white truncate group-hover:text-brand-600 transition-colors" title={p.projectName}>{p.projectName}</h3>
+                                    <button
+                                        onclick={() => openComposeEditor(p)}
+                                        class="text-lg font-black tracking-tight text-slate-900 dark:text-white truncate group-hover:text-brand-600 transition-colors text-left hover:underline"
+                                        title={p.projectName}
+                                    >
+                                        {p.projectName}
+                                    </button>
                                     <p class="text-[10px] font-mono text-slate-400 mt-1 break-all">{p.workingDir || (p.configFiles && p.configFiles[0]) || "Path unavailable"}</p>
                                 </div>
                                 <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest {composeSourceStatusClass(p.sourceStatus)}">
@@ -393,7 +406,10 @@
                                 <div class="flex flex-wrap gap-2">
                                     {#each p.members || [] as m}
                                         <button
-                                            onclick={() => onNavigate('container-detail', { id: m.containerId, tab: 'lifecycle' })}
+                                            onclick={(event) => {
+                                                event.stopPropagation();
+                                                onNavigate('container-detail', { id: m.containerId, tab: 'lifecycle' });
+                                            }}
                                             class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 hover:border-brand-400 text-left"
                                             title={m.image || ""}
                                         >
@@ -402,6 +418,17 @@
                                         </button>
                                     {/each}
                                 </div>
+                            </div>
+                            <div class="pt-1">
+                                <button
+                                    onclick={(event) => {
+                                        event.stopPropagation();
+                                        openComposeEditor(p);
+                                    }}
+                                    class="w-full px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-black uppercase tracking-widest transition-all"
+                                >
+                                    Open Compose Editor
+                                </button>
                             </div>
                         </article>
                         </div>

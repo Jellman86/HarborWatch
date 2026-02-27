@@ -35,6 +35,7 @@ type localComposeProjectMember struct {
 }
 
 type localComposeProject struct {
+	ProjectKey       string                      `json:"projectKey"`
 	ProjectName      string                      `json:"projectName"`
 	WorkingDir       string                      `json:"workingDir,omitempty"`
 	ConfigFiles      []string                    `json:"configFiles,omitempty"`
@@ -193,6 +194,7 @@ func discoverLocalComposeProjectsWithSnapshotRoot(containers []gen.ContainerSumm
 			status := detectComposeSourceStatus(configFiles)
 			snapshotStatus, snapshotErr := composesnapshots.DetectProjectChangeStatus(snapshotRoot, projectName, workingDir, configFiles)
 			p = &localComposeProject{
+				ProjectKey:       composeProjectKey(projectName, workingDir, configFiles),
 				ProjectName:      projectName,
 				WorkingDir:       workingDir,
 				ConfigFiles:      append([]string(nil), configFiles...),
@@ -252,4 +254,24 @@ func discoverLocalComposeProjectsWithSnapshotRoot(containers []gen.ContainerSumm
 		return left < right
 	})
 	return out
+}
+
+func composeProjectKey(projectName, workingDir string, configFiles []string) string {
+	base := strings.TrimSpace(projectName)
+	if base == "" {
+		base = "compose-project"
+	}
+	base = strings.ToLower(base)
+	base = strings.ReplaceAll(base, " ", "-")
+	base = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, base)
+	base = strings.Trim(base, "-_")
+	if base == "" {
+		base = "compose-project"
+	}
+	return base
 }

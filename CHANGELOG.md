@@ -8,6 +8,11 @@ All notable changes to HarborWatch are documented in this file.
 - **Migration + Schema Versioning Foundation (2026-02-24):**
   - Centralized SQLite schema migrations with `schema_migrations` and startup migration execution before store init.
   - Added diagnostics reporting for current schema version and migrated core tables (`settings`, `rules`, `updates`, `scanning`, `metrics`, `scheduler`, `diag`, `healthremediation`, `containerintel`, AI stores) into versioned migrations.
+- **Local Compose Source Editor (2026-02-27):**
+  - Added local compose project editor APIs for loading, validating, prettifying, and saving compose files and project `.env`.
+  - Added optimistic hash-conflict detection and strict file-allowlist guards for safe writes.
+  - Added snapshot-before-save safety using HarborWatch compose snapshot archives.
+  - Added a Stacks -> Compose Project Editor UI flow with top-of-page compose editing, `.env` editing, validation diagnostics, and service list context.
 - **Lifecycle Policy Controls + Defaults:**
   - Added per-container lifecycle controls for validation mode/URL/timeouts/probe interval, auto rollback, AI log validation, and post-upgrade dependent restarts (with delay).
   - Added global default lifecycle policy settings so new containers inherit sensible automation defaults while preserving saved overrides.
