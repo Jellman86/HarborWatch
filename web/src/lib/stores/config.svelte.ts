@@ -28,6 +28,10 @@ class ConfigStore {
         if (!this.#settings) return false;
         return this.#settings.portainerEnabled && this.#settings.portainerTestingPassed;
     }
+
+    get gitOpsMasterDirectory() {
+        return this.#settings?.gitOpsMasterDirectory || "/data/gitops";
+    }
 }
 
 export const configStore = new ConfigStore();

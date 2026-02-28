@@ -138,6 +138,7 @@
         trivySweepMode: "running-only",
         dockerPruneIncludeUnusedTaggedImages: false,
         composeSnapshotRootPath: "",
+        gitOpsMasterDirectory: "/data/gitops",
         clamavSnapshotMaxBytes: 2147483648,
         dataRetentionDays: 30,
         retentionLogsDays: 30,
@@ -2939,6 +2940,31 @@
                             class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                         />
                         <p class="text-[11px] text-slate-500">Leave blank to use the appliance default snapshot location.</p>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-900/40">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4a3 3 0 00-3 3v4a3 3 0 003 3h4a3 3 0 003-3V7a3 3 0 00-3-3H8zM2 14a2 2 0 012-2h16a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2z" /></svg>
+                        </span>
+                        <div>
+                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">GitOps Storage</p>
+                            <p class="text-[11px] text-slate-500 mt-1">Configure where HarborWatch stores synchronized Git repositories.</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label for="gitops-master-dir" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Master GitOps Directory</label>
+                        <input
+                            id="gitops-master-dir"
+                            type="text"
+                            bind:value={settings.gitOpsMasterDirectory}
+                            disabled={isLocked("gitOpsMasterDirectory")}
+                            placeholder="/data/gitops"
+                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                        />
+                        <p class="text-[11px] text-slate-500">Local path where repositories will be cloned. Default is <span class="font-mono">/data/gitops</span>.</p>
                     </div>
                 </div>
 
