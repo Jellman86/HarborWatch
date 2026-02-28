@@ -65,7 +65,7 @@ Return ONLY valid JSON using this exact schema:
   "risk_level": ("Low"|"Medium"|"High"|"Critical"),
   "summary": (string),
   "breaking_changes": [string],
-  "action_required": (boolean)
+  "action_required": (boolean, set to true ONLY if manual user intervention or config changes are required before updating)
 }
 
 Release notes:

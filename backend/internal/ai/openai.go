@@ -55,7 +55,7 @@ Respond ONLY in valid JSON format with the following structure:
   "risk_level": ("Low", "Medium", "High", "Critical"),
   "summary": (brief string),
   "breaking_changes": [string array],
-  "action_required": (boolean)
+  "action_required": (boolean, set to true ONLY if manual user intervention or config changes are required before updating)
 }
 
 Release Notes:
