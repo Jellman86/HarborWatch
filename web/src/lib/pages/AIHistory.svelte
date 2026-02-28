@@ -54,7 +54,7 @@
     }
 
     let timelineDays = $derived(buildTimeline14Days(usageSummary?.daily || []));
-    let maxCalls = $derived(Math.max(...timelineDays.map(d => d.calls), 1));
+    let maxCalls = $derived(Math.max(...timelineDays.map(d => d.calls), 10));
     let timelineHasActivity = $derived(timelineDays.some(d => d.calls > 0));
 
     function normalizeText(raw: string | null | undefined): string {
@@ -190,12 +190,11 @@
             <div class="relative flex items-end justify-between gap-1 h-32 px-2">
                 {#if usageSummary}
                     {#each timelineDays as day}
-                        <div class="flex-1 flex flex-col items-center gap-2 group">
-                            <div 
+                        <div class="flex-1 h-full flex flex-col justify-end items-center gap-2 group">
+                            <div
                                 class="w-full bg-brand-500/20 group-hover:bg-brand-500/40 transition-all rounded-t-sm relative"
                                 style="height: {day.calls > 0 ? Math.max((day.calls / maxCalls) * 100, 6) : 4}%"
-                            >
-                                {#if day.calls > 0}
+                            >                                {#if day.calls > 0}
                                     <div class="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
                                         {day.calls} calls
                                     </div>
