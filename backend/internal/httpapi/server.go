@@ -22,6 +22,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/gitops"
 	"github.com/Jellman86/HarborWatch/backend/internal/healthremediation"
 	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
@@ -832,9 +833,21 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 		}
 	}
 
-	// Bootstrap schedules from DB
-	if err := schedSvc.LoadSchedules(context.Background()); err != nil && diagService != nil {
-		diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to load schedules from DB: %v", err))
+	gitopsStore := gitops.NewStore(db)
+	gitopsService := gitops.NewService(gitopsStore, settingsStore)
+
+	if schedSvc != nil {
+		schedSvc.RegisterTask("gitops_sync", func() scheduler.Task {
+			return gitops.NewSyncTask(gitopsService)
+		})
+		if err := schedSvc.AddTask("0 */5 * * * *", gitops.NewSyncTask(gitopsService), true); err != nil {
+			diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to register task gitops_sync: %v", err))
+		}
+
+		// Bootstrap schedules from DB
+		if err := schedSvc.LoadSchedules(context.Background()); err != nil && diagService != nil {
+			diagService.Log("ERROR", "Scheduler", fmt.Sprintf("Failed to load schedules from DB: %v", err))
+		}
 	}
 
 	return newMuxWithDepsAndComposeAuditStore(
@@ -2087,6 +2100,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 		registerComposeRoutes(r, adminDeps)
 		registerNetworkRoutes(r, adminDeps)
 		registerPortainerRoutes(r, adminDeps)
+		registerGitOpsRoutes(r, adminDeps)
 	})
 
 	staticDir := filepath.Clean(filepath.Join("..", "web", "dist"))

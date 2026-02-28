@@ -8,12 +8,16 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 )
 
-type Service struct {
-	store         *Store
-	settingsStore *settings.Store
+type SettingsProvider interface {
+	Get(ctx context.Context) (settings.Settings, error)
 }
 
-func NewService(store *Store, settingsStore *settings.Store) *Service {
+type Service struct {
+	store         *Store
+	settingsStore SettingsProvider
+}
+
+func NewService(store *Store, settingsStore SettingsProvider) *Service {
 	return &Service{
 		store:         store,
 		settingsStore: settingsStore,
