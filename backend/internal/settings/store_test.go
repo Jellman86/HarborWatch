@@ -228,3 +228,22 @@ func TestSetDashboardUpdateCheckSnapshotPersistsReadOnlyFields(t *testing.T) {
 		t.Fatalf("expected DashboardLastUpdateCheckAt=1700000123, got %d", got.DashboardLastUpdateCheckAt)
 	}
 }
+
+func TestSavePersistsGitOpsMasterDirectory(t *testing.T) {
+	store := newTestStore(t)
+
+	const expected = "/mnt/Storage-SSD/dockercompose"
+	if err := store.Save(context.Background(), Settings{
+		GitOpsMasterDirectory: expected,
+	}); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+
+	got, err := store.Get(context.Background())
+	if err != nil {
+		t.Fatalf("get settings: %v", err)
+	}
+	if got.GitOpsMasterDirectory != expected {
+		t.Fatalf("expected GitOpsMasterDirectory=%q, got %q", expected, got.GitOpsMasterDirectory)
+	}
+}

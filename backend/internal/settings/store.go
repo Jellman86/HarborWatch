@@ -467,6 +467,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"trivySweepMode":                       "trivy_sweep_mode",
 		"dockerPruneIncludeUnusedTaggedImages": "docker_prune_include_unused_tagged_images",
 		"composeSnapshotRootPath":              "compose_snapshot_root_path",
+		"gitOpsMasterDirectory":                "gitops_master_directory",
 		"clamavSnapshotMaxBytes":               "clamav_snapshot_max_bytes",
 		"dataRetentionDays":                    "data_retention_days",
 		"retentionLogsDays":                    "retention_logs_days",
