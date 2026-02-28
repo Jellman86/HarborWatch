@@ -357,6 +357,28 @@ func TestRunCreatesAITablesAndIndexes(t *testing.T) {
 	}
 }
 
+func TestRunCreatesGitOpsTablesAndIndexes(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	if _, err := Run(ctx, db); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	for _, table := range []string{"git_sources", "git_deployments"} {
+		var exists int
+		err := db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1`, table).Scan(&exists)
+		if err != nil {
+			t.Fatalf("expected table %s after migrations: %v", table, err)
+		}
+	}
+
+	var exists int
+	if err := db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_git_deployments_source' LIMIT 1`).Scan(&exists); err != nil {
+		t.Fatalf("expected idx_git_deployments_source after migrations: %v", err)
+	}
+}
+
 func TestRunUpgradesLegacyContainerIntelColumns(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

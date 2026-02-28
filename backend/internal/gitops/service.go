@@ -2,8 +2,8 @@ package gitops
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"path/filepath"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 )
@@ -31,6 +31,9 @@ func (s *Service) SyncSource(ctx context.Context, sourceID string) (string, bool
 	if err != nil {
 		return "", false, fmt.Errorf("failed to get source: %w", err)
 	}
+	if err := NormalizeSource(&src); err != nil {
+		return "", false, fmt.Errorf("invalid git source configuration: %w", err)
+	}
 
 	st, err := s.settingsStore.Get(ctx)
 	if err != nil {
@@ -41,7 +44,10 @@ func (s *Service) SyncSource(ctx context.Context, sourceID string) (string, bool
 		return "", false, fmt.Errorf("GitOps master directory is not configured")
 	}
 
-	targetPath := filepath.Join(st.GitOpsMasterDirectory, src.TargetDir)
+	targetPath, err := ResolvePathUnder(st.GitOpsMasterDirectory, src.TargetDir)
+	if err != nil {
+		return "", false, fmt.Errorf("invalid target path: %w", err)
+	}
 
 	newHash, syncErr := SyncRepository(ctx, src.URL, src.Branch, targetPath, src.AuthMethod, src.AuthSecret)
 
@@ -54,8 +60,9 @@ func (s *Service) SyncSource(ctx context.Context, sourceID string) (string, bool
 	// Update DB
 	dbErr := s.store.UpdateSourceSyncStatus(ctx, sourceID, newHash, errStr)
 	if dbErr != nil {
-		// Log the error but return the sync error if it exists
-		if syncErr == nil {
+		if syncErr != nil {
+			syncErr = errors.Join(syncErr, fmt.Errorf("failed to save sync status: %w", dbErr))
+		} else {
 			syncErr = fmt.Errorf("failed to save sync status: %w", dbErr)
 		}
 	}

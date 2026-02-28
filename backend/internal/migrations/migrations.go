@@ -117,5 +117,10 @@ func defaultMigrations() []Migration {
 			Name:    "upgrade_container_rules_dependent_restart_columns",
 			ApplyTx: migrateContainerRulesDependentRestartColumns,
 		},
+		{
+			Version: 19,
+			Name:    "create_gitops_tables",
+			SQL:     mustReadSQL("sql/0019_create_gitops_tables.sql"),
+		},
 	}
 }

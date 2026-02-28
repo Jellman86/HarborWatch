@@ -312,6 +312,7 @@
                             <div class="flex items-center gap-4">
                                 <button 
                                     onclick={() => toggleExpand(source.id)}
+                                    aria-label={expandedSourceId === source.id ? `Collapse repository ${source.name}` : `Expand repository ${source.name}`}
                                     class="w-14 h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700 transition-all group-hover:bg-brand-500/5 group-hover:border-brand-500/20 active:scale-90"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-slate-400 dark:text-slate-500 group-hover:text-brand-500 transition-transform duration-300 {expandedSourceId === source.id ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -430,6 +431,7 @@
                                                     </button>
                                                     <button 
                                                         onclick={() => deleteDeployment(dep.id, source.id)}
+                                                        aria-label={`Delete deployment ${dep.composePath}`}
                                                         class="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
                                                     >
                                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -465,7 +467,7 @@
             <div class="p-8 space-y-6">
                 <div class="flex items-center justify-between">
                     <h3 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Connect Repository</h3>
-                    <button onclick={() => showAddSourceModal = false} class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                    <button onclick={() => showAddSourceModal = false} aria-label="Close connect repository dialog" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -496,7 +498,7 @@
                     </div>
 
                     <div class="space-y-1.5 pt-2">
-                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Authentication Method</label>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Authentication Method</p>
                         <div class="flex flex-wrap gap-2">
                             {#each ['none', 'http_token', 'ssh_key'] as method}
                                 <button 
@@ -551,7 +553,7 @@
                         <h3 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Deploy Stack</h3>
                         <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Source: {sources.find(s => s.id === selectedSourceId)?.name}</p>
                     </div>
-                    <button onclick={() => showAddDeploymentModal = false} class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                    <button onclick={() => showAddDeploymentModal = false} aria-label="Close deploy stack dialog" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -566,7 +568,7 @@
 
                     <div class="space-y-3">
                         <div class="flex items-center justify-between ml-1">
-                            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Environment Variables (.env)</label>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Environment Variables (.env)</p>
                             <button onclick={addEnvVar} class="text-[9px] font-black text-brand-600 uppercase tracking-widest hover:underline">+ Add Variable</button>
                         </div>
                         
@@ -578,7 +580,7 @@
                                     <div class="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200" style="--index: {i}">
                                         <input bind:value={env.key} placeholder="KEY" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
                                         <input bind:value={env.value} type="password" placeholder="VALUE" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
-                                        <button onclick={() => removeEnvVar(i)} class="p-2 text-slate-400 hover:text-rose-500">
+                                        <button onclick={() => removeEnvVar(i)} aria-label={`Remove environment variable ${i + 1}`} class="p-2 text-slate-400 hover:text-rose-500">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                             </svg>

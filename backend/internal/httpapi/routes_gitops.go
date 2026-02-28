@@ -26,7 +26,7 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 	gitService := gitops.NewService(gitStore, deps.settingsService)
 
 	r.Route("/gitops", func(r chi.Router) {
-		
+
 		// SOURCES
 		r.Route("/sources", func(r chi.Router) {
 			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -48,22 +48,19 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 					return
 				}
-				if src.Name == "" || src.URL == "" || src.Branch == "" || src.TargetDir == "" {
-					writeError(w, http.StatusBadRequest, "invalid_request", "name, url, branch, and targetDir are required")
+				if err := gitops.NormalizeSource(&src); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 					return
 				}
 				if src.ID == "" {
 					src.ID = uuid.NewString()
-				}
-				if src.SyncIntervalMins <= 0 {
-					src.SyncIntervalMins = 5 // Default
 				}
 
 				if err := gitStore.CreateSource(req.Context(), src); err != nil {
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
 				}
-				
+
 				// Return the created source, but mask secret
 				src.AuthSecret = ""
 				writeJSON(w, http.StatusOK, src)
@@ -142,8 +139,8 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 					return
 				}
-				if dep.GitSourceID == "" || dep.ComposePath == "" {
-					writeError(w, http.StatusBadRequest, "invalid_request", "gitSourceId and composePath are required")
+				if err := gitops.NormalizeDeployment(&dep); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 					return
 				}
 				if dep.ID == "" {
@@ -167,7 +164,7 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 
 			r.Post("/{id}/deploy", func(w http.ResponseWriter, req *http.Request) {
 				id := chi.URLParam(req, "id")
-				
+
 				// Need to lookup source ID from deployment
 				var sourceID string
 				// Quick lookup
@@ -181,7 +178,7 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					writeError(w, http.StatusInternalServerError, "deploy_failed", err.Error())
 					return
 				}
-				
+
 				writeJSON(w, http.StatusOK, gitOpsResponse{OK: true})
 			})
 		})
