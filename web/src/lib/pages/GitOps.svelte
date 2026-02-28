@@ -286,6 +286,13 @@
         if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
         return new Date(ts * 1000).toLocaleDateString();
     }
+
+    function resolvedComposeMapping(targetDir: string, composePath: string): string {
+        const baseDir = String(configStore.gitOpsMasterDirectory || "").replace(/\/+$/, "");
+        const normalizedTargetDir = String(targetDir || "").replace(/^\/+|\/+$/g, "");
+        const normalizedComposePath = String(composePath || "").replace(/^\/+/, "");
+        return [baseDir, normalizedTargetDir, normalizedComposePath].filter(Boolean).join("/");
+    }
 </script>
 
 <div class="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
@@ -442,6 +449,7 @@
                                                     </div>
                                                     <div>
                                                         <p class="text-sm font-bold text-slate-900 dark:text-white font-mono">{dep.composePath}</p>
+                                                        <p class="text-[10px] text-slate-500 mt-0.5 font-mono break-all">Mapped: {resolvedComposeMapping(source.targetDir, dep.composePath)}</p>
                                                         <p class="text-[10px] text-slate-500 mt-0.5">Last deployed: {formatRelativeTime(dep.lastDeployedAt)} {dep.lastDeployedHash ? `(${dep.lastDeployedHash.slice(0, 7)})` : ''}</p>
                                                         {#if dep.envFilePath}
                                                             <p class="text-[10px] text-slate-500 mt-0.5 font-mono">Env file: {dep.envFilePath}</p>
@@ -609,6 +617,9 @@
                     <div class="space-y-1.5">
                         <label for="dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Compose File Path (relative to repo root)</label>
                         <input id="dep-path" bind:value={newDeployment.composePath} placeholder="docker-compose.yml" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                        <p class="text-[10px] text-slate-500 ml-1 italic">
+                            Mapped path: {resolvedComposeMapping(sources.find(s => s.id === selectedSourceId)?.targetDir || "", newDeployment.composePath)}
+                        </p>
                     </div>
 
                     <div class="space-y-1.5">
