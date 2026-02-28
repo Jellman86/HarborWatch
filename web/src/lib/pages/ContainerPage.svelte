@@ -1598,20 +1598,26 @@
                         <div class="space-y-6">
                         {#if configStore.aiActive}
                             <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                                <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Breaking Change Signals</h3>
-                                <p class="text-[11px] text-slate-500 mt-1">Recent AI release assessments that flagged breaking-change risk.</p>
+                                <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">AI Upgrade Risk Signals</h3>
+                                <p class="text-[11px] text-slate-500 mt-1">Recent AI release assessments that flagged breaking-change risk or blocked an update.</p>
                                 <div class="mt-4 space-y-3 max-h-[280px] overflow-y-auto pr-1">
                                     {#if loadingUpdateHistory}
                                         <p class="text-[11px] text-slate-500">Loading lifecycle history...</p>
                                     {:else}
-                                        {#each updateHistory.filter((job) => (job.aiAnalysis?.breakingChanges || []).length > 0).slice(0, 6) as job}
+                                        {#each updateHistory.filter((job) => (job.aiAnalysis?.breakingChanges || []).length > 0 || extractAIBlockedReason(job) !== "").slice(0, 6) as job}
+                                            {@const blockReason = extractAIBlockedReason(job)}
                                             <div class="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-3">
                                                 <p class="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{job.targetImage}</p>
                                                 <p class="text-[10px] text-amber-700/80 dark:text-amber-200/90 mt-1">{new Date(job.updatedAt * 1000).toLocaleString()}</p>
-                                                <p class="text-[11px] text-amber-900 dark:text-amber-100 mt-2">{job.aiAnalysis?.breakingChanges?.[0]}</p>
+                                                {#if (job.aiAnalysis?.breakingChanges || []).length > 0}
+                                                    <p class="text-[11px] text-amber-900 dark:text-amber-100 mt-2">{job.aiAnalysis?.breakingChanges?.[0]}</p>
+                                                {/if}
+                                                {#if blockReason}
+                                                    <p class="text-[11px] text-rose-700 dark:text-rose-400 font-bold mt-1">Blocked: {blockReason}</p>
+                                                {/if}
                                             </div>
                                         {:else}
-                                            <p class="text-[11px] text-slate-500 italic">No recent breaking-change notices for this container.</p>
+                                            <p class="text-[11px] text-slate-500 italic">No recent risk notices or blocks for this container.</p>
                                         {/each}
                                     {/if}
                                 </div>
