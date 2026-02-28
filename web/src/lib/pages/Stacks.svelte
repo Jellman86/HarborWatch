@@ -128,7 +128,7 @@
             return;
         }
         if (requested === "portainer") {
-            activeSourceTab = "portainer";
+            activeSourceTab = configStore.portainerActive ? "portainer" : "compose";
             return;
         }
         if (requested === "compose") {
@@ -295,13 +295,15 @@
             Compose Files
             <span class="px-1.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-600 dark:text-slate-300">{composeProjects.length}</span>
         </button>
-        <button
-            onclick={() => activeSourceTab = "portainer"}
-            class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'portainer' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
-        >
-            Portainer Stacks
-            <span class="px-1.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-600 dark:text-slate-300">{stacks.length}</span>
-        </button>
+        {#if configStore.portainerActive}
+            <button
+                onclick={() => activeSourceTab = "portainer"}
+                class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'portainer' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+            >
+                Portainer Stacks
+                <span class="px-1.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-600 dark:text-slate-300">{stacks.length}</span>
+            </button>
+        {/if}
         <button
             onclick={() => activeSourceTab = "repositories"}
             class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'repositories' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
@@ -461,7 +463,7 @@
         </section>
         {/if}
 
-        {#if activeSourceTab === "portainer"}
+        {#if configStore.portainerActive && activeSourceTab === "portainer"}
         <section class="space-y-4 pt-2">
             <div class="flex items-center justify-between gap-3">
                 <div>

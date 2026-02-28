@@ -1059,7 +1059,7 @@
                                 Update Available
                             </span>
                         {/if}
-                        {#if intel}
+                        {#if intel && !(intel?.portainerManaged && orchestrationModeLabel() === "Portainer")}
                             <span class="px-2 py-1 border rounded text-[9px] font-black uppercase whitespace-nowrap {orchestrationModeBadgeClass()}">
                                 {orchestrationModeLabel()}
                             </span>
