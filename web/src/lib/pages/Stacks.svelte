@@ -3,6 +3,7 @@
     import PaginationBar from "../components/PaginationBar.svelte";
     import GitOps from "./GitOps.svelte";
     import { toasts } from "../stores/ToastStore";
+    import { configStore } from "../stores/config.svelte";
 
     let { onNavigate, params = null } = $props<{
         onNavigate: (route: string, params?: any) => void;
