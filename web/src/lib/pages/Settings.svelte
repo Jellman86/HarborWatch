@@ -2674,58 +2674,62 @@
                         </div>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-3">
-                        <div>
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Discord Notifications</p>
-                            <p class="text-[11px] text-slate-500 mt-1">Enable or disable outbound Discord alerts without deleting credentials.</p>
-                        </div>
-                        <button
-                            onclick={() => settings.discordEnabled = !settings.discordEnabled}
-                            disabled={isLocked("discordEnabled")}
-                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.discordEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                            aria-label="Toggle Discord notifications"
-                        >
-                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.discordEnabled ? 'right-1' : 'left-1'}"></div>
-                        </button>
-                    </div>
-
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-3">
-                        <div>
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Portainer Integration</p>
-                            <p class="text-[11px] text-slate-500 mt-1">Control whether HarborWatch should query Portainer APIs.</p>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            {#if settings.portainerEnabled && !settings.portainerTestingPassed}
-                                <span class="px-2 py-1 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[9px] font-black uppercase">Connectivity Error</span>
-                            {/if}
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-5 space-y-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Discord Notifications</p>
+                                <p class="text-[11px] text-slate-500 mt-1">Enable outbound Discord alerts without deleting stored credentials.</p>
+                            </div>
                             <button
-                                onclick={() => settings.portainerEnabled = !settings.portainerEnabled}
-                                disabled={isLocked("portainerEnabled")}
-                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.portainerEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                aria-label="Toggle Portainer integration"
+                                onclick={() => settings.discordEnabled = !settings.discordEnabled}
+                                disabled={isLocked("discordEnabled")}
+                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.discordEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                aria-label="Toggle Discord notifications"
                             >
-                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.portainerEnabled ? 'right-1' : 'left-1'}"></div>
+                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.discordEnabled ? 'right-1' : 'left-1'}"></div>
                             </button>
                         </div>
-                    </div>
-                </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <div class="space-y-2">
-                        <label for="discord-webhook" class="text-[10px] font-black uppercase text-slate-400 ml-1">Discord Webhook</label>
-                        <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl") || !settings.discordEnabled} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <p class="text-[11px] text-slate-500">Incoming webhook used for outbound alerts (detections, automation events, failures).</p>
+                        <div class="space-y-2">
+                            <label for="discord-webhook" class="text-[10px] font-black uppercase text-slate-400 ml-1">Discord Webhook</label>
+                            <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl") || !settings.discordEnabled} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                            <p class="text-[11px] text-slate-500">Incoming webhook for detections, automation events, and failures.</p>
+                        </div>
                     </div>
-                    <div class="space-y-2">
-                        <label for="portainer-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer URL</label>
-                        <input id="portainer-url" bind:value={settings.portainerUrl} disabled={isLocked("portainerUrl") || !settings.portainerEnabled} placeholder="https://portainer.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <p class="text-[11px] text-slate-500">Base URL for Portainer API access. Used to enrich container and stack metadata.</p>
-                    </div>
-                    <div class="space-y-2 xl:col-span-2">
-                        <label for="portainer-api-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer API Key</label>
-                        <input id="portainer-api-key" type="password" bind:value={settings.portainerApiKey} disabled={isLocked("portainerApiKey") || !settings.portainerEnabled} placeholder="ptr_..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <p class="text-[11px] text-slate-500">Token HarborWatch uses for authenticated Portainer calls. Keep scope limited to required read/write actions.</p>
+
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-5 space-y-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Portainer Integration</p>
+                                <p class="text-[11px] text-slate-500 mt-1">Control whether HarborWatch should query Portainer APIs.</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                {#if settings.portainerEnabled && !settings.portainerTestingPassed}
+                                    <span class="px-2 py-1 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[9px] font-black uppercase">Connectivity Error</span>
+                                {/if}
+                                <button
+                                    onclick={() => settings.portainerEnabled = !settings.portainerEnabled}
+                                    disabled={isLocked("portainerEnabled")}
+                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.portainerEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                                    aria-label="Toggle Portainer integration"
+                                >
+                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.portainerEnabled ? 'right-1' : 'left-1'}"></div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label for="portainer-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer URL</label>
+                            <input id="portainer-url" bind:value={settings.portainerUrl} disabled={isLocked("portainerUrl") || !settings.portainerEnabled} placeholder="https://portainer.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                            <p class="text-[11px] text-slate-500">Base URL for Portainer API access and stack metadata enrichment.</p>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label for="portainer-api-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer API Key</label>
+                            <input id="portainer-api-key" type="password" bind:value={settings.portainerApiKey} disabled={isLocked("portainerApiKey") || !settings.portainerEnabled} placeholder="ptr_..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                            <p class="text-[11px] text-slate-500">Token used for authenticated Portainer calls. Keep scope limited.</p>
+                        </div>
                     </div>
                 </div>
             </div>

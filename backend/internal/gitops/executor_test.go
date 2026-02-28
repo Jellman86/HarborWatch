@@ -37,3 +37,21 @@ func TestBuildEnvFileRejectsWindowsLineEndingsInValues(t *testing.T) {
 		t.Fatalf("expected normalized error text, got %q", err.Error())
 	}
 }
+
+func TestResolveEnvFilePathSupportsAbsoluteAndRelative(t *testing.T) {
+	abs, err := resolveEnvFilePath("/data/gitops/repo", "/mnt/Storage-SSD/dockercompose/env/.env")
+	if err != nil {
+		t.Fatalf("resolveEnvFilePath absolute returned error: %v", err)
+	}
+	if abs != "/mnt/Storage-SSD/dockercompose/env/.env" {
+		t.Fatalf("unexpected absolute env file path: %s", abs)
+	}
+
+	rel, err := resolveEnvFilePath("/data/gitops/repo", "env/.env")
+	if err != nil {
+		t.Fatalf("resolveEnvFilePath relative returned error: %v", err)
+	}
+	if rel != "/data/gitops/repo/env/.env" {
+		t.Fatalf("unexpected relative env file path: %s", rel)
+	}
+}

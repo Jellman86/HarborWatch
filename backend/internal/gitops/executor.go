@@ -40,6 +40,9 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 	if err := NormalizeDeployment(dep); err != nil {
 		return fmt.Errorf("invalid deployment configuration: %w", err)
 	}
+	if !dep.Enabled {
+		return fmt.Errorf("deployment %s is disabled", dep.ID)
+	}
 
 	st, err := s.settingsStore.Get(ctx)
 	if err != nil {
@@ -69,8 +72,18 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 	// Build the command
 	args := []string{"compose", "-f", composeFile}
 
-	// Handle environment overrides
+	// Handle env-file mapping and environment overrides.
 	envFilePath := ""
+	if dep.EnvFilePath != "" {
+		envFilePath, err = resolveEnvFilePath(repoPath, dep.EnvFilePath)
+		if err != nil {
+			return fmt.Errorf("invalid deployment env file path: %w", err)
+		}
+		if _, err := os.Stat(envFilePath); err != nil {
+			return fmt.Errorf("env file not found at %s", envFilePath)
+		}
+		args = append(args, "--env-file", envFilePath)
+	}
 	if dep.EnvVarsJSON != "" {
 		var envVars map[string]string
 		if err := json.Unmarshal([]byte(dep.EnvVarsJSON), &envVars); err != nil {
@@ -83,13 +96,13 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 				return err
 			}
 
-			envFilePath = filepath.Join(workDir, ".env.harborwatch")
-			if err := os.WriteFile(envFilePath, []byte(envContent), 0600); err != nil {
+			overrideEnvFilePath := filepath.Join(workDir, ".env.harborwatch")
+			if err := os.WriteFile(overrideEnvFilePath, []byte(envContent), 0600); err != nil {
 				return fmt.Errorf("failed to write env file: %w", err)
 			}
-			defer os.Remove(envFilePath) // Clean up afterwards
+			defer os.Remove(overrideEnvFilePath) // Clean up afterwards
 
-			args = append(args, "--env-file", envFilePath)
+			args = append(args, "--env-file", overrideEnvFilePath)
 		}
 	}
 
@@ -133,12 +146,26 @@ func (s *Service) DeployAllForSource(ctx context.Context, sourceID string) []err
 
 	var errs []error
 	for _, dep := range deps {
+		if !dep.Enabled {
+			continue
+		}
 		if err := s.DeployCompose(ctx, sourceID, dep.ID); err != nil {
 			errs = append(errs, fmt.Errorf("deployment %s failed: %w", dep.ID, err))
 		}
 	}
 
 	return errs
+}
+
+func resolveEnvFilePath(repoPath, rawPath string) (string, error) {
+	path := strings.TrimSpace(rawPath)
+	if path == "" {
+		return "", fmt.Errorf("env file path is empty")
+	}
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	return ResolvePathUnder(repoPath, path)
 }
 
 func buildEnvFile(envVars map[string]string) (string, error) {

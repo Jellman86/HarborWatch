@@ -27,13 +27,13 @@ func (t *gitopsSyncTask) Run(ctx context.Context) error {
 	}
 
 	for _, src := range sources {
-		// We could implement fine-grained scheduling per source here, 
+		// We could implement fine-grained scheduling per source here,
 		// but for the MVP we'll just check if it's time to sync based on LastSyncAt and SyncIntervalMins.
 		// Actually, the scheduler itself can run this task every minute, and we decide here.
-		
+
 		// For simplicity in MVP, we just sync all of them when the task runs.
 		// The user can configure the task itself to run every 5 mins.
-		
+
 		log.Printf("[INFO] GitOps: Syncing source %s (%s)", src.Name, src.ID)
 		hash, changed, err := t.service.SyncSource(ctx, src.ID)
 		if err != nil {

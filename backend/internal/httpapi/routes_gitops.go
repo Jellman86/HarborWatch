@@ -16,6 +16,10 @@ type gitOpsResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
+type toggleDeploymentRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
 func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 	if deps.db == nil || deps.settingsService == nil {
 		// Mocked out in tests, or database not available
@@ -156,6 +160,20 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 			r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
 				id := chi.URLParam(req, "id")
 				if err := gitStore.DeleteDeployment(req.Context(), id); err != nil {
+					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, gitOpsResponse{OK: true})
+			})
+
+			r.Patch("/{id}/enabled", func(w http.ResponseWriter, req *http.Request) {
+				id := chi.URLParam(req, "id")
+				var body toggleDeploymentRequest
+				if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+					return
+				}
+				if err := gitStore.UpdateDeploymentEnabled(req.Context(), id, body.Enabled); err != nil {
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
 				}

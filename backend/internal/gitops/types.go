@@ -28,6 +28,8 @@ type GitDeployment struct {
 	GitSourceID      string `json:"gitSourceId"`
 	ComposePath      string `json:"composePath"`
 	EnvVarsJSON      string `json:"envVarsJson"` // JSON string map of overrides
+	EnvFilePath      string `json:"envFilePath"`
+	Enabled          bool   `json:"enabled"`
 	LastDeployedHash string `json:"lastDeployedHash"`
 	LastDeployedAt   int64  `json:"lastDeployedAt"`
 	LastError        string `json:"lastError"`

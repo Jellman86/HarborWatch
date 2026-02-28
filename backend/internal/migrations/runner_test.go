@@ -377,6 +377,12 @@ func TestRunCreatesGitOpsTablesAndIndexes(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_git_deployments_source' LIMIT 1`).Scan(&exists); err != nil {
 		t.Fatalf("expected idx_git_deployments_source after migrations: %v", err)
 	}
+
+	for _, col := range []string{"compose_path", "env_vars_json", "env_file_path", "enabled"} {
+		if !hasColumn(t, db, "git_deployments", col) {
+			t.Fatalf("expected git_deployments.%s after migrations", col)
+		}
+	}
 }
 
 func TestRunUpgradesLegacyContainerIntelColumns(t *testing.T) {

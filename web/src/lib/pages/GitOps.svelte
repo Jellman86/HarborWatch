@@ -27,6 +27,8 @@
         gitSourceId: string;
         composePath: string;
         envVarsJson?: string;
+        envFilePath?: string;
+        enabled?: boolean;
         lastDeployedHash?: string;
         lastDeployedAt: number;
         lastError?: string;
@@ -56,6 +58,8 @@
 
     let newDeployment = $state({
         composePath: "docker-compose.yml",
+        envFilePath: "",
+        enabled: true,
         envVars: [] as { key: string, value: string }[]
     });
 
@@ -144,6 +148,8 @@
                 body: JSON.stringify({
                     gitSourceId: selectedSourceId,
                     composePath: newDeployment.composePath,
+                    envFilePath: newDeployment.envFilePath,
+                    enabled: newDeployment.enabled,
                     envVarsJson: JSON.stringify(envMap)
                 })
             });
@@ -154,6 +160,8 @@
                 // Reset
                 newDeployment = {
                     composePath: "docker-compose.yml",
+                    envFilePath: "",
+                    enabled: true,
                     envVars: []
                 };
             } else {
@@ -172,6 +180,25 @@
             if (res.ok) {
                 toasts.success("Deployment removed");
                 loadDeployments(sourceId);
+            }
+        } catch (e) {
+            toasts.error("Connection error");
+        }
+    }
+
+    async function toggleDeployment(id: string, sourceId: string, enabled: boolean) {
+        try {
+            const res = await fetch(`/api/gitops/deployments/${id}/enabled`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled })
+            });
+            if (res.ok) {
+                toasts.success(enabled ? "Deployment enabled" : "Deployment disabled");
+                loadDeployments(sourceId);
+            } else {
+                const data = await res.json().catch(() => ({}));
+                toasts.error(data.message || "Failed to update deployment status");
             }
         } catch (e) {
             toasts.error("Connection error");
@@ -416,9 +443,17 @@
                                                     <div>
                                                         <p class="text-sm font-bold text-slate-900 dark:text-white font-mono">{dep.composePath}</p>
                                                         <p class="text-[10px] text-slate-500 mt-0.5">Last deployed: {formatRelativeTime(dep.lastDeployedAt)} {dep.lastDeployedHash ? `(${dep.lastDeployedHash.slice(0, 7)})` : ''}</p>
+                                                        {#if dep.envFilePath}
+                                                            <p class="text-[10px] text-slate-500 mt-0.5 font-mono">Env file: {dep.envFilePath}</p>
+                                                        {/if}
                                                     </div>
                                                 </div>
                                                 <div class="flex items-center gap-2">
+                                                    {#if dep.enabled === false}
+                                                        <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[9px] font-black uppercase tracking-widest">
+                                                            Disabled
+                                                        </span>
+                                                    {/if}
                                                     {#if dep.lastError}
                                                         <span class="p-2 text-rose-500" title={dep.lastError}>
                                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -428,10 +463,16 @@
                                                     {/if}
                                                     <button 
                                                         onclick={() => deployNow(dep.id)}
-                                                        disabled={deploying[dep.id]}
+                                                        disabled={deploying[dep.id] || dep.enabled === false}
                                                         class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-all disabled:opacity-50"
                                                     >
                                                         {deploying[dep.id] ? 'Deploying...' : 'Deploy Now'}
+                                                    </button>
+                                                    <button
+                                                        onclick={() => toggleDeployment(dep.id, source.id, dep.enabled === false)}
+                                                        class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-all"
+                                                    >
+                                                        {dep.enabled === false ? 'Enable' : 'Disable'}
                                                     </button>
                                                     <button 
                                                         onclick={() => deleteDeployment(dep.id, source.id)}
@@ -568,6 +609,26 @@
                     <div class="space-y-1.5">
                         <label for="dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Compose File Path (relative to repo root)</label>
                         <input id="dep-path" bind:value={newDeployment.composePath} placeholder="docker-compose.yml" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label for="dep-env-file" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Env File Path (optional)</label>
+                        <input id="dep-env-file" bind:value={newDeployment.envFilePath} placeholder=".env or /mnt/Storage-SSD/dockercompose/app/.env" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                        <p class="text-[10px] text-slate-500 ml-1 italic">Supports repo-relative paths and absolute host paths.</p>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Deployment Active</p>
+                            <p class="text-[10px] text-slate-500 mt-1">Disabled rules are kept but skipped during auto-sync deploys.</p>
+                        </div>
+                        <button
+                            onclick={() => newDeployment.enabled = !newDeployment.enabled}
+                            class="w-10 h-5 rounded-full relative transition-colors {newDeployment.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                            aria-label="Toggle deployment active state"
+                        >
+                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {newDeployment.enabled ? 'right-1' : 'left-1'}"></div>
+                        </button>
                     </div>
 
                     <div class="space-y-3">

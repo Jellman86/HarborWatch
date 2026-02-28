@@ -125,7 +125,7 @@ func (s *Store) DeleteSource(ctx context.Context, id string) error {
 // GitDeployment Operations
 
 func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) ([]GitDeployment, error) {
-	query := `SELECT id, git_source_id, compose_path, env_vars_json, last_deployed_hash, last_deployed_at, last_error FROM git_deployments WHERE git_source_id = ?`
+	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, enabled, last_deployed_hash, last_deployed_at, last_error FROM git_deployments WHERE git_source_id = ?`
 	rows, err := s.db.QueryContext(ctx, query, sourceID)
 	if err != nil {
 		return nil, err
@@ -135,9 +135,9 @@ func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) (
 	deps := make([]GitDeployment, 0)
 	for rows.Next() {
 		var dep GitDeployment
-		var envVars, lastDepHash, lastError sql.NullString
+		var envVars, envFilePath, lastDepHash, lastError sql.NullString
 		if err := rows.Scan(
-			&dep.ID, &dep.GitSourceID, &dep.ComposePath, &envVars,
+			&dep.ID, &dep.GitSourceID, &dep.ComposePath, &envVars, &envFilePath, &dep.Enabled,
 			&lastDepHash, &dep.LastDeployedAt, &lastError,
 		); err != nil {
 			return nil, err
@@ -148,6 +148,9 @@ func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) (
 		if lastDepHash.Valid {
 			dep.LastDeployedHash = lastDepHash.String
 		}
+		if envFilePath.Valid {
+			dep.EnvFilePath = envFilePath.String
+		}
 		if lastError.Valid {
 			dep.LastError = lastError.String
 		}
@@ -157,15 +160,19 @@ func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) (
 }
 
 func (s *Store) CreateDeployment(ctx context.Context, dep GitDeployment) error {
-	query := `INSERT INTO git_deployments (id, git_source_id, compose_path, env_vars_json) VALUES (?, ?, ?, ?)`
+	query := `INSERT INTO git_deployments (id, git_source_id, compose_path, env_vars_json, env_file_path, enabled) VALUES (?, ?, ?, ?, ?, ?)`
 
-	var envVars sql.NullString
+	var envVars, envFilePath sql.NullString
 	if dep.EnvVarsJSON != "" {
 		envVars.Valid = true
 		envVars.String = dep.EnvVarsJSON
 	}
+	if dep.EnvFilePath != "" {
+		envFilePath.Valid = true
+		envFilePath.String = dep.EnvFilePath
+	}
 
-	_, err := s.db.ExecContext(ctx, query, dep.ID, dep.GitSourceID, dep.ComposePath, envVars)
+	_, err := s.db.ExecContext(ctx, query, dep.ID, dep.GitSourceID, dep.ComposePath, envVars, envFilePath, dep.Enabled)
 	return err
 }
 
@@ -190,5 +197,11 @@ func (s *Store) UpdateDeploymentStatus(ctx context.Context, id, deployedHash, de
 func (s *Store) DeleteDeployment(ctx context.Context, id string) error {
 	query := `DELETE FROM git_deployments WHERE id = ?`
 	_, err := s.db.ExecContext(ctx, query, id)
+	return err
+}
+
+func (s *Store) UpdateDeploymentEnabled(ctx context.Context, id string, enabled bool) error {
+	query := `UPDATE git_deployments SET enabled = ? WHERE id = ?`
+	_, err := s.db.ExecContext(ctx, query, enabled, id)
 	return err
 }

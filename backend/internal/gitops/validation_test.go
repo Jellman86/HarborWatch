@@ -52,6 +52,22 @@ func TestNormalizeDeploymentRejectsAbsoluteComposePath(t *testing.T) {
 	}
 }
 
+func TestNormalizeDeploymentAllowsAbsoluteOrRelativeEnvFilePath(t *testing.T) {
+	dep := GitDeployment{
+		GitSourceID: "src-1",
+		ComposePath: "docker-compose.yml",
+		EnvFilePath: "/mnt/Storage-SSD/dockercompose/app/.env",
+	}
+	if err := NormalizeDeployment(&dep); err != nil {
+		t.Fatalf("expected absolute env file path to be allowed, got: %v", err)
+	}
+
+	dep.EnvFilePath = "env/.env.prod"
+	if err := NormalizeDeployment(&dep); err != nil {
+		t.Fatalf("expected relative env file path to be allowed, got: %v", err)
+	}
+}
+
 func TestResolvePathUnder(t *testing.T) {
 	got, err := ResolvePathUnder("/opt/harborwatch/gitops", "stack/docker-compose.yml")
 	if err != nil {

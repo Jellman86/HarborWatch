@@ -122,5 +122,10 @@ func defaultMigrations() []Migration {
 			Name:    "create_gitops_tables",
 			SQL:     mustReadSQL("sql/0019_create_gitops_tables.sql"),
 		},
+		{
+			Version: 20,
+			Name:    "add_gitops_deployment_enabled_and_env_file_path",
+			SQL:     mustReadSQL("sql/0020_add_gitops_deployment_enabled_and_env_file_path.sql"),
+		},
 	}
 }

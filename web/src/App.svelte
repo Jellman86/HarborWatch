@@ -26,6 +26,11 @@
       routeParams = { preset: "audit" };
       return;
     }
+    if (route === "gitops") {
+      currentRoute = "stacks";
+      routeParams = { tab: "repositories" };
+      return;
+    }
     currentRoute = route;
     routeParams = params;
   }
@@ -215,11 +220,7 @@
         {/await}
       {:else if currentRoute === 'stacks'}
         {#await import("./lib/pages/Stacks.svelte") then Mod}
-          <Mod.default onNavigate={navigate} />
-        {/await}
-      {:else if currentRoute === 'gitops'}
-        {#await import("./lib/pages/GitOps.svelte") then Mod}
-          <Mod.default onNavigate={navigate} />
+          <Mod.default onNavigate={navigate} params={routeParams} />
         {/await}
       {:else if currentRoute === 'compose-project-detail'}
         {#await import("./lib/pages/ComposeProjectDetail.svelte") then Mod}

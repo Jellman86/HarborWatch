@@ -47,12 +47,28 @@ func NormalizeDeployment(dep *GitDeployment) error {
 	dep.GitSourceID = strings.TrimSpace(dep.GitSourceID)
 	dep.ComposePath = strings.TrimSpace(dep.ComposePath)
 	dep.EnvVarsJSON = strings.TrimSpace(dep.EnvVarsJSON)
+	dep.EnvFilePath = strings.TrimSpace(dep.EnvFilePath)
 
 	if dep.GitSourceID == "" || dep.ComposePath == "" {
 		return fmt.Errorf("gitSourceId and composePath are required")
 	}
 	if err := validateRelativePath(dep.ComposePath, "composePath"); err != nil {
 		return err
+	}
+	if dep.EnvFilePath != "" {
+		if filepath.IsAbs(dep.EnvFilePath) {
+			cleaned := filepath.Clean(dep.EnvFilePath)
+			if cleaned == "." {
+				return fmt.Errorf("envFilePath is invalid")
+			}
+			dep.EnvFilePath = cleaned
+		} else if err := validateRelativePath(dep.EnvFilePath, "envFilePath"); err != nil {
+			return err
+		}
+	}
+	if dep.ID == "" {
+		// New deployment defaults to active; existing records keep their value.
+		dep.Enabled = true
 	}
 
 	return nil

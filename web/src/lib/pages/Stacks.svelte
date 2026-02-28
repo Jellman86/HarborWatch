@@ -1,10 +1,12 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import PaginationBar from "../components/PaginationBar.svelte";
+    import GitOps from "./GitOps.svelte";
     import { toasts } from "../stores/ToastStore";
 
-    let { onNavigate } = $props<{
+    let { onNavigate, params = null } = $props<{
         onNavigate: (route: string, params?: any) => void;
+        params?: { tab?: string } | null;
     }>();
 
     interface LocalComposeProjectMember {
@@ -46,7 +48,7 @@
     let pageIndex = $state(0);
     let composePageIndex = $state(0);
     const pageSize = 12;
-    let activeSourceTab = $state<"compose" | "portainer">("compose");
+    let activeSourceTab = $state<"compose" | "portainer" | "repositories">("compose");
 
     async function loadStacks() {
         loading = true;
@@ -117,6 +119,21 @@
 
     onMount(() => {
         loadStacks();
+    });
+
+    $effect(() => {
+        const requested = String(params?.tab || "").toLowerCase();
+        if (requested === "repositories") {
+            activeSourceTab = "repositories";
+            return;
+        }
+        if (requested === "portainer") {
+            activeSourceTab = "portainer";
+            return;
+        }
+        if (requested === "compose") {
+            activeSourceTab = "compose";
+        }
     });
 
     const stackType = (type: number) => {
@@ -284,6 +301,12 @@
         >
             Portainer Stacks
             <span class="px-1.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-600 dark:text-slate-300">{stacks.length}</span>
+        </button>
+        <button
+            onclick={() => activeSourceTab = "repositories"}
+            class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'repositories' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+        >
+            Repositories
         </button>
     </div>
 
@@ -535,6 +558,11 @@
                     {/each}
                 </div>
             {/if}
+        </section>
+        {/if}
+        {#if activeSourceTab === "repositories"}
+        <section class="pt-2">
+            <GitOps {onNavigate} />
         </section>
         {/if}
     {/if}
