@@ -42,6 +42,7 @@ type Settings struct {
 	TrivySweepMode                       string `json:"trivySweepMode"`
 	DockerPruneIncludeUnusedTaggedImages bool   `json:"dockerPruneIncludeUnusedTaggedImages"`
 	ComposeSnapshotRootPath              string `json:"composeSnapshotRootPath"`
+	GitOpsMasterDirectory                string `json:"gitOpsMasterDirectory"`
 	ClamAVSnapshotMaxBytes               int64  `json:"clamavSnapshotMaxBytes"`
 	DataRetentionDays                    int    `json:"dataRetentionDays"`
 	RetentionLogsDays                    int    `json:"retentionLogsDays"`
@@ -196,9 +197,10 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		case "docker_prune_include_unused_tagged_images":
 			st.DockerPruneIncludeUnusedTaggedImages = parseStoredBool(value, st.DockerPruneIncludeUnusedTaggedImages)
 		case "compose_snapshot_root_path":
-			st.ComposeSnapshotRootPath = strings.TrimSpace(value)
-		case "clamav_snapshot_max_bytes":
-			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
+		        st.ComposeSnapshotRootPath = strings.TrimSpace(value)
+		case "gitops_master_directory":
+		        st.GitOpsMasterDirectory = strings.TrimSpace(value)
+		case "clamav_snapshot_max_bytes":			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
 		case "data_retention_days":
 			st.DataRetentionDays = parseStoredInt(value, st.DataRetentionDays, 1, 3650)
 		case "retention_logs_days":
@@ -272,8 +274,8 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		"malwareIgnoredMounts":        {&st.MalwareIgnoredMounts, "HW_MALWARE_IGNORE_MOUNTS"},
 		"trivySweepMode":              {&st.TrivySweepMode, "HW_TRIVY_SWEEP_MODE"},
 		"composeSnapshotRootPath":     {&st.ComposeSnapshotRootPath, "HW_COMPOSE_SNAPSHOT_ROOT"},
-	}
-
+		"gitOpsMasterDirectory":       {&st.GitOpsMasterDirectory, "HW_GITOPS_MASTER_DIRECTORY"},
+		}
 	for jsonKey, mapping := range envMap {
 		if val := os.Getenv(mapping.envKey); val != "" {
 			*mapping.ptr = val
@@ -349,6 +351,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 
 	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
 	st.ComposeSnapshotRootPath = strings.TrimSpace(st.ComposeSnapshotRootPath)
+	st.GitOpsMasterDirectory = strings.TrimSpace(st.GitOpsMasterDirectory)
 	st.DefaultValidateMode = normalizeValidateModeValue(st.DefaultValidateMode)
 	st.AutomationIgnoredContainers = normalizeContainerIgnoreList(st.AutomationIgnoredContainers)
 	st.MalwareIgnoredMounts = normalizeDelimitedList(st.MalwareIgnoredMounts)
@@ -367,6 +370,7 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	st.AutoUpgradeMinRetryMinutes = parseStoredInt(strconv.Itoa(st.AutoUpgradeMinRetryMinutes), 60, 1, 24*60)
 	st.TrivySweepMode = normalizeTrivySweepMode(st.TrivySweepMode)
 	st.ComposeSnapshotRootPath = strings.TrimSpace(st.ComposeSnapshotRootPath)
+	st.GitOpsMasterDirectory = strings.TrimSpace(st.GitOpsMasterDirectory)
 	st.ClamAVSnapshotMaxBytes = parseStoredInt64(strconv.FormatInt(st.ClamAVSnapshotMaxBytes, 10), 2<<30, 1, 32<<30)
 	st.DefaultValidateMode = normalizeValidateModeValue(st.DefaultValidateMode)
 	st.DefaultValidateTimeoutSec = parseStoredInt(strconv.Itoa(st.DefaultValidateTimeoutSec), 45, 1, 3600)
@@ -410,9 +414,9 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 		"auto_upgrade_max_concurrency":              intString(st.AutoUpgradeMaxConcurrency),
 		"auto_upgrade_min_retry_minutes":            intString(st.AutoUpgradeMinRetryMinutes),
 		"trivy_sweep_mode":                          st.TrivySweepMode,
-		"docker_prune_include_unused_tagged_images": boolString(st.DockerPruneIncludeUnusedTaggedImages),
-		"compose_snapshot_root_path":                st.ComposeSnapshotRootPath,
-		"clamav_snapshot_max_bytes":                 int64String(st.ClamAVSnapshotMaxBytes),
+		"docker_prune_include_unused_tagged":        boolString(st.DockerPruneIncludeUnusedTaggedImages),		"compose_snapshot_root_path":                st.ComposeSnapshotRootPath,
+		"gitops_master_directory":                   st.GitOpsMasterDirectory,
+		"clamav_snapshot_max_bytes":                 fmt.Sprintf("%d", st.ClamAVSnapshotMaxBytes),
 		"data_retention_days":                       intString(st.DataRetentionDays),
 		"retention_logs_days":                       intString(st.RetentionLogsDays),
 		"retention_metrics_days":                    intString(st.RetentionMetricsDays),
