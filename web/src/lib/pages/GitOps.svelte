@@ -63,12 +63,16 @@
         loadSources();
     });
 
+    function asArray<T>(value: unknown): T[] {
+        return Array.isArray(value) ? (value as T[]) : [];
+    }
+
     async function loadSources() {
         loading = true;
         try {
             const res = await fetch("/api/gitops/sources");
             if (res.ok) {
-                sources = await res.json();
+                sources = asArray<GitSource>(await res.json());
                 // Load deployments for all sources
                 for (const src of sources) {
                     loadDeployments(src.id);
@@ -87,7 +91,7 @@
         try {
             const res = await fetch(`/api/gitops/deployments?sourceId=${sourceId}`);
             if (res.ok) {
-                deployments[sourceId] = await res.json();
+                deployments[sourceId] = asArray<GitDeployment>(await res.json());
             }
         } catch (e) {
             console.error(`Failed to load deployments for ${sourceId}`, e);

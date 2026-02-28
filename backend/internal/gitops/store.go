@@ -25,7 +25,7 @@ func (s *Store) ListSources(ctx context.Context) ([]GitSource, error) {
 	}
 	defer rows.Close()
 
-	var sources []GitSource
+	sources := make([]GitSource, 0)
 	for rows.Next() {
 		var src GitSource
 		var authSecret, lastCommitHash, lastSyncError sql.NullString
@@ -132,7 +132,7 @@ func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) (
 	}
 	defer rows.Close()
 
-	var deps []GitDeployment
+	deps := make([]GitDeployment, 0)
 	for rows.Next() {
 		var dep GitDeployment
 		var envVars, lastDepHash, lastError sql.NullString
