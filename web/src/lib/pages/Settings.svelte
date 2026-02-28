@@ -1447,7 +1447,7 @@
                                     <div class="grid grid-cols-1 gap-4">
                                     <div class="space-y-2">
                                         <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
-                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto">
+                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto custom-scrollbar">
                                             {#if discoveredContainers.length === 0}
                                                 <p class="px-3 py-3 text-[11px] text-slate-500 italic">No containers discovered. Start Docker to use auto-toggle exclusions.</p>
                                             {:else}
