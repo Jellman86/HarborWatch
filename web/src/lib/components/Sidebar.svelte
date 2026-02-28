@@ -61,8 +61,8 @@
             {/if}
         </div>
 
-    <!-- Nav Items -->
-    <nav class="flex-1 overflow-y-auto p-4 space-y-1.5">
+    <!-- Navigation -->
+    <nav class="flex-1 overflow-y-auto p-4 space-y-1.5 custom-scrollbar">
         {#each navItems as item}
             <button
                 class="w-full flex items-center gap-3.5 p-3 rounded-xl transition-all duration-300 group nav-item-hover {currentRoute === item.path ? 'nav-item-active' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'}"
@@ -115,3 +115,18 @@
     </div>
     </div>
 </aside>
+
+<style>
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        @apply bg-transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        @apply bg-slate-200 dark:bg-slate-700 rounded-full;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        @apply bg-slate-300 dark:bg-slate-600;
+    }
+</style>
