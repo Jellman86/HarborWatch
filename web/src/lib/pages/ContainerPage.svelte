@@ -1541,11 +1541,13 @@
                                     >
                                         {savingRules ? "Saving..." : lifecycleDirty ? "Save Selection" : "Saved"}
                                     </button>
-                                    <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {indicatorToneClass(lifecycleIndicatorState())}">
-                                        <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/30">
+                                    <span
+                                        class="inline-flex items-center justify-center p-2 rounded-xl border {indicatorToneClass(lifecycleIndicatorState())}"
+                                        title={lifecycleIndicatorState() === "saving" ? "Saving..." : lifecycleIndicatorState() === "error" ? "Save Error" : lifecycleIndicatorState() === "pending" ? "Unsaved Changes" : "All Changes Saved"}
+                                    >
+                                        <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/30 text-[10px] font-black">
                                             {indicatorSymbol(lifecycleIndicatorState())}
                                         </span>
-                                        {lifecycleIndicatorState() === "saving" ? "Saving..." : lifecycleIndicatorState() === "error" ? "Save Error" : lifecycleIndicatorState() === "pending" ? "Unsaved" : "Saved"}
                                     </span>
                                     <button
                                         onclick={triggerManualUpdate}

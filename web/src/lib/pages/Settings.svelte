@@ -1254,11 +1254,13 @@
             <p class="text-sm text-slate-500 mt-1">Global configuration and automation policy control plane.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {indicatorToneClass(settingsIndicatorState())}">
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/30">
+            <span
+                class="inline-flex items-center justify-center p-2 rounded-xl border {indicatorToneClass(settingsIndicatorState())}"
+                title={settingsIndicatorState() === "saving" ? "Saving..." : settingsIndicatorState() === "error" ? "Save Error" : settingsIndicatorState() === "pending" ? "Unsaved Changes" : "All Changes Saved"}
+            >
+                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/30 text-[10px] font-black">
                     {indicatorSymbol(settingsIndicatorState())}
                 </span>
-                {settingsIndicatorState() === "saving" ? "Saving..." : settingsIndicatorState() === "error" ? "Save Error" : settingsIndicatorState() === "pending" ? "Unsaved" : "Saved"}
             </span>
             <button
                 onclick={saveSettings}
