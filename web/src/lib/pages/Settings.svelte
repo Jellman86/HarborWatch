@@ -1444,7 +1444,7 @@
                                         </div>
                                         <p class="text-[11px] text-slate-500 mt-2">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
                                     </div>
-                                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                    <div class="grid grid-cols-1 gap-4">
                                     <div class="space-y-2">
                                         <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
                                         <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto">
@@ -1667,17 +1667,19 @@
                                             </div>
                                         </div>
 
-                                        <div class="space-y-2">
-                                            <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
+                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                            <div>
+                                                <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Ignored Malware Mount Paths</label>
+                                                <p class="text-[11px] text-slate-500 mt-0.5">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
+                                            </div>
                                             <textarea
                                                 id="malware-ignore-mounts-security"
                                                 rows="2"
                                                 bind:value={settings.malwareIgnoredMounts}
                                                 disabled={isLocked("malwareIgnoredMounts")}
                                                 placeholder="/mnt/media, /srv/plex-library"
-                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                             ></textarea>
-                                            <p class="text-[11px] text-slate-500">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
                                         </div>
 
                                         <div class="flex flex-wrap items-center gap-2">
@@ -2118,6 +2120,25 @@
                                                     <p class="text-[11px] text-slate-500">Select one or more month days. Tasks run on matching calendar dates.</p>
                                                 </div>
                                             {/if}
+
+                                            {#if task.id === "docker_system_prune"}
+                                                <div class="pt-3 border-t border-slate-200/60 dark:border-slate-700/60 mt-2">
+                                                    <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-3 py-2">
+                                                        <div class="flex-1">
+                                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Include Unused Tagged Images</p>
+                                                            <p class="text-[11px] text-slate-500 mt-1">When enabled, scheduled cleanup also deletes unused tagged images (for example orphaned images like old Watchtower deployments).</p>
+                                                        </div>
+                                                        <button
+                                                            onclick={() => { settings.dockerPruneIncludeUnusedTaggedImages = !settings.dockerPruneIncludeUnusedTaggedImages; }}
+                                                            disabled={isLocked("dockerPruneIncludeUnusedTaggedImages")}
+                                                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.dockerPruneIncludeUnusedTaggedImages ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
+                                                            aria-label="Toggle scheduled prune of unused tagged images"
+                                                        >
+                                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.dockerPruneIncludeUnusedTaggedImages ? 'right-1' : 'left-1'}"></div>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            {/if}
                                         </div>
                                     {:else}
                                         <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-sm text-slate-500 italic">
@@ -2127,27 +2148,6 @@
                                 {/if}
 
                                 {#if activeAutomationTab === "maintenance"}
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
-                                        <div>
-                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Docker Image Prune Policy</p>
-                                            <p class="text-[11px] text-slate-500 mt-1">Controls how the scheduled <span class="font-mono">docker_system_prune</span> task handles images. Default matches standard Docker prune behavior (dangling only).</p>
-                                        </div>
-                                        <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 px-3 py-2">
-                                            <div class="flex-1">
-                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Include Unused Tagged Images</p>
-                                                <p class="text-[11px] text-slate-500 mt-1">When enabled, scheduled cleanup also deletes unused tagged images (for example orphaned images like old Watchtower deployments).</p>
-                                            </div>
-                                            <button
-                                                onclick={() => settings.dockerPruneIncludeUnusedTaggedImages = !settings.dockerPruneIncludeUnusedTaggedImages}
-                                                disabled={isLocked("dockerPruneIncludeUnusedTaggedImages")}
-                                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.dockerPruneIncludeUnusedTaggedImages ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                aria-label="Toggle scheduled prune of unused tagged images"
-                                            >
-                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.dockerPruneIncludeUnusedTaggedImages ? 'right-1' : 'left-1'}"></div>
-                                            </button>
-                                        </div>
-                                    </div>
-
                                     <div class="rounded-2xl border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 p-4 space-y-3">
                                         <div>
                                             <p class="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Manual Data Wipe</p>
