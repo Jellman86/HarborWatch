@@ -15,8 +15,8 @@ import (
 )
 
 type Collector struct {
-	docker *client.Client
-	store  *Store
+	docker   *client.Client
+	store    *Store
 	settings settingsStore
 }
 

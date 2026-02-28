@@ -14,9 +14,9 @@ import (
 type JobType string
 
 const (
-	JobTypeUpdate   JobType = "update"
-	JobTypeScan     JobType = "scan"
-	JobTypeRedeploy JobType = "redeploy"
+	JobTypeUpdate      JobType = "update"
+	JobTypeScan        JobType = "scan"
+	JobTypeRedeploy    JobType = "redeploy"
 	JobTypeRemediation JobType = "remediation"
 )
 

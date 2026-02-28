@@ -24,11 +24,11 @@ type Stack struct {
 
 // Endpoint represents a Portainer endpoint (Environment).
 type Endpoint struct {
-	ID      int    `json:"Id"`
-	Name    string `json:"Name"`
-	Type    int    `json:"Type"`
-	URL     string `json:"URL"`
-	Status  int    `json:"Status"`
+	ID     int    `json:"Id"`
+	Name   string `json:"Name"`
+	Type   int    `json:"Type"`
+	URL    string `json:"URL"`
+	Status int    `json:"Status"`
 }
 
 // Client is a Portainer API client.

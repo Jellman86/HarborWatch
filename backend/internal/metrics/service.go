@@ -26,7 +26,7 @@ func (s *Service) GetCollectorTask() *Collector {
 func (s *Service) GetMetrics(ctx context.Context, containerID string, duration string) ([]Metric, error) {
 	// Default to 24 hours
 	since := time.Now().Add(-24 * time.Hour).Unix()
-	
+
 	if d, err := time.ParseDuration(duration); err == nil {
 		since = time.Now().Add(-d).Unix()
 	}

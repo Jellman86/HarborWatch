@@ -496,8 +496,8 @@ type containerJSON struct {
 }
 
 type containerInspectJSON struct {
-	ID    string `json:"Id"`
-	Name  string `json:"Name"`
+	ID     string `json:"Id"`
+	Name   string `json:"Name"`
 	Mounts []struct {
 		Type        string `json:"Type"`
 		Source      string `json:"Source"`
