@@ -1667,20 +1667,6 @@
                                             </div>
                                         </div>
 
-                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
-                                            <div>
-                                                <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Ignored Malware Mount Paths</label>
-                                                <p class="text-[11px] text-slate-500 mt-0.5">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
-                                            </div>
-                                            <textarea
-                                                id="malware-ignore-mounts-security"
-                                                rows="2"
-                                                bind:value={settings.malwareIgnoredMounts}
-                                                disabled={isLocked("malwareIgnoredMounts")}
-                                                placeholder="/mnt/media, /srv/plex-library"
-                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                            ></textarea>
-                                        </div>
 
                                         <div class="flex flex-wrap items-center gap-2">
                                             <button
@@ -1856,6 +1842,21 @@
                                                     {/if}
                                                 </div>
                                             {/if}
+                                        </div>
+
+                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                            <div>
+                                                <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Ignored Malware Mount Paths</label>
+                                                <p class="text-[11px] text-slate-500 mt-0.5">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
+                                            </div>
+                                            <textarea
+                                                id="malware-ignore-mounts-security"
+                                                rows="2"
+                                                bind:value={settings.malwareIgnoredMounts}
+                                                disabled={isLocked("malwareIgnoredMounts")}
+                                                placeholder="/mnt/media, /srv/plex-library"
+                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                            ></textarea>
                                         </div>
                                     </div>
                                 {/if}
