@@ -1645,18 +1645,6 @@
                                             </div>
                                         </div>
 
-                                        <div class="space-y-2">
-                                            <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
-                                            <textarea
-                                                id="malware-ignore-mounts-security"
-                                                rows="3"
-                                                bind:value={settings.malwareIgnoredMounts}
-                                                disabled={isLocked("malwareIgnoredMounts")}
-                                                placeholder="/mnt/media, /srv/plex-library"
-                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                            ></textarea>
-                                            <p class="text-[11px] text-slate-500">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
-                                        </div>
 
                                         <div class="grid grid-cols-1 xl:grid-cols-4 gap-3">
                                             <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
@@ -1675,6 +1663,19 @@
                                                 <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Local DB Updated</p>
                                                 <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.lastLocalUpdate ? new Date(clamavStatus.lastLocalUpdate * 1000).toLocaleString() : "Unknown"}</p>
                                             </div>
+                                        </div>
+
+                                        <div class="space-y-2">
+                                            <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Malware Mount Paths</label>
+                                            <textarea
+                                                id="malware-ignore-mounts-security"
+                                                rows="2"
+                                                bind:value={settings.malwareIgnoredMounts}
+                                                disabled={isLocked("malwareIgnoredMounts")}
+                                                placeholder="/mnt/media, /srv/plex-library"
+                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                            ></textarea>
+                                            <p class="text-[11px] text-slate-500">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
                                         </div>
 
                                         <div class="flex flex-wrap items-center gap-2">
@@ -1707,7 +1708,7 @@
                                             <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>.</p>
                                         </div>
 
-                                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                        <div class="grid grid-cols-1 gap-4">
                                             {#if malwareTask && malwareDraft}
                                                 <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
                                                     <div class="flex flex-wrap items-center justify-between gap-2">
