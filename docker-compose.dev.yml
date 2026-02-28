@@ -26,6 +26,7 @@ services:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
       - HARBORWATCH_DB_PATH=/data/harborwatch.db
+      - HW_GITOPS_MASTER_DIRECTORY=${HW_GITOPS_MASTER_DIRECTORY:-/mnt/Storage-SSD/dockercompose}
       - PORT=8000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
