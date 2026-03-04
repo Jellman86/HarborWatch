@@ -873,11 +873,13 @@
             // We do this in parallel but with a small limit if there are many, 
             // though for most home labs Discovery list is small enough for Promise.all
             const results = await Promise.allSettled(discoveredContainers.map(async (c) => {
+                const containerName = String((c.names || [])[0] || "").replace(/^\//, "").trim();
                 const res = await fetch(`/api/docker/${encodeURIComponent(c.id)}/rules`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         containerId: c.id,
+                        containerName: containerName || undefined,
                         updatePolicy: "auto",
                         inheritAutomation: true,
                         upgradesAutomation: true,

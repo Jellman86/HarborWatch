@@ -55,12 +55,15 @@ func (s *Store) Init(ctx context.Context) error {
 }
 
 func (s *Store) Get(ctx context.Context, id, name string) (ContainerRules, error) {
+	lookupName := normalizeContainerName(name)
 	row := s.db.QueryRowContext(ctx, `
 SELECT container_id, container_name, update_policy, validate_url, validate_mode, validate_timeout_sec, validate_interval_sec, bypass_ai, skip_health_check, ai_validate_logs, auto_rollback, inherit_automation, upgrades_automation, maintenance_automation, security_automation, restart_on_unhealthy, unhealthy_restart_cooldown_sec, restart_dependents_after_upgrade, dependent_restart_delay_sec
-FROM container_rules WHERE container_id = ? OR (container_name = ? AND container_name != '')
+FROM container_rules
+WHERE container_id = ?
+   OR (? != '' AND container_name = ?)
 ORDER BY rowid DESC
 LIMIT 1
-`, id, name)
+`, id, lookupName, lookupName)
 
 	var r ContainerRules
 	var rollback, aiValidateLogs, bypassAI, skipHealthCheck int
@@ -70,7 +73,7 @@ LIMIT 1
 		if err == sql.ErrNoRows {
 			return ContainerRules{
 				ContainerID:              id,
-				ContainerName:            name,
+				ContainerName:            lookupName,
 				UpdatePolicy:             "manual",
 				ValidateMode:             "both",
 				ValidateTimeoutSec:       45,
@@ -99,6 +102,7 @@ LIMIT 1
 	r.RestartOnUnhealthy = restartOnUnhealthy == 1
 	r.RestartDependentsAfterUpgrade = restartDependentsAfterUpgrade == 1
 	r.Exists = true
+	r.ContainerName = normalizeContainerName(r.ContainerName)
 	if strings.TrimSpace(r.ValidateMode) == "" {
 		r.ValidateMode = "both"
 	}
@@ -116,6 +120,7 @@ LIMIT 1
 }
 
 func (s *Store) Save(ctx context.Context, r ContainerRules) error {
+	r.ContainerName = normalizeContainerName(r.ContainerName)
 	rollback := 0
 	if r.AutoRollback {
 		rollback = 1
@@ -193,6 +198,14 @@ ON CONFLICT(container_id) DO UPDATE SET
     dependent_restart_delay_sec = excluded.dependent_restart_delay_sec
 `, r.ContainerID, r.ContainerName, r.UpdatePolicy, r.ValidateURL, r.ValidateMode, r.ValidateTimeoutSec, r.ValidateIntervalSec, bypassAI, skipHealthCheck, aiValidateLogs, rollback, inheritAutomation, upgradesAutomation, maintenanceAutomation, securityAutomation, restartOnUnhealthy, r.UnhealthyRestartCooldownSec, restartDependentsAfterUpgrade, r.DependentRestartDelaySec)
 	return err
+}
+
+func normalizeContainerName(name string) string {
+	name = strings.TrimSpace(name)
+	if strings.EqualFold(name, "unknown") {
+		return ""
+	}
+	return name
 }
 
 func normalizeAutomationDefaults(r *ContainerRules) {

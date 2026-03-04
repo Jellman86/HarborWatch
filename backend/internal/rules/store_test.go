@@ -99,3 +99,25 @@ func TestSavePersistsSkipHealthCheck(t *testing.T) {
 		t.Fatalf("expected SkipHealthCheck=true after save")
 	}
 }
+
+func TestGetDoesNotFallbackByUnknownContainerName(t *testing.T) {
+	store := newRulesTestStore(t)
+	if err := store.Save(context.Background(), ContainerRules{
+		ContainerID:   "old-id",
+		ContainerName: "unknown",
+		UpdatePolicy:  "auto",
+	}); err != nil {
+		t.Fatalf("save rules: %v", err)
+	}
+
+	got, err := store.Get(context.Background(), "new-id", "unknown")
+	if err != nil {
+		t.Fatalf("get rules: %v", err)
+	}
+	if got.UpdatePolicy != "manual" {
+		t.Fatalf("expected unknown-name lookup to use defaults, got updatePolicy=%q", got.UpdatePolicy)
+	}
+	if got.ContainerID != "new-id" {
+		t.Fatalf("expected defaulted container ID new-id, got %q", got.ContainerID)
+	}
+}
