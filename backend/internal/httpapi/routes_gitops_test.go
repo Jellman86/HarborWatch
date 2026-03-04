@@ -68,6 +68,9 @@ func TestGitOpsSyncAutoCreatesDisabledDeploymentRules(t *testing.T) {
 		if dep.Enabled {
 			t.Fatalf("expected auto-created deployment %q to be disabled", dep.ComposePath)
 		}
+		if !dep.AutoCreated {
+			t.Fatalf("expected auto-created deployment %q to be flagged autoCreated", dep.ComposePath)
+		}
 		paths = append(paths, dep.ComposePath)
 	}
 	sort.Strings(paths)
@@ -139,6 +142,9 @@ func TestGitOpsUpdateDeploymentRouteUpdatesFields(t *testing.T) {
 	if !got.Enabled {
 		t.Fatalf("enabled flag not updated")
 	}
+	if got.AutoCreated {
+		t.Fatalf("autoCreated should be false after edit")
+	}
 }
 
 func TestGitOpsSourceFilesRouteListsComposeAndEnvFiles(t *testing.T) {
@@ -206,6 +212,104 @@ func TestGitOpsSourceFilesRouteListsComposeAndEnvFiles(t *testing.T) {
 	}
 	if !reflect.DeepEqual(payload.EnvFiles, []string{".env", "apps/api/.env.prod"}) {
 		t.Fatalf("unexpected env files: %v", payload.EnvFiles)
+	}
+}
+
+func TestGitOpsCreateDeploymentRouteReturnsConflictOnDuplicateComposePath(t *testing.T) {
+	db := openGitOpsTestDB(t)
+	store := gitops.NewStore(db)
+	mux := newGitOpsTestMux(db, t.TempDir())
+
+	src := gitops.GitSource{
+		ID:               "src-conflict-create",
+		Name:             "Conflict Create",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-conflict-create",
+		AuthMethod:       gitops.AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(context.Background(), src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.CreateDeployment(context.Background(), gitops.GitDeployment{
+		ID:          "dep-existing",
+		GitSourceID: src.ID,
+		ComposePath: "docker-compose.yml",
+		Enabled:     false,
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"gitSourceId":"src-conflict-create","composePath":"docker-compose.yml","enabled":true}`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/gitops/deployments", body)
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGitOpsUpdateDeploymentEnabledReturnsNotFound(t *testing.T) {
+	db := openGitOpsTestDB(t)
+	mux := newGitOpsTestMux(db, t.TempDir())
+
+	body := bytes.NewBufferString(`{"enabled":true}`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/gitops/deployments/missing/enabled", body)
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGitOpsToggleDeploymentClearsAutoCreatedFlag(t *testing.T) {
+	db := openGitOpsTestDB(t)
+	store := gitops.NewStore(db)
+	mux := newGitOpsTestMux(db, t.TempDir())
+
+	src := gitops.GitSource{
+		ID:               "src-toggle-auto",
+		Name:             "Toggle Auto",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-toggle-auto",
+		AuthMethod:       gitops.AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(context.Background(), src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.CreateDeployment(context.Background(), gitops.GitDeployment{
+		ID:          "dep-toggle-auto",
+		GitSourceID: src.ID,
+		ComposePath: "docker-compose.yml",
+		AutoCreated: true,
+		Enabled:     false,
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"enabled":true}`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/gitops/deployments/dep-toggle-auto/enabled", body)
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	got, err := store.GetDeployment(context.Background(), "dep-toggle-auto")
+	if err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if got.AutoCreated {
+		t.Fatalf("expected autoCreated to be false after explicit toggle")
+	}
+	if !got.Enabled {
+		t.Fatalf("expected enabled true after toggle")
 	}
 }
 

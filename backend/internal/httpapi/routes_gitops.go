@@ -171,6 +171,7 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 					return
 				}
+				dep.AutoCreated = false
 				if err := gitops.NormalizeDeployment(&dep); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 					return
@@ -179,6 +180,10 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					dep.ID = uuid.NewString()
 				}
 				if err := gitStore.CreateDeployment(req.Context(), dep); err != nil {
+					if isUniqueConstraintErr(err) {
+						writeError(w, http.StatusConflict, "conflict", "deployment already exists for this compose path")
+						return
+					}
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
 				}
@@ -211,12 +216,17 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 				if body.Enabled != nil {
 					current.Enabled = *body.Enabled
 				}
+				current.AutoCreated = false
 				if err := gitops.NormalizeDeployment(&current); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 					return
 				}
 
 				if err := gitStore.UpdateDeployment(req.Context(), current); err != nil {
+					if isUniqueConstraintErr(err) {
+						writeError(w, http.StatusConflict, "conflict", "deployment already exists for this compose path")
+						return
+					}
 					if strings.Contains(strings.ToLower(err.Error()), "not found") {
 						writeError(w, http.StatusNotFound, "not_found", err.Error())
 						return
@@ -244,6 +254,10 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					return
 				}
 				if err := gitStore.UpdateDeploymentEnabled(req.Context(), id, body.Enabled); err != nil {
+					if strings.Contains(strings.ToLower(err.Error()), "not found") {
+						writeError(w, http.StatusNotFound, "not_found", err.Error())
+						return
+					}
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
 				}
@@ -271,4 +285,11 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 			})
 		})
 	})
+}
+
+func isUniqueConstraintErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "unique constraint failed")
 }

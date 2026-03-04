@@ -1,0 +1,1 @@
+ALTER TABLE git_deployments ADD COLUMN auto_created INTEGER NOT NULL DEFAULT 0;

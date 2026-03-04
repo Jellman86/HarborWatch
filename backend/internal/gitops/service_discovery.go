@@ -57,6 +57,7 @@ func (s *Service) AutoCreateDeploymentRules(ctx context.Context, sourceID string
 			ID:          uuid.NewString(),
 			GitSourceID: sourceID,
 			ComposePath: composePath,
+			AutoCreated: true,
 			Enabled:     false,
 		}
 		if err := NormalizeDeployment(&dep); err != nil {

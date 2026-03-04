@@ -29,6 +29,7 @@ type GitDeployment struct {
 	ComposePath      string `json:"composePath"`
 	EnvVarsJSON      string `json:"envVarsJson"` // JSON string map of overrides
 	EnvFilePath      string `json:"envFilePath"`
+	AutoCreated      bool   `json:"autoCreated"`
 	Enabled          bool   `json:"enabled"`
 	LastDeployedHash string `json:"lastDeployedHash"`
 	LastDeployedAt   int64  `json:"lastDeployedAt"`

@@ -28,6 +28,7 @@
         composePath: string;
         envVarsJson?: string;
         envFilePath?: string;
+        autoCreated?: boolean;
         enabled?: boolean;
         lastDeployedHash?: string;
         lastDeployedAt: number;
@@ -580,6 +581,11 @@
                                                     {#if dep.enabled === false}
                                                         <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[9px] font-black uppercase tracking-widest">
                                                             Disabled
+                                                        </span>
+                                                    {/if}
+                                                    {#if dep.autoCreated && dep.enabled === false}
+                                                        <span class="px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 text-[9px] font-black uppercase tracking-widest">
+                                                            Newly Discovered
                                                         </span>
                                                     {/if}
                                                     {#if dep.lastError}

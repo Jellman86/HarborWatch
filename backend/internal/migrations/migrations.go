@@ -132,5 +132,10 @@ func defaultMigrations() []Migration {
 			Name:    "add_gitops_unique_source_compose_index",
 			SQL:     mustReadSQL("sql/0021_add_gitops_unique_source_compose_index.sql"),
 		},
+		{
+			Version: 22,
+			Name:    "add_gitops_deployment_auto_created",
+			SQL:     mustReadSQL("sql/0022_add_gitops_deployment_auto_created.sql"),
+		},
 	}
 }
