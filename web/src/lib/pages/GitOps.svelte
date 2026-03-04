@@ -34,15 +34,32 @@
         lastError?: string;
     }
 
+    interface GitSourceFiles {
+        composeFiles: string[];
+        envFiles: string[];
+    }
+
+    interface DeploymentFormState {
+        composePath: string;
+        envFilePath: string;
+        enabled: boolean;
+        envVars: { key: string, value: string }[];
+    }
+
     // Component State
     let sources = $state<GitSource[]>([]);
     let deployments = $state<Record<string, GitDeployment[]>>({});
+    let sourceFiles = $state<Record<string, GitSourceFiles>>({});
+    let loadingSourceFiles = $state<Record<string, boolean>>({});
     let loading = $state(true);
     let syncing = $state<Record<string, boolean>>({});
     let deploying = $state<Record<string, boolean>>({});
     let showAddSourceModal = $state(false);
     let showAddDeploymentModal = $state(false);
+    let showEditDeploymentModal = $state(false);
     let selectedSourceId = $state<string | null>(null);
+    let editingSourceId = $state<string | null>(null);
+    let editingDeploymentId = $state<string | null>(null);
     let expandedSourceId = $state<string | null>(null);
 
     // Form State
@@ -56,11 +73,18 @@
         syncIntervalMins: 5
     });
 
-    let newDeployment = $state({
+    let newDeployment = $state<DeploymentFormState>({
         composePath: "docker-compose.yml",
         envFilePath: "",
         enabled: true,
         envVars: [] as { key: string, value: string }[]
+    });
+
+    let editDeployment = $state<DeploymentFormState>({
+        composePath: "",
+        envFilePath: "",
+        enabled: true,
+        envVars: []
     });
 
     onMount(() => {
@@ -69,6 +93,78 @@
 
     function asArray<T>(value: unknown): T[] {
         return Array.isArray(value) ? (value as T[]) : [];
+    }
+
+    function parseEnvVarsJson(raw: string | undefined): { key: string, value: string }[] {
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw) as Record<string, string>;
+            if (!parsed || typeof parsed !== "object") return [];
+            return Object.entries(parsed).map(([key, value]) => ({ key, value: String(value ?? "") }));
+        } catch {
+            return [];
+        }
+    }
+
+    function envVarsToJson(vars: { key: string, value: string }[]): string {
+        const envMap: Record<string, string> = {};
+        vars.forEach((v) => {
+            const key = v.key.trim();
+            if (key) envMap[key] = v.value;
+        });
+        return JSON.stringify(envMap);
+    }
+
+    function resetNewDeployment() {
+        newDeployment = {
+            composePath: "docker-compose.yml",
+            envFilePath: "",
+            enabled: true,
+            envVars: []
+        };
+    }
+
+    async function loadSourceFilesForPicker(sourceId: string, force = false) {
+        if (!sourceId) return;
+        if (loadingSourceFiles[sourceId]) return;
+        if (!force && sourceFiles[sourceId]) return;
+
+        loadingSourceFiles[sourceId] = true;
+        try {
+            const res = await fetch(`/api/gitops/sources/${sourceId}/files`);
+            if (!res.ok) {
+                throw new Error("request_failed");
+            }
+            const payload = await res.json();
+            sourceFiles[sourceId] = {
+                composeFiles: asArray<string>(payload?.composeFiles),
+                envFiles: asArray<string>(payload?.envFiles)
+            };
+        } catch (e) {
+            toasts.error("Unable to load compose/env files. Sync and try again.");
+        } finally {
+            loadingSourceFiles[sourceId] = false;
+        }
+    }
+
+    function openAddDeploymentModal(sourceId: string) {
+        selectedSourceId = sourceId;
+        resetNewDeployment();
+        showAddDeploymentModal = true;
+        loadSourceFilesForPicker(sourceId);
+    }
+
+    function openEditDeploymentModal(sourceId: string, dep: GitDeployment) {
+        editingSourceId = sourceId;
+        editingDeploymentId = dep.id;
+        editDeployment = {
+            composePath: dep.composePath,
+            envFilePath: dep.envFilePath || "",
+            enabled: dep.enabled !== false,
+            envVars: parseEnvVarsJson(dep.envVarsJson)
+        };
+        showEditDeploymentModal = true;
+        loadSourceFilesForPicker(sourceId);
     }
 
     async function loadSources() {
@@ -134,12 +230,6 @@
 
     async function addDeployment() {
         if (!selectedSourceId) return;
-        
-        // Convert envVars array to JSON map
-        const envMap: Record<string, string> = {};
-        newDeployment.envVars.forEach(v => {
-            if (v.key.trim()) envMap[v.key.trim()] = v.value;
-        });
 
         try {
             const res = await fetch("/api/gitops/deployments", {
@@ -150,23 +240,46 @@
                     composePath: newDeployment.composePath,
                     envFilePath: newDeployment.envFilePath,
                     enabled: newDeployment.enabled,
-                    envVarsJson: JSON.stringify(envMap)
+                    envVarsJson: envVarsToJson(newDeployment.envVars)
                 })
             });
             if (res.ok) {
                 toasts.success("Deployment rule added");
                 showAddDeploymentModal = false;
                 loadDeployments(selectedSourceId);
-                // Reset
-                newDeployment = {
-                    composePath: "docker-compose.yml",
-                    envFilePath: "",
-                    enabled: true,
-                    envVars: []
-                };
+                resetNewDeployment();
             } else {
                 const data = await res.json();
                 toasts.error(data.message || "Failed to add deployment");
+            }
+        } catch (e) {
+            toasts.error("Connection error");
+        }
+    }
+
+    async function saveDeploymentEdits() {
+        if (!editingDeploymentId || !editingSourceId) return;
+        const sourceId = editingSourceId;
+        try {
+            const res = await fetch(`/api/gitops/deployments/${editingDeploymentId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    composePath: editDeployment.composePath,
+                    envFilePath: editDeployment.envFilePath,
+                    enabled: editDeployment.enabled,
+                    envVarsJson: envVarsToJson(editDeployment.envVars)
+                })
+            });
+            if (res.ok) {
+                toasts.success("Deployment rule updated");
+                showEditDeploymentModal = false;
+                editingDeploymentId = null;
+                editingSourceId = null;
+                loadDeployments(sourceId);
+            } else {
+                const data = await res.json().catch(() => ({}));
+                toasts.error(data.message || "Failed to update deployment rule");
             }
         } catch (e) {
             toasts.error("Connection error");
@@ -255,6 +368,11 @@
                 } else {
                     toasts.info("Repository is already up to date");
                 }
+                if (Number(data.autoCreated || 0) > 0) {
+                    const count = Number(data.autoCreated);
+                    toasts.info(`Discovered ${count} compose file${count === 1 ? "" : "s"}. Rules were added disabled.`);
+                }
+                loadSourceFilesForPicker(id, true);
                 loadSources();
             } else {
                 toasts.error(data.message || "Sync failed");
@@ -276,6 +394,14 @@
 
     function removeEnvVar(index: number) {
         newDeployment.envVars = newDeployment.envVars.filter((_, i) => i !== index);
+    }
+
+    function addEditEnvVar() {
+        editDeployment.envVars = [...editDeployment.envVars, { key: "", value: "" }];
+    }
+
+    function removeEditEnvVar(index: number) {
+        editDeployment.envVars = editDeployment.envVars.filter((_, i) => i !== index);
     }
 
     function formatRelativeTime(ts: number) {
@@ -367,10 +493,7 @@
                             </div>
                             <div class="flex items-center gap-2">
                                 <button 
-                                    onclick={() => {
-                                        selectedSourceId = source.id;
-                                        showAddDeploymentModal = true;
-                                    }}
+                                    onclick={() => openAddDeploymentModal(source.id)}
                                     class="px-4 py-2 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 text-[10px] font-black uppercase tracking-widest border border-brand-500/20 hover:bg-brand-500/20 transition-all flex items-center gap-2"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -428,10 +551,7 @@
                                     <div class="p-8 text-center bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
                                         <p class="text-sm text-slate-500 font-medium italic">No compose files selected for deployment from this repository.</p>
                                         <button 
-                                            onclick={() => {
-                                                selectedSourceId = source.id;
-                                                showAddDeploymentModal = true;
-                                            }}
+                                            onclick={() => openAddDeploymentModal(source.id)}
                                             class="mt-4 text-[10px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400 hover:underline"
                                         >
                                             Configure first stack
@@ -481,6 +601,12 @@
                                                         class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-all"
                                                     >
                                                         {dep.enabled === false ? 'Enable' : 'Disable'}
+                                                    </button>
+                                                    <button
+                                                        onclick={() => openEditDeploymentModal(source.id, dep)}
+                                                        class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-all"
+                                                    >
+                                                        Edit
                                                     </button>
                                                     <button 
                                                         onclick={() => deleteDeployment(dep.id, source.id)}
@@ -597,6 +723,111 @@
     </div>
 {/if}
 
+{#if showEditDeploymentModal}
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/40 animate-in fade-in duration-300">
+        <div class="bg-white dark:bg-[#0f172a] w-full max-w-xl rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-300">
+            <div class="p-8 space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Edit Deployment Rule</h3>
+                        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Source: {sources.find(s => s.id === editingSourceId)?.name}</p>
+                    </div>
+                    <button onclick={() => { showEditDeploymentModal = false; editingDeploymentId = null; editingSourceId = null; }} aria-label="Close edit deployment dialog" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between ml-1">
+                            <label for="edit-dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Compose File Path</label>
+                            <button
+                                onclick={() => editingSourceId && loadSourceFilesForPicker(editingSourceId, true)}
+                                disabled={!editingSourceId || loadingSourceFiles[editingSourceId || ""]}
+                                class="text-[9px] font-black uppercase tracking-widest text-brand-600 hover:underline disabled:opacity-40"
+                            >
+                                {editingSourceId && loadingSourceFiles[editingSourceId || ""] ? 'Refreshing...' : 'Refresh File List'}
+                            </button>
+                        </div>
+                        <input id="edit-dep-path" bind:value={editDeployment.composePath} list={`compose-picker-edit-${editingSourceId || 'none'}`} placeholder="docker-compose.yml" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                        <datalist id={`compose-picker-edit-${editingSourceId || 'none'}`}>
+                            {#each sourceFiles[editingSourceId || ""]?.composeFiles || [] as file}
+                                <option value={file}></option>
+                            {/each}
+                        </datalist>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label for="edit-dep-env-file" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Env File Path (optional)</label>
+                        <input id="edit-dep-env-file" bind:value={editDeployment.envFilePath} list={`env-picker-edit-${editingSourceId || 'none'}`} placeholder=".env or /mnt/Storage-SSD/dockercompose/app/.env" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                        <datalist id={`env-picker-edit-${editingSourceId || 'none'}`}>
+                            {#each sourceFiles[editingSourceId || ""]?.envFiles || [] as file}
+                                <option value={file}></option>
+                            {/each}
+                        </datalist>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 flex items-center justify-between">
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Deployment Active</p>
+                            <p class="text-[10px] text-slate-500 mt-1">Keep disabled until this rule is fully configured.</p>
+                        </div>
+                        <button
+                            onclick={() => editDeployment.enabled = !editDeployment.enabled}
+                            class="w-10 h-5 rounded-full relative transition-colors {editDeployment.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
+                            aria-label="Toggle deployment active state"
+                        >
+                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {editDeployment.enabled ? 'right-1' : 'left-1'}"></div>
+                        </button>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between ml-1">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Environment Variables (.env)</p>
+                            <button onclick={addEditEnvVar} class="text-[9px] font-black text-brand-600 uppercase tracking-widest hover:underline">+ Add Variable</button>
+                        </div>
+
+                        {#if editDeployment.envVars.length === 0}
+                            <p class="text-[11px] text-slate-500 italic ml-1">No custom environment variables defined.</p>
+                        {:else}
+                            <div class="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                {#each editDeployment.envVars as env, i}
+                                    <div class="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200" style="--index: {i}">
+                                        <input bind:value={env.key} placeholder="KEY" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
+                                        <input bind:value={env.value} type="password" placeholder="VALUE" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
+                                        <button onclick={() => removeEditEnvVar(i)} aria-label={`Remove environment variable ${i + 1}`} class="p-2 text-slate-400 hover:text-rose-500">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button
+                        onclick={() => { showEditDeploymentModal = false; editingDeploymentId = null; editingSourceId = null; }}
+                        class="flex-1 px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onclick={saveDeploymentEdits}
+                        class="flex-[2] px-6 py-3 bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-brand-700 shadow-xl shadow-brand-500/20"
+                    >
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
 {#if showAddDeploymentModal}
     <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/40 animate-in fade-in duration-300">
         <div class="bg-white dark:bg-[#0f172a] w-full max-w-xl rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-300">
@@ -615,8 +846,25 @@
 
                 <div class="space-y-4">
                     <div class="space-y-1.5">
-                        <label for="dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Compose File Path (relative to repo root)</label>
-                        <input id="dep-path" bind:value={newDeployment.composePath} placeholder="docker-compose.yml" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                        <div class="flex items-center justify-between ml-1">
+                            <label for="dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Compose File Path (relative to repo root)</label>
+                            <button
+                                onclick={() => selectedSourceId && loadSourceFilesForPicker(selectedSourceId, true)}
+                                disabled={!selectedSourceId || loadingSourceFiles[selectedSourceId || ""]}
+                                class="text-[9px] font-black uppercase tracking-widest text-brand-600 hover:underline disabled:opacity-40"
+                            >
+                                {selectedSourceId && loadingSourceFiles[selectedSourceId || ""] ? 'Refreshing...' : 'Refresh File List'}
+                            </button>
+                        </div>
+                        <input id="dep-path" bind:value={newDeployment.composePath} list={`compose-picker-${selectedSourceId || 'none'}`} placeholder="docker-compose.yml" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                        <datalist id={`compose-picker-${selectedSourceId || 'none'}`}>
+                            {#each sourceFiles[selectedSourceId || ""]?.composeFiles || [] as file}
+                                <option value={file}></option>
+                            {/each}
+                        </datalist>
+                        {#if selectedSourceId && (sourceFiles[selectedSourceId || ""]?.composeFiles || []).length === 0}
+                            <p class="text-[10px] text-slate-500 ml-1 italic">No compose files discovered yet. Sync repository and refresh.</p>
+                        {/if}
                         <p class="text-[10px] text-slate-500 ml-1 italic">
                             Mapped path: {resolvedComposeMapping(sources.find(s => s.id === selectedSourceId)?.targetDir || "", newDeployment.composePath)}
                         </p>
@@ -624,7 +872,12 @@
 
                     <div class="space-y-1.5">
                         <label for="dep-env-file" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Env File Path (optional)</label>
-                        <input id="dep-env-file" bind:value={newDeployment.envFilePath} placeholder=".env or /mnt/Storage-SSD/dockercompose/app/.env" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                        <input id="dep-env-file" bind:value={newDeployment.envFilePath} list={`env-picker-${selectedSourceId || 'none'}`} placeholder=".env or /mnt/Storage-SSD/dockercompose/app/.env" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
+                        <datalist id={`env-picker-${selectedSourceId || 'none'}`}>
+                            {#each sourceFiles[selectedSourceId || ""]?.envFiles || [] as file}
+                                <option value={file}></option>
+                            {/each}
+                        </datalist>
                         <p class="text-[10px] text-slate-500 ml-1 italic">Supports repo-relative paths and absolute host paths.</p>
                     </div>
 

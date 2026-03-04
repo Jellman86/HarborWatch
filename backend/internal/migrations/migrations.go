@@ -127,5 +127,10 @@ func defaultMigrations() []Migration {
 			Name:    "add_gitops_deployment_enabled_and_env_file_path",
 			SQL:     mustReadSQL("sql/0020_add_gitops_deployment_enabled_and_env_file_path.sql"),
 		},
+		{
+			Version: 21,
+			Name:    "add_gitops_unique_source_compose_index",
+			SQL:     mustReadSQL("sql/0021_add_gitops_unique_source_compose_index.sql"),
+		},
 	}
 }

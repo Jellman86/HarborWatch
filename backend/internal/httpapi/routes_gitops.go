@@ -20,6 +20,13 @@ type toggleDeploymentRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
+type updateDeploymentRequest struct {
+	ComposePath *string `json:"composePath"`
+	EnvVarsJSON *string `json:"envVarsJson"`
+	EnvFilePath *string `json:"envFilePath"`
+	Enabled     *bool   `json:"enabled"`
+}
+
 func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 	if deps.db == nil || deps.settingsService == nil {
 		// Mocked out in tests, or database not available
@@ -81,6 +88,20 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 				writeJSON(w, http.StatusOK, src)
 			})
 
+			r.Get("/{id}/files", func(w http.ResponseWriter, req *http.Request) {
+				id := chi.URLParam(req, "id")
+				files, err := gitService.ListSourceFiles(req.Context(), id)
+				if err != nil {
+					if strings.Contains(strings.ToLower(err.Error()), "not found") {
+						writeError(w, http.StatusNotFound, "not_found", err.Error())
+						return
+					}
+					writeError(w, http.StatusInternalServerError, "discovery_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, files)
+			})
+
 			r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
 				id := chi.URLParam(req, "id")
 				if err := gitStore.DeleteSource(req.Context(), id); err != nil {
@@ -95,6 +116,12 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 				hash, changed, err := gitService.SyncSource(req.Context(), id)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, "sync_failed", err.Error())
+					return
+				}
+
+				created, err := gitService.AutoCreateDeploymentRules(req.Context(), id)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "auto_create_failed", err.Error())
 					return
 				}
 
@@ -114,9 +141,10 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 				}
 
 				writeJSON(w, http.StatusOK, map[string]any{
-					"ok":      true,
-					"changed": changed,
-					"hash":    hash,
+					"ok":          true,
+					"changed":     changed,
+					"hash":        hash,
+					"autoCreated": len(created),
 				})
 			})
 		})
@@ -155,6 +183,48 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					return
 				}
 				writeJSON(w, http.StatusOK, dep)
+			})
+
+			r.Patch("/{id}", func(w http.ResponseWriter, req *http.Request) {
+				id := chi.URLParam(req, "id")
+				current, err := gitStore.GetDeployment(req.Context(), id)
+				if err != nil {
+					writeError(w, http.StatusNotFound, "not_found", err.Error())
+					return
+				}
+
+				var body updateDeploymentRequest
+				if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+					return
+				}
+
+				if body.ComposePath != nil {
+					current.ComposePath = *body.ComposePath
+				}
+				if body.EnvVarsJSON != nil {
+					current.EnvVarsJSON = *body.EnvVarsJSON
+				}
+				if body.EnvFilePath != nil {
+					current.EnvFilePath = *body.EnvFilePath
+				}
+				if body.Enabled != nil {
+					current.Enabled = *body.Enabled
+				}
+				if err := gitops.NormalizeDeployment(&current); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+					return
+				}
+
+				if err := gitStore.UpdateDeployment(req.Context(), current); err != nil {
+					if strings.Contains(strings.ToLower(err.Error()), "not found") {
+						writeError(w, http.StatusNotFound, "not_found", err.Error())
+						return
+					}
+					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, current)
 			})
 
 			r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
