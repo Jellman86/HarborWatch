@@ -102,6 +102,19 @@ func TestEffectiveContainerRules_UsesGlobalLifecycleDefaultsWhenRuleMissing(t *t
 	}
 }
 
+func TestEffectiveContainerRules_DefaultsToDockerHealthModeWhenSettingsMissing(t *testing.T) {
+	summary := gen.ContainerSummary{ID: "abc", Names: []string{"/demo"}}
+	existing := rules.ContainerRules{
+		ContainerID: "abc",
+		Exists:      false,
+	}
+
+	got := effectiveContainerRules(context.Background(), summary, existing, nil, nil)
+	if got.ValidateMode != "docker" {
+		t.Fatalf("expected default validate mode docker, got %q", got.ValidateMode)
+	}
+}
+
 func TestBuildUpdateRequestForContainer_UsesGlobalValidationDefaultsWhenNoRulesService(t *testing.T) {
 	res, err := buildUpdateRequestForContainer(
 		context.Background(),

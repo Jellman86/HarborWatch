@@ -54,6 +54,9 @@ func TestGetDefaultsPrepopulateHarborWatchIgnore(t *testing.T) {
 	if !strings.Contains(strings.ToLower(got.AutomationIgnoredContainers), "harborwatch") {
 		t.Fatalf("expected harborwatch in automation ignores, got %q", got.AutomationIgnoredContainers)
 	}
+	if got.DefaultValidateMode != "docker" {
+		t.Fatalf("expected default validate mode docker, got %q", got.DefaultValidateMode)
+	}
 }
 
 func TestSaveNormalizesIgnoreLists(t *testing.T) {

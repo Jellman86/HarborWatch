@@ -151,7 +151,7 @@
         metricsNormalized: true,
         globalBypassAi: false,
         globalSkipHealthCheck: false,
-        defaultValidateMode: "both",
+        defaultValidateMode: "docker",
         defaultValidateTimeoutSec: 45,
         defaultValidateIntervalSec: 2,
         defaultAiValidateLogs: false,
@@ -868,6 +868,10 @@
         bulkUpdating = true;
         let success = 0;
         let fail = 0;
+        const defaultValidateMode = "docker";
+        const defaultValidateTimeoutSec = Math.max(1, Number(settings.defaultValidateTimeoutSec || 45));
+        const defaultValidateIntervalSec = Math.max(1, Number(settings.defaultValidateIntervalSec || 2));
+        const defaultRestartCooldown = Math.max(0, Number(settings.unhealthyRestartCooldownSecDefault || 300));
 
         try {
             // We do this in parallel but with a small limit if there are many, 
@@ -884,7 +888,14 @@
                         inheritAutomation: true,
                         upgradesAutomation: true,
                         maintenanceAutomation: true,
-                        securityAutomation: true
+                        securityAutomation: true,
+                        validateMode: defaultValidateMode,
+                        validateTimeoutSec: defaultValidateTimeoutSec,
+                        validateIntervalSec: defaultValidateIntervalSec,
+                        aiValidateLogs: !!settings.defaultAiValidateLogs,
+                        autoRollback: !!settings.defaultAutoRollback,
+                        restartOnUnhealthy: !!settings.defaultRestartOnUnhealthy,
+                        unhealthyRestartCooldownSec: defaultRestartCooldown
                     })
                 });
                 if (!res.ok) throw new Error("fail");
@@ -899,7 +910,7 @@
             if (fail > 0) {
                 toasts.warning(`Bulk update partial: ${success} set to Automatic, ${fail} failed.`);
             } else {
-                toasts.success(`Successfully set all ${success} containers to Automatic.`);
+                toasts.success(`Successfully set all ${success} containers to Automatic with Docker health validation defaults.`);
             }
 
             await loadContainersForExclusions();
@@ -2232,8 +2243,8 @@
                                                                     disabled={isLocked("defaultValidateMode")}
                                                                     class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                                                 >
-                                                                    <option value="both">Docker + HTTP</option>
                                                                     <option value="docker">Docker health only</option>
+                                                                    <option value="both">Docker + HTTP</option>
                                                                     <option value="http">HTTP only</option>
                                                                 </select>
                                                             </div>

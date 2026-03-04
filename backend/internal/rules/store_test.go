@@ -50,6 +50,9 @@ func TestGetDefaultsSkipHealthCheckFalse(t *testing.T) {
 	if got.SkipHealthCheck {
 		t.Fatalf("expected default SkipHealthCheck=false")
 	}
+	if got.ValidateMode != "docker" {
+		t.Fatalf("expected default validate mode docker, got %q", got.ValidateMode)
+	}
 }
 
 func TestSaveAndGetDependentRestartSettings(t *testing.T) {

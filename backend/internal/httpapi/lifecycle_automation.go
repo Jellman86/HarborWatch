@@ -81,7 +81,7 @@ type lifecycleDefaults struct {
 
 func lifecycleRuleDefaults() lifecycleDefaults {
 	return lifecycleDefaults{
-		ValidateMode:                "both",
+		ValidateMode:                "docker",
 		ValidateTimeoutSec:          45,
 		ValidateIntervalSec:         2,
 		AIValidateLogs:              false,
@@ -95,7 +95,7 @@ func lifecycleRuleDefaultsFromSettings(st settings.Settings) lifecycleDefaults {
 	out := lifecycleRuleDefaults()
 	out.ValidateMode = normalizeValidateMode(st.DefaultValidateMode)
 	if out.ValidateMode == "" {
-		out.ValidateMode = "both"
+		out.ValidateMode = "docker"
 	}
 	if st.DefaultValidateTimeoutSec > 0 {
 		out.ValidateTimeoutSec = st.DefaultValidateTimeoutSec

@@ -75,7 +75,7 @@ LIMIT 1
 				ContainerID:              id,
 				ContainerName:            lookupName,
 				UpdatePolicy:             "manual",
-				ValidateMode:             "both",
+				ValidateMode:             "docker",
 				ValidateTimeoutSec:       45,
 				ValidateIntervalSec:      2,
 				BypassAI:                 false,
@@ -104,7 +104,7 @@ LIMIT 1
 	r.Exists = true
 	r.ContainerName = normalizeContainerName(r.ContainerName)
 	if strings.TrimSpace(r.ValidateMode) == "" {
-		r.ValidateMode = "both"
+		r.ValidateMode = "docker"
 	}
 	if r.ValidateTimeoutSec <= 0 {
 		r.ValidateTimeoutSec = 45
@@ -138,7 +138,7 @@ func (s *Store) Save(ctx context.Context, r ContainerRules) error {
 		skipHealthCheck = 1
 	}
 	if strings.TrimSpace(r.ValidateMode) == "" {
-		r.ValidateMode = "both"
+		r.ValidateMode = "docker"
 	}
 	if r.ValidateTimeoutSec <= 0 {
 		r.ValidateTimeoutSec = 45

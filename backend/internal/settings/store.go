@@ -126,7 +126,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		UnhealthyRestartCooldownSecDefault: 300,
 		MaxRestartsPerWindow:               3,
 		MetricsNormalized:                  true,
-		DefaultValidateMode:                "both",
+		DefaultValidateMode:                "docker",
 		DefaultValidateTimeoutSec:          45,
 		DefaultValidateIntervalSec:         2,
 		DefaultAIValidateLogs:              false,
@@ -197,10 +197,11 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		case "docker_prune_include_unused_tagged_images":
 			st.DockerPruneIncludeUnusedTaggedImages = parseStoredBool(value, st.DockerPruneIncludeUnusedTaggedImages)
 		case "compose_snapshot_root_path":
-		        st.ComposeSnapshotRootPath = strings.TrimSpace(value)
+			st.ComposeSnapshotRootPath = strings.TrimSpace(value)
 		case "gitops_master_directory":
-		        st.GitOpsMasterDirectory = strings.TrimSpace(value)
-		case "clamav_snapshot_max_bytes":			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
+			st.GitOpsMasterDirectory = strings.TrimSpace(value)
+		case "clamav_snapshot_max_bytes":
+			st.ClamAVSnapshotMaxBytes = parseStoredInt64(value, st.ClamAVSnapshotMaxBytes, 1, 32<<30)
 		case "data_retention_days":
 			st.DataRetentionDays = parseStoredInt(value, st.DataRetentionDays, 1, 3650)
 		case "retention_logs_days":
@@ -275,7 +276,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 		"trivySweepMode":              {&st.TrivySweepMode, "HW_TRIVY_SWEEP_MODE"},
 		"composeSnapshotRootPath":     {&st.ComposeSnapshotRootPath, "HW_COMPOSE_SNAPSHOT_ROOT"},
 		"gitOpsMasterDirectory":       {&st.GitOpsMasterDirectory, "HW_GITOPS_MASTER_DIRECTORY"},
-		}
+	}
 	for jsonKey, mapping := range envMap {
 		if val := os.Getenv(mapping.envKey); val != "" {
 			*mapping.ptr = val
@@ -391,54 +392,54 @@ func (s *Store) Save(ctx context.Context, st Settings) error {
 	defer tx.Rollback()
 
 	keys := map[string]string{
-		"discord_webhook_url":                       st.DiscordWebhookURL,
-		"discord_enabled":                           boolString(st.DiscordEnabled),
-		"portainer_url":                             st.PortainerURL,
-		"portainer_api_key":                         st.PortainerApiKey,
-		"portainer_enabled":                         boolString(st.PortainerEnabled),
-		"ai_enabled":                                boolString(st.AIEnabled),
-		"ai_provider":                               st.AIProvider,
-		"ai_block_risk_threshold":                   intString(st.AIBlockRiskThreshold),
-		"openai_key":                                st.OpenAIKey,
-		"openai_model":                              st.OpenAIModel,
-		"anthropic_key":                             st.AnthropicKey,
-		"anthropic_model":                           st.AnthropicModel,
-		"gemini_key":                                st.GeminiKey,
-		"gemini_model":                              st.GeminiModel,
-		"ai_pricing_json":                           st.AIPricingJSON,
-		"instance_url":                              st.InstanceURL,
-		"validate_url_pattern":                      st.ValidateURLPattern,
-		"ui_animations_enabled":                     boolString(st.UIAnimationsEnabled),
-		"automation_ignored_containers":             st.AutomationIgnoredContainers,
-		"malware_ignored_mounts":                    st.MalwareIgnoredMounts,
-		"auto_upgrade_max_concurrency":              intString(st.AutoUpgradeMaxConcurrency),
-		"auto_upgrade_min_retry_minutes":            intString(st.AutoUpgradeMinRetryMinutes),
-		"trivy_sweep_mode":                          st.TrivySweepMode,
-		"docker_prune_include_unused_tagged":        boolString(st.DockerPruneIncludeUnusedTaggedImages),		"compose_snapshot_root_path":                st.ComposeSnapshotRootPath,
-		"gitops_master_directory":                   st.GitOpsMasterDirectory,
-		"clamav_snapshot_max_bytes":                 fmt.Sprintf("%d", st.ClamAVSnapshotMaxBytes),
-		"data_retention_days":                       intString(st.DataRetentionDays),
-		"retention_logs_days":                       intString(st.RetentionLogsDays),
-		"retention_metrics_days":                    intString(st.RetentionMetricsDays),
-		"retention_scan_results_days":               intString(st.RetentionScanResultsDays),
-		"retention_scan_jobs_days":                  intString(st.RetentionScanJobsDays),
-		"retention_update_runs_days":                intString(st.RetentionUpdateRunsDays),
-		"retention_compose_audit_days":              intString(st.RetentionComposeAuditDays),
-		"retention_ai_usage_days":                   intString(st.RetentionAIUsageDays),
-		"metrics_normalized":                        boolString(st.MetricsNormalized),
-		"global_bypass_ai":                          boolString(st.GlobalBypassAI),
-		"global_skip_health_check":                  boolString(st.GlobalSkipHealthCheck),
-		"default_validate_mode":                     st.DefaultValidateMode,
-		"default_validate_timeout_sec":              intString(st.DefaultValidateTimeoutSec),
-		"default_validate_interval_sec":             intString(st.DefaultValidateIntervalSec),
-		"default_ai_validate_logs":                  boolString(st.DefaultAIValidateLogs),
-		"default_auto_rollback":                     boolString(st.DefaultAutoRollback),
-		"default_restart_on_unhealthy":              boolString(st.DefaultRestartOnUnhealthy),
-		"unhealthy_auto_remediation_enabled":        boolString(st.UnhealthyAutoRemediationEnabled),
-		"unhealthy_restart_cooldown_sec_default":    intString(st.UnhealthyRestartCooldownSecDefault),
-		"max_restarts_per_window":                   intString(st.MaxRestartsPerWindow),
-		"ai_testing_passed":                         boolString(st.AITestingPassed),
-		"portainer_testing_passed":                  boolString(st.PortainerTestingPassed),
+		"discord_webhook_url":                st.DiscordWebhookURL,
+		"discord_enabled":                    boolString(st.DiscordEnabled),
+		"portainer_url":                      st.PortainerURL,
+		"portainer_api_key":                  st.PortainerApiKey,
+		"portainer_enabled":                  boolString(st.PortainerEnabled),
+		"ai_enabled":                         boolString(st.AIEnabled),
+		"ai_provider":                        st.AIProvider,
+		"ai_block_risk_threshold":            intString(st.AIBlockRiskThreshold),
+		"openai_key":                         st.OpenAIKey,
+		"openai_model":                       st.OpenAIModel,
+		"anthropic_key":                      st.AnthropicKey,
+		"anthropic_model":                    st.AnthropicModel,
+		"gemini_key":                         st.GeminiKey,
+		"gemini_model":                       st.GeminiModel,
+		"ai_pricing_json":                    st.AIPricingJSON,
+		"instance_url":                       st.InstanceURL,
+		"validate_url_pattern":               st.ValidateURLPattern,
+		"ui_animations_enabled":              boolString(st.UIAnimationsEnabled),
+		"automation_ignored_containers":      st.AutomationIgnoredContainers,
+		"malware_ignored_mounts":             st.MalwareIgnoredMounts,
+		"auto_upgrade_max_concurrency":       intString(st.AutoUpgradeMaxConcurrency),
+		"auto_upgrade_min_retry_minutes":     intString(st.AutoUpgradeMinRetryMinutes),
+		"trivy_sweep_mode":                   st.TrivySweepMode,
+		"docker_prune_include_unused_tagged": boolString(st.DockerPruneIncludeUnusedTaggedImages), "compose_snapshot_root_path": st.ComposeSnapshotRootPath,
+		"gitops_master_directory":                st.GitOpsMasterDirectory,
+		"clamav_snapshot_max_bytes":              fmt.Sprintf("%d", st.ClamAVSnapshotMaxBytes),
+		"data_retention_days":                    intString(st.DataRetentionDays),
+		"retention_logs_days":                    intString(st.RetentionLogsDays),
+		"retention_metrics_days":                 intString(st.RetentionMetricsDays),
+		"retention_scan_results_days":            intString(st.RetentionScanResultsDays),
+		"retention_scan_jobs_days":               intString(st.RetentionScanJobsDays),
+		"retention_update_runs_days":             intString(st.RetentionUpdateRunsDays),
+		"retention_compose_audit_days":           intString(st.RetentionComposeAuditDays),
+		"retention_ai_usage_days":                intString(st.RetentionAIUsageDays),
+		"metrics_normalized":                     boolString(st.MetricsNormalized),
+		"global_bypass_ai":                       boolString(st.GlobalBypassAI),
+		"global_skip_health_check":               boolString(st.GlobalSkipHealthCheck),
+		"default_validate_mode":                  st.DefaultValidateMode,
+		"default_validate_timeout_sec":           intString(st.DefaultValidateTimeoutSec),
+		"default_validate_interval_sec":          intString(st.DefaultValidateIntervalSec),
+		"default_ai_validate_logs":               boolString(st.DefaultAIValidateLogs),
+		"default_auto_rollback":                  boolString(st.DefaultAutoRollback),
+		"default_restart_on_unhealthy":           boolString(st.DefaultRestartOnUnhealthy),
+		"unhealthy_auto_remediation_enabled":     boolString(st.UnhealthyAutoRemediationEnabled),
+		"unhealthy_restart_cooldown_sec_default": intString(st.UnhealthyRestartCooldownSecDefault),
+		"max_restarts_per_window":                intString(st.MaxRestartsPerWindow),
+		"ai_testing_passed":                      boolString(st.AITestingPassed),
+		"portainer_testing_passed":               boolString(st.PortainerTestingPassed),
 	}
 
 	jsonToDbKey := map[string]string{
@@ -634,7 +635,7 @@ func normalizeValidateModeValue(mode string) string {
 	case "both":
 		return "both"
 	default:
-		return "both"
+		return "docker"
 	}
 }
 
