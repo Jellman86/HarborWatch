@@ -17,6 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/harborwatch ./cmd/ser
 FROM debian:bookworm-slim
 ARG APP_VERSION=dev
 ARG GIT_HASH=unknown
+ARG TRIVY_VERSION=0.69.3
 
 ENV HARBORWATCH_VERSION=${APP_VERSION}
 ENV HARBORWATCH_DB_PATH=/data/harborwatch.db
@@ -30,7 +31,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     clamav \
     clamav-daemon \
-    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.50.1 \
+    && TRIVY_TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+    && curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_TARBALL}" -o "/tmp/${TRIVY_TARBALL}" \
+    && curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt" -o /tmp/trivy_checksums.txt \
+    && (cd /tmp && grep " ${TRIVY_TARBALL}$" trivy_checksums.txt | sha256sum -c -) \
+    && tar -xzf "/tmp/${TRIVY_TARBALL}" -C /tmp trivy \
+    && install -m 0755 /tmp/trivy /usr/local/bin/trivy \
+    && rm -f "/tmp/${TRIVY_TARBALL}" /tmp/trivy_checksums.txt /tmp/trivy \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -u 1000 appuser && \
