@@ -181,6 +181,29 @@ func TestRunCreatesUpdatesTablesAndIndexes(t *testing.T) {
 	}
 }
 
+func TestRunCreatesGitOpsInlineEnvColumns(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	if _, err := Run(ctx, db); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	for _, col := range []string{"env_inline_content", "env_inline_enabled"} {
+		if !hasColumn(t, db, "git_deployments", col) {
+			t.Fatalf("expected git_deployments.%s after migrations", col)
+		}
+	}
+
+	var integrity string
+	if err := db.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&integrity); err != nil {
+		t.Fatalf("integrity_check failed: %v", err)
+	}
+	if integrity != "ok" {
+		t.Fatalf("expected integrity_check ok, got %q", integrity)
+	}
+}
+
 func TestRunUpgradesLegacyUpdateRunsColumns(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

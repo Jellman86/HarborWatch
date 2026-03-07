@@ -48,6 +48,7 @@ func NormalizeDeployment(dep *GitDeployment) error {
 	dep.ComposePath = strings.TrimSpace(dep.ComposePath)
 	dep.EnvVarsJSON = strings.TrimSpace(dep.EnvVarsJSON)
 	dep.EnvFilePath = strings.TrimSpace(dep.EnvFilePath)
+	dep.EnvInlineContent = normalizeEnvContent(dep.EnvInlineContent)
 
 	if dep.GitSourceID == "" || dep.ComposePath == "" {
 		return fmt.Errorf("gitSourceId and composePath are required")
@@ -72,6 +73,12 @@ func NormalizeDeployment(dep *GitDeployment) error {
 	}
 
 	return nil
+}
+
+func normalizeEnvContent(raw string) string {
+	value := strings.ReplaceAll(raw, "\r\n", "\n")
+	value = strings.ReplaceAll(value, "\r", "\n")
+	return value
 }
 
 // ResolvePathUnder joins relPath under root and rejects path traversal/absolute paths.

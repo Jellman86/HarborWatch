@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -21,10 +22,12 @@ type toggleDeploymentRequest struct {
 }
 
 type updateDeploymentRequest struct {
-	ComposePath *string `json:"composePath"`
-	EnvVarsJSON *string `json:"envVarsJson"`
-	EnvFilePath *string `json:"envFilePath"`
-	Enabled     *bool   `json:"enabled"`
+	ComposePath      *string `json:"composePath"`
+	EnvVarsJSON      *string `json:"envVarsJson"`
+	EnvFilePath      *string `json:"envFilePath"`
+	EnvInlineContent *string `json:"envInlineContent"`
+	EnvInlineEnabled *bool   `json:"envInlineEnabled"`
+	Enabled          *bool   `json:"enabled"`
 }
 
 func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
@@ -108,6 +111,9 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
 				}
+				if masterDir := gitOpsMasterDirectory(req.Context(), deps); masterDir != "" {
+					_ = gitops.RemoveManagedInlineEnvSourceDir(masterDir, id)
+				}
 				writeJSON(w, http.StatusOK, gitOpsResponse{OK: true})
 			})
 
@@ -162,6 +168,12 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
 				}
+				for i := range deps {
+					if err := gitops.HydrateDeploymentForResponse(&deps[i]); err != nil {
+						writeError(w, http.StatusInternalServerError, "deployment_env_invalid", err.Error())
+						return
+					}
+				}
 				writeJSON(w, http.StatusOK, deps)
 			})
 
@@ -185,6 +197,10 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 						return
 					}
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+					return
+				}
+				if err := gitops.HydrateDeploymentForResponse(&dep); err != nil {
+					writeError(w, http.StatusInternalServerError, "deployment_env_invalid", err.Error())
 					return
 				}
 				writeJSON(w, http.StatusOK, dep)
@@ -213,6 +229,15 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 				if body.EnvFilePath != nil {
 					current.EnvFilePath = *body.EnvFilePath
 				}
+				if body.EnvInlineContent != nil {
+					current.EnvInlineContent = *body.EnvInlineContent
+				}
+				if body.EnvInlineEnabled != nil {
+					current.EnvInlineEnabled = *body.EnvInlineEnabled
+				}
+				if body.EnvInlineContent != nil || body.EnvInlineEnabled != nil {
+					current.EnvVarsJSON = ""
+				}
 				if body.Enabled != nil {
 					current.Enabled = *body.Enabled
 				}
@@ -234,14 +259,31 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
 				}
+				if !current.EnvInlineEnabled && strings.TrimSpace(current.EnvVarsJSON) == "" {
+					if masterDir := gitOpsMasterDirectory(req.Context(), deps); masterDir != "" {
+						_ = gitops.RemoveManagedInlineEnvFile(masterDir, current.GitSourceID, current.ID)
+					}
+				}
+				if err := gitops.HydrateDeploymentForResponse(&current); err != nil {
+					writeError(w, http.StatusInternalServerError, "deployment_env_invalid", err.Error())
+					return
+				}
 				writeJSON(w, http.StatusOK, current)
 			})
 
 			r.Delete("/{id}", func(w http.ResponseWriter, req *http.Request) {
 				id := chi.URLParam(req, "id")
+				current, err := gitStore.GetDeployment(req.Context(), id)
+				if err != nil {
+					writeError(w, http.StatusNotFound, "not_found", err.Error())
+					return
+				}
 				if err := gitStore.DeleteDeployment(req.Context(), id); err != nil {
 					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
+				}
+				if masterDir := gitOpsMasterDirectory(req.Context(), deps); masterDir != "" {
+					_ = gitops.RemoveManagedInlineEnvFile(masterDir, current.GitSourceID, current.ID)
 				}
 				writeJSON(w, http.StatusOK, gitOpsResponse{OK: true})
 			})
@@ -285,6 +327,17 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 			})
 		})
 	})
+}
+
+func gitOpsMasterDirectory(ctx context.Context, deps adminRouteDeps) string {
+	if deps.settingsService == nil {
+		return ""
+	}
+	st, err := deps.settingsService.Get(ctx)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(st.GitOpsMasterDirectory)
 }
 
 func isUniqueConstraintErr(err error) bool {

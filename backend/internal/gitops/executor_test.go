@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -53,5 +55,24 @@ func TestResolveEnvFilePathSupportsAbsoluteAndRelative(t *testing.T) {
 	}
 	if rel != "/data/gitops/repo/env/.env" {
 		t.Fatalf("unexpected relative env file path: %s", rel)
+	}
+}
+
+func TestManagedInlineEnvFilePathLivesOutsideRepoCheckout(t *testing.T) {
+	masterDir := t.TempDir()
+	repoPath := filepath.Join(masterDir, "repo", "apps", "demo")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("mkdir repo path: %v", err)
+	}
+
+	path, err := managedInlineEnvFilePath(masterDir, "src-1", "dep-1")
+	if err != nil {
+		t.Fatalf("managedInlineEnvFilePath returned error: %v", err)
+	}
+	if !strings.HasPrefix(path, filepath.Join(masterDir, ".harborwatch", "gitops-env")) {
+		t.Fatalf("expected managed env path under HarborWatch gitops env root, got %q", path)
+	}
+	if strings.HasPrefix(path, repoPath) {
+		t.Fatalf("managed env path must not live inside repo checkout: %q", path)
 	}
 }

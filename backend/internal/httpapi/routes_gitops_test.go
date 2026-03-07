@@ -112,6 +112,8 @@ func TestGitOpsUpdateDeploymentRouteUpdatesFields(t *testing.T) {
 		"composePath":"stacks/web/compose.yaml",
 		"envFilePath":"stacks/web/.env",
 		"envVarsJson":"{\"APP_ENV\":\"prod\"}",
+		"envInlineEnabled":true,
+		"envInlineContent":"APP_ENV=prod\nFEATURE_FLAG=true\n",
 		"enabled":true
 	}`)
 	rec := httptest.NewRecorder()
@@ -136,14 +138,75 @@ func TestGitOpsUpdateDeploymentRouteUpdatesFields(t *testing.T) {
 	if got.EnvFilePath != "stacks/web/.env" {
 		t.Fatalf("envFilePath not updated: %q", got.EnvFilePath)
 	}
-	if got.EnvVarsJSON != `{"APP_ENV":"prod"}` {
-		t.Fatalf("envVarsJson not updated: %q", got.EnvVarsJSON)
+	if got.EnvVarsJSON != "" {
+		t.Fatalf("expected legacy envVarsJson cleared after inline override edit, got %q", got.EnvVarsJSON)
+	}
+	if !got.EnvInlineEnabled {
+		t.Fatalf("expected envInlineEnabled true")
+	}
+	if got.EnvInlineContent != "APP_ENV=prod\nFEATURE_FLAG=true\n" {
+		t.Fatalf("envInlineContent not updated: %q", got.EnvInlineContent)
 	}
 	if !got.Enabled {
 		t.Fatalf("enabled flag not updated")
 	}
 	if got.AutoCreated {
 		t.Fatalf("autoCreated should be false after edit")
+	}
+}
+
+func TestGitOpsListDeploymentsDerivesInlineEnvFromLegacyEnvVars(t *testing.T) {
+	db := openGitOpsTestDB(t)
+	store := gitops.NewStore(db)
+	mux := newGitOpsTestMux(db, t.TempDir())
+
+	src := gitops.GitSource{
+		ID:               "src-legacy-env",
+		Name:             "Legacy Env",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-legacy-env",
+		AuthMethod:       gitops.AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(context.Background(), src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+
+	if err := store.CreateDeployment(context.Background(), gitops.GitDeployment{
+		ID:               "dep-legacy-env",
+		GitSourceID:      src.ID,
+		ComposePath:      "docker-compose.yml",
+		EnvVarsJSON:      `{"APP_ENV":"prod","FEATURE_FLAG":"true"}`,
+		EnvInlineEnabled: false,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/gitops/deployments?sourceId="+src.ID, nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload []struct {
+		ID               string `json:"id"`
+		EnvInlineEnabled bool   `json:"envInlineEnabled"`
+		EnvInlineContent string `json:"envInlineContent"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("expected 1 deployment, got %d", len(payload))
+	}
+	if payload[0].EnvInlineEnabled {
+		t.Fatalf("expected legacy env vars to remain disabled until explicitly migrated")
+	}
+	if payload[0].EnvInlineContent != "APP_ENV=prod\nFEATURE_FLAG=true\n" {
+		t.Fatalf("unexpected derived envInlineContent: %q", payload[0].EnvInlineContent)
 	}
 }
 

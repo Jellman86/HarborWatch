@@ -28,6 +28,8 @@
         composePath: string;
         envVarsJson?: string;
         envFilePath?: string;
+        envInlineContent?: string;
+        envInlineEnabled?: boolean;
         autoCreated?: boolean;
         enabled?: boolean;
         lastDeployedHash?: string;
@@ -44,7 +46,8 @@
         composePath: string;
         envFilePath: string;
         enabled: boolean;
-        envVars: { key: string, value: string }[];
+        envInlineEnabled: boolean;
+        envInlineContent: string;
     }
 
     // Component State
@@ -78,14 +81,16 @@
         composePath: "docker-compose.yml",
         envFilePath: "",
         enabled: true,
-        envVars: [] as { key: string, value: string }[]
+        envInlineEnabled: false,
+        envInlineContent: ""
     });
 
     let editDeployment = $state<DeploymentFormState>({
         composePath: "",
         envFilePath: "",
         enabled: true,
-        envVars: []
+        envInlineEnabled: false,
+        envInlineContent: ""
     });
 
     onMount(() => {
@@ -96,32 +101,13 @@
         return Array.isArray(value) ? (value as T[]) : [];
     }
 
-    function parseEnvVarsJson(raw: string | undefined): { key: string, value: string }[] {
-        if (!raw) return [];
-        try {
-            const parsed = JSON.parse(raw) as Record<string, string>;
-            if (!parsed || typeof parsed !== "object") return [];
-            return Object.entries(parsed).map(([key, value]) => ({ key, value: String(value ?? "") }));
-        } catch {
-            return [];
-        }
-    }
-
-    function envVarsToJson(vars: { key: string, value: string }[]): string {
-        const envMap: Record<string, string> = {};
-        vars.forEach((v) => {
-            const key = v.key.trim();
-            if (key) envMap[key] = v.value;
-        });
-        return JSON.stringify(envMap);
-    }
-
     function resetNewDeployment() {
         newDeployment = {
             composePath: "docker-compose.yml",
             envFilePath: "",
             enabled: true,
-            envVars: []
+            envInlineEnabled: false,
+            envInlineContent: ""
         };
     }
 
@@ -162,7 +148,8 @@
             composePath: dep.composePath,
             envFilePath: dep.envFilePath || "",
             enabled: dep.enabled !== false,
-            envVars: parseEnvVarsJson(dep.envVarsJson)
+            envInlineEnabled: dep.envInlineEnabled === true,
+            envInlineContent: dep.envInlineContent || ""
         };
         showEditDeploymentModal = true;
         loadSourceFilesForPicker(sourceId);
@@ -241,7 +228,9 @@
                     composePath: newDeployment.composePath,
                     envFilePath: newDeployment.envFilePath,
                     enabled: newDeployment.enabled,
-                    envVarsJson: envVarsToJson(newDeployment.envVars)
+                    envVarsJson: "",
+                    envInlineEnabled: newDeployment.envInlineEnabled,
+                    envInlineContent: newDeployment.envInlineContent
                 })
             });
             if (res.ok) {
@@ -269,7 +258,9 @@
                     composePath: editDeployment.composePath,
                     envFilePath: editDeployment.envFilePath,
                     enabled: editDeployment.enabled,
-                    envVarsJson: envVarsToJson(editDeployment.envVars)
+                    envVarsJson: "",
+                    envInlineEnabled: editDeployment.envInlineEnabled,
+                    envInlineContent: editDeployment.envInlineContent
                 })
             });
             if (res.ok) {
@@ -387,22 +378,6 @@
 
     function toggleExpand(id: string) {
         expandedSourceId = expandedSourceId === id ? null : id;
-    }
-
-    function addEnvVar() {
-        newDeployment.envVars = [...newDeployment.envVars, { key: "", value: "" }];
-    }
-
-    function removeEnvVar(index: number) {
-        newDeployment.envVars = newDeployment.envVars.filter((_, i) => i !== index);
-    }
-
-    function addEditEnvVar() {
-        editDeployment.envVars = [...editDeployment.envVars, { key: "", value: "" }];
-    }
-
-    function removeEditEnvVar(index: number) {
-        editDeployment.envVars = editDeployment.envVars.filter((_, i) => i !== index);
     }
 
     function formatRelativeTime(ts: number) {
@@ -574,6 +549,9 @@
                                                         <p class="text-[10px] text-slate-500 mt-0.5">Last deployed: {formatRelativeTime(dep.lastDeployedAt)} {dep.lastDeployedHash ? `(${dep.lastDeployedHash.slice(0, 7)})` : ''}</p>
                                                         {#if dep.envFilePath}
                                                             <p class="text-[10px] text-slate-500 mt-0.5 font-mono">Env file: {dep.envFilePath}</p>
+                                                        {/if}
+                                                        {#if dep.envInlineEnabled}
+                                                            <p class="text-[10px] text-sky-600 dark:text-sky-300 mt-0.5 font-bold">HarborWatch-managed env override active</p>
                                                         {/if}
                                                     </div>
                                                 </div>
@@ -773,6 +751,9 @@
                                 <option value={file}></option>
                             {/each}
                         </datalist>
+                        {#if editDeployment.envInlineEnabled}
+                            <p class="text-[10px] text-sky-600 dark:text-sky-300 ml-1 italic">Ignored while HarborWatch env override is enabled.</p>
+                        {/if}
                     </div>
 
                     <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 flex items-center justify-between">
@@ -789,29 +770,30 @@
                         </button>
                     </div>
 
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between ml-1">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Environment Variables (.env)</p>
-                            <button onclick={addEditEnvVar} class="text-[9px] font-black text-brand-600 uppercase tracking-widest hover:underline">+ Add Variable</button>
-                        </div>
-
-                        {#if editDeployment.envVars.length === 0}
-                            <p class="text-[11px] text-slate-500 italic ml-1">No custom environment variables defined.</p>
-                        {:else}
-                            <div class="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                                {#each editDeployment.envVars as env, i}
-                                    <div class="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200" style="--index: {i}">
-                                        <input bind:value={env.key} placeholder="KEY" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
-                                        <input bind:value={env.value} type="text" placeholder="VALUE" spellcheck="false" autocapitalize="off" autocomplete="off" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
-                                        <button onclick={() => removeEditEnvVar(i)} aria-label={`Remove environment variable ${i + 1}`} class="p-2 text-slate-400 hover:text-rose-500">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                {/each}
+                    <div class="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4">
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">HarborWatch Env Override</p>
+                                <p class="text-[10px] text-slate-500 mt-1">Uses a HarborWatch-managed <span class="font-mono">.env</span> outside the repo checkout and ignores any repo/default env file at deploy time.</p>
                             </div>
-                        {/if}
+                            <button
+                                onclick={() => editDeployment.envInlineEnabled = !editDeployment.envInlineEnabled}
+                                class="w-10 h-5 rounded-full relative transition-colors {editDeployment.envInlineEnabled ? 'bg-sky-600' : 'bg-slate-300'}"
+                                aria-label="Toggle HarborWatch env override"
+                            >
+                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {editDeployment.envInlineEnabled ? 'right-1' : 'left-1'}"></div>
+                            </button>
+                        </div>
+                        <textarea
+                            bind:value={editDeployment.envInlineContent}
+                            rows="10"
+                            spellcheck="false"
+                            autocapitalize="off"
+                            autocomplete="off"
+                            placeholder={"APP_ENV=prod\nAPI_BASE=https://example.com\nFEATURE_FLAG=true"}
+                            disabled={!editDeployment.envInlineEnabled}
+                            class="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-mono outline-none focus:ring-2 focus:ring-sky-500 transition-all text-slate-900 dark:text-white disabled:opacity-50"
+                        ></textarea>
                     </div>
                 </div>
 
@@ -885,6 +867,9 @@
                             {/each}
                         </datalist>
                         <p class="text-[10px] text-slate-500 ml-1 italic">Supports repo-relative paths and absolute host paths.</p>
+                        {#if newDeployment.envInlineEnabled}
+                            <p class="text-[10px] text-sky-600 dark:text-sky-300 ml-1 italic">Ignored while HarborWatch env override is enabled.</p>
+                        {/if}
                     </div>
 
                     <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 flex items-center justify-between">
@@ -901,29 +886,30 @@
                         </button>
                     </div>
 
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between ml-1">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Environment Variables (.env)</p>
-                            <button onclick={addEnvVar} class="text-[9px] font-black text-brand-600 uppercase tracking-widest hover:underline">+ Add Variable</button>
-                        </div>
-                        
-                        {#if newDeployment.envVars.length === 0}
-                            <p class="text-[11px] text-slate-500 italic ml-1">No custom environment variables defined.</p>
-                        {:else}
-                            <div class="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                                {#each newDeployment.envVars as env, i}
-                                    <div class="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200" style="--index: {i}">
-                                        <input bind:value={env.key} placeholder="KEY" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
-                                        <input bind:value={env.value} type="text" placeholder="VALUE" spellcheck="false" autocapitalize="off" autocomplete="off" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
-                                        <button onclick={() => removeEnvVar(i)} aria-label={`Remove environment variable ${i + 1}`} class="p-2 text-slate-400 hover:text-rose-500">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                {/each}
+                    <div class="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4">
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">HarborWatch Env Override</p>
+                                <p class="text-[10px] text-slate-500 mt-1">Use a HarborWatch-managed <span class="font-mono">.env</span> outside the repo checkout. This ignores any repo/default env file during deploy.</p>
                             </div>
-                        {/if}
+                            <button
+                                onclick={() => newDeployment.envInlineEnabled = !newDeployment.envInlineEnabled}
+                                class="w-10 h-5 rounded-full relative transition-colors {newDeployment.envInlineEnabled ? 'bg-sky-600' : 'bg-slate-300'}"
+                                aria-label="Toggle HarborWatch env override"
+                            >
+                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {newDeployment.envInlineEnabled ? 'right-1' : 'left-1'}"></div>
+                            </button>
+                        </div>
+                        <textarea
+                            bind:value={newDeployment.envInlineContent}
+                            rows="10"
+                            spellcheck="false"
+                            autocapitalize="off"
+                            autocomplete="off"
+                            placeholder={"APP_ENV=prod\nAPI_BASE=https://example.com\nFEATURE_FLAG=true"}
+                            disabled={!newDeployment.envInlineEnabled}
+                            class="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-mono outline-none focus:ring-2 focus:ring-sky-500 transition-all text-slate-900 dark:text-white disabled:opacity-50"
+                        ></textarea>
                     </div>
                 </div>
 

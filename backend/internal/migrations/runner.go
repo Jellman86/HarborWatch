@@ -318,3 +318,19 @@ func migrateContainerIntelColumns(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
+
+func migrateGitOpsInlineEnvColumns(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		ddl  string
+	}{
+		{"env_inline_content", "TEXT"},
+		{"env_inline_enabled", "INTEGER NOT NULL DEFAULT 0"},
+	}
+	for _, c := range columns {
+		if err := ensureColumnTx(ctx, tx, "git_deployments", c.name, c.ddl); err != nil {
+			return fmt.Errorf("ensure git_deployments.%s: %w", c.name, err)
+		}
+	}
+	return nil
+}

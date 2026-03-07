@@ -27,8 +27,10 @@ type GitDeployment struct {
 	ID               string `json:"id"`
 	GitSourceID      string `json:"gitSourceId"`
 	ComposePath      string `json:"composePath"`
-	EnvVarsJSON      string `json:"envVarsJson"` // JSON string map of overrides
+	EnvVarsJSON      string `json:"envVarsJson"` // Legacy JSON string map of overrides
 	EnvFilePath      string `json:"envFilePath"`
+	EnvInlineContent string `json:"envInlineContent"` // Raw .env content for HarborWatch-managed overrides
+	EnvInlineEnabled bool   `json:"envInlineEnabled"`
 	AutoCreated      bool   `json:"autoCreated"`
 	Enabled          bool   `json:"enabled"`
 	LastDeployedHash string `json:"lastDeployedHash"`

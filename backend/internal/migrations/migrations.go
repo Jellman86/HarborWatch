@@ -137,5 +137,10 @@ func defaultMigrations() []Migration {
 			Name:    "add_gitops_deployment_auto_created",
 			SQL:     mustReadSQL("sql/0022_add_gitops_deployment_auto_created.sql"),
 		},
+		{
+			Version: 23,
+			Name:    "add_gitops_inline_env_override",
+			ApplyTx: migrateGitOpsInlineEnvColumns,
+		},
 	}
 }

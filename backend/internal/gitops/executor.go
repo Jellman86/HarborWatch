@@ -2,7 +2,6 @@ package gitops
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -73,8 +72,19 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 	args := []string{"compose", "-f", composeFile}
 
 	// Handle env-file mapping and environment overrides.
+	inlineEnabled, inlineContent, err := deriveInlineEnvContent(*dep)
+	if err != nil {
+		return err
+	}
+
 	envFilePath := ""
-	if dep.EnvFilePath != "" {
+	if inlineEnabled {
+		envFilePath, err = writeManagedInlineEnvFile(st.GitOpsMasterDirectory, sourceID, dep.ID, inlineContent)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--env-file", envFilePath)
+	} else if dep.EnvFilePath != "" {
 		envFilePath, err = resolveEnvFilePath(repoPath, dep.EnvFilePath)
 		if err != nil {
 			return fmt.Errorf("invalid deployment env file path: %w", err)
@@ -84,28 +94,22 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 		}
 		args = append(args, "--env-file", envFilePath)
 	}
-	if dep.EnvVarsJSON != "" {
-		var envVars map[string]string
-		if err := json.Unmarshal([]byte(dep.EnvVarsJSON), &envVars); err != nil {
-			return fmt.Errorf("failed to parse env vars JSON: %w", err)
+
+	if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) != "" {
+		legacyOverride, err := legacyEnvVarsJSONToEnvContent(dep.EnvVarsJSON)
+		if err != nil {
+			return err
 		}
-
-		if len(envVars) > 0 {
-			envContent, err := buildEnvFile(envVars)
-			if err != nil {
-				return err
-			}
-
-			overrideEnvFilePath := filepath.Join(workDir, ".env.harborwatch")
-			if err := os.WriteFile(overrideEnvFilePath, []byte(envContent), 0600); err != nil {
-				return fmt.Errorf("failed to write env file: %w", err)
-			}
-			defer os.Remove(overrideEnvFilePath) // Clean up afterwards
-
-			args = append(args, "--env-file", overrideEnvFilePath)
+		overridePath, err := writeManagedInlineEnvFile(st.GitOpsMasterDirectory, sourceID, dep.ID, legacyOverride)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--env-file", overridePath)
+	} else if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) == "" {
+		if path, pathErr := managedInlineEnvFilePath(st.GitOpsMasterDirectory, sourceID, dep.ID); pathErr == nil {
+			_ = os.Remove(path)
 		}
 	}
-
 	args = append(args, "up", "-d", "--remove-orphans")
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
