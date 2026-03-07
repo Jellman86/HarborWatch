@@ -18,6 +18,8 @@ FROM debian:bookworm-slim
 ARG APP_VERSION=dev
 ARG GIT_HASH=unknown
 ARG TRIVY_VERSION=0.69.3
+ARG COMPOSE_PLUGIN_VERSION=5.0.1
+ARG TARGETARCH
 
 ENV HARBORWATCH_VERSION=${APP_VERSION}
 ENV HARBORWATCH_DB_PATH=/data/harborwatch.db
@@ -27,12 +29,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     docker.io \
-    docker-compose \
     gnupg \
     lsb-release \
     clamav \
     clamav-daemon \
     sqlite3 \
+    && case "${TARGETARCH:-amd64}" in \
+        amd64) compose_arch="x86_64" ;; \
+        arm64) compose_arch="aarch64" ;; \
+        arm) compose_arch="armv7" ;; \
+        *) echo "unsupported TARGETARCH for compose plugin: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -sfL "https://github.com/docker/compose/releases/download/v${COMPOSE_PLUGIN_VERSION}/docker-compose-linux-${compose_arch}" -o /usr/local/lib/docker/cli-plugins/docker-compose \
+    && chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose \
     && TRIVY_TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
     && curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_TARBALL}" -o "/tmp/${TRIVY_TARBALL}" \
     && curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt" -o /tmp/trivy_checksums.txt \
