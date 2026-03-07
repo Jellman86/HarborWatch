@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/composecli"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"gopkg.in/yaml.v3"
 )
@@ -20,7 +20,7 @@ var (
 	ErrComposeTargetDivergesFromSource      = errors.New("target image diverges from compose source")
 
 	dockerComposeConfigRunner = func(ctx context.Context, workingDir string, configFiles []string) ([]byte, error) {
-		args := []string{"compose"}
+		args := make([]string, 0, len(configFiles)*2+1)
 		for _, raw := range configFiles {
 			p := strings.TrimSpace(raw)
 			if p == "" {
@@ -29,13 +29,17 @@ var (
 			args = append(args, "-f", p)
 		}
 		args = append(args, "config")
-		cmd := exec.CommandContext(ctx, "docker", args...)
+		runner, err := composecli.Resolve(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("resolve compose runtime: %w", err)
+		}
+		cmd := runner.CommandContext(ctx, args...)
 		if wd := strings.TrimSpace(workingDir); wd != "" {
 			cmd.Dir = wd
 		}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return nil, fmt.Errorf("docker compose config failed: %w (%s)", err, truncateAuthorityOutput(string(out), 400))
+			return nil, fmt.Errorf("compose config failed: %w (%s)", err, truncateAuthorityOutput(string(out), 400))
 		}
 		return out, nil
 	}

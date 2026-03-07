@@ -27,10 +27,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     docker.io \
+    docker-compose \
     gnupg \
     lsb-release \
     clamav \
     clamav-daemon \
+    sqlite3 \
     && TRIVY_TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
     && curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_TARBALL}" -o "/tmp/${TRIVY_TARBALL}" \
     && curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt" -o /tmp/trivy_checksums.txt \

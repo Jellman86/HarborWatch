@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Jellman86/HarborWatch/backend/internal/composecli"
 )
 
 // DeployCompose executes `docker compose up -d --remove-orphans` for a given deployment.
@@ -69,7 +70,7 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 	workDir := filepath.Dir(composeFile)
 
 	// Build the command
-	args := []string{"compose", "-f", composeFile}
+	args := []string{"-f", composeFile}
 
 	// Handle env-file mapping and environment overrides.
 	inlineEnabled, inlineContent, err := deriveInlineEnvContent(*dep)
@@ -112,7 +113,11 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 	}
 	args = append(args, "up", "-d", "--remove-orphans")
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	runner, err := composecli.Resolve(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve compose runtime: %w", err)
+	}
+	cmd := runner.CommandContext(ctx, args...)
 	cmd.Dir = workDir
 
 	// We want to capture both stdout and stderr for logging
