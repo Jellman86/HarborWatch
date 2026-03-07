@@ -36,4 +36,10 @@ type GitDeployment struct {
 	LastDeployedHash string `json:"lastDeployedHash"`
 	LastDeployedAt   int64  `json:"lastDeployedAt"`
 	LastError        string `json:"lastError"`
+	LastJobID           string `json:"lastJobId"`
+	DeployStatus        string `json:"deployStatus"`
+	DeployStatusMessage string `json:"deployStatusMessage"`
+	DeployStartedAt     int64  `json:"deployStartedAt"`
+	DeployFinishedAt    int64  `json:"deployFinishedAt"`
+	DeployOutputSummary string `json:"deployOutputSummary"`
 }

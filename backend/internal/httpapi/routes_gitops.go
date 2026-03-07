@@ -3,10 +3,13 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gitops"
+	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -310,20 +313,73 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 				id := chi.URLParam(req, "id")
 
 				// Need to lookup source ID from deployment
-				var sourceID string
+				var sourceID, composePath string
 				// Quick lookup
-				row := deps.db.QueryRowContext(req.Context(), "SELECT git_source_id FROM git_deployments WHERE id = ?", id)
-				if err := row.Scan(&sourceID); err != nil {
+				row := deps.db.QueryRowContext(req.Context(), "SELECT git_source_id, compose_path FROM git_deployments WHERE id = ?", id)
+				if err := row.Scan(&sourceID, &composePath); err != nil {
 					writeError(w, http.StatusNotFound, "not_found", "deployment not found")
 					return
 				}
 
-				if err := gitService.DeployCompose(req.Context(), sourceID, id); err != nil {
-					writeError(w, http.StatusInternalServerError, "deploy_failed", err.Error())
+				if deps.jobManager == nil {
+					if err := gitService.DeployCompose(req.Context(), sourceID, id); err != nil {
+						writeError(w, http.StatusInternalServerError, "deploy_failed", err.Error())
+						return
+					}
+					writeJSON(w, http.StatusOK, gitOpsResponse{OK: true})
 					return
 				}
 
-				writeJSON(w, http.StatusOK, gitOpsResponse{OK: true})
+				jobID := "gitops-deploy-" + uuid.NewString()
+				lockID := "gitops-deployment-" + id
+				job := &jobs.Job{
+					ID:         jobID,
+					Type:       jobs.JobTypeGitOpsDeploy,
+					Target:     "deployment:" + id,
+					TargetName: composePath,
+					Status:     "queued",
+					Message:    "Waiting for concurrency slot",
+					StartedAt:  time.Now().UTC().Unix(),
+				}
+				if existingID, duplicate := deps.jobManager.RegisterJobIfNoDuplicate(job); duplicate {
+					writeJSON(w, http.StatusAccepted, map[string]any{
+						"ok":        true,
+						"jobId":     existingID,
+						"status":    "queued",
+						"duplicate": true,
+					})
+					return
+				}
+
+				go func(sourceID, depID, lockID, jobID string) {
+					defer deps.jobManager.FinishJob(jobID)
+
+					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+					defer cancel()
+
+					if err := deps.jobManager.AcquireSlot(ctx, jobID, lockID); err != nil {
+						deps.jobManager.UpdateJob(jobID, 100, "failed", "Failed to acquire slot: "+err.Error())
+						return
+					}
+					defer deps.jobManager.ReleaseSlot(jobID, lockID)
+
+					if err := gitService.RunTrackedDeploy(ctx, sourceID, depID, jobID, func(progress int, status, message string) {
+						deps.jobManager.UpdateJob(jobID, progress, status, message)
+					}); err != nil {
+						deps.jobManager.UpdateJob(jobID, 100, "failed", "Deploy failed: "+err.Error())
+						if deps.diagService != nil {
+							deps.diagService.Log("ERROR", "GitOps", fmt.Sprintf("Deployment %s failed: %v", depID, err))
+						}
+						return
+					}
+				}(sourceID, id, lockID, jobID)
+
+				writeJSON(w, http.StatusAccepted, map[string]any{
+					"ok":        true,
+					"jobId":     jobID,
+					"status":    "queued",
+					"duplicate": false,
+				})
 			})
 		})
 	})

@@ -204,6 +204,28 @@ func TestRunCreatesGitOpsInlineEnvColumns(t *testing.T) {
 	}
 }
 
+func TestRunCreatesGitOpsDeployRuntimeColumns(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	if _, err := Run(ctx, db); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	for _, col := range []string{
+		"last_job_id",
+		"deploy_status",
+		"deploy_status_message",
+		"deploy_started_at",
+		"deploy_finished_at",
+		"deploy_output_summary",
+	} {
+		if !hasColumn(t, db, "git_deployments", col) {
+			t.Fatalf("expected git_deployments.%s after migrations", col)
+		}
+	}
+}
+
 func TestRunUpgradesLegacyUpdateRunsColumns(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

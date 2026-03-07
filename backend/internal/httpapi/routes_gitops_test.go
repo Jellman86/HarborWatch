@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/gitops"
+	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	gogit "github.com/go-git/go-git/v5"
@@ -376,6 +377,98 @@ func TestGitOpsToggleDeploymentClearsAutoCreatedFlag(t *testing.T) {
 	}
 }
 
+func TestGitOpsDeployRouteQueuesJobAndDeduplicatesActiveDeployment(t *testing.T) {
+	db := openGitOpsTestDB(t)
+	store := gitops.NewStore(db)
+	jobManager := jobs.NewManager(1)
+	mux := newGitOpsTestMuxWithJobManager(db, t.TempDir(), jobManager)
+
+	src := gitops.GitSource{
+		ID:               "src-deploy-job",
+		Name:             "Deploy Source",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "deploy-source",
+		AuthMethod:       gitops.AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(context.Background(), src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.CreateDeployment(context.Background(), gitops.GitDeployment{
+		ID:          "dep-deploy-job",
+		GitSourceID: src.ID,
+		ComposePath: "docker-compose.yml",
+		Enabled:     true,
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	if err := jobManager.AcquireSlot(context.Background(), "blocking-job", "blocking-target"); err != nil {
+		t.Fatalf("acquire blocking slot: %v", err)
+	}
+	defer jobManager.ReleaseSlot("blocking-job", "blocking-target")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/gitops/deployments/dep-deploy-job/deploy", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		OK        bool   `json:"ok"`
+		JobID     string `json:"jobId"`
+		Status    string `json:"status"`
+		Duplicate bool   `json:"duplicate"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !payload.OK {
+		t.Fatalf("expected ok response")
+	}
+	if payload.JobID == "" {
+		t.Fatalf("expected job id in response")
+	}
+	if payload.Status != "queued" {
+		t.Fatalf("expected queued status, got %q", payload.Status)
+	}
+	if payload.Duplicate {
+		t.Fatalf("expected first deploy request not to be duplicate")
+	}
+
+	active := jobManager.ActiveJobs()
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active job, got %d", len(active))
+	}
+	if active[0].Type != string(jobs.JobTypeGitOpsDeploy) {
+		t.Fatalf("expected gitops deploy job type, got %q", active[0].Type)
+	}
+
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/api/gitops/deployments/dep-deploy-job/deploy", nil)
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusAccepted {
+		t.Fatalf("expected duplicate request to return 202, got %d body=%s", rec2.Code, rec2.Body.String())
+	}
+
+	var payload2 struct {
+		JobID     string `json:"jobId"`
+		Status    string `json:"status"`
+		Duplicate bool   `json:"duplicate"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(rec2.Body.Bytes())).Decode(&payload2); err != nil {
+		t.Fatalf("decode duplicate response: %v", err)
+	}
+	if !payload2.Duplicate {
+		t.Fatalf("expected duplicate deploy response")
+	}
+	if payload2.JobID != payload.JobID {
+		t.Fatalf("expected duplicate to return existing job id %q, got %q", payload.JobID, payload2.JobID)
+	}
+}
+
 func openGitOpsTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "gitops.db"))
@@ -392,6 +485,10 @@ func openGitOpsTestDB(t *testing.T) *sql.DB {
 }
 
 func newGitOpsTestMux(db *sql.DB, masterDir string) http.Handler {
+	return newGitOpsTestMuxWithJobManager(db, masterDir, nil)
+}
+
+func newGitOpsTestMuxWithJobManager(db *sql.DB, masterDir string, jobManager *jobs.Manager) http.Handler {
 	return NewMuxWithDeps(
 		db,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
@@ -399,7 +496,7 @@ func newGitOpsTestMux(db *sql.DB, masterDir string) http.Handler {
 		fakePortainerClient{},
 		fakeRulesService{},
 		nil,
-		nil,
+		jobManager,
 	)
 }
 

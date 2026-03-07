@@ -212,6 +212,14 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 	if err := settingsStore.Init(context.Background()); err != nil {
 		return nil, nil, fmt.Errorf("init settings store: %w", err)
 	}
+	gitOpsStore := gitops.NewStore(db)
+	if recovered, err := gitOpsStore.MarkInFlightDeploymentsFailed(context.Background(), "deploy interrupted by HarborWatch restart"); err == nil {
+		if recovered > 0 && diagService != nil {
+			diagService.Log("WARN", "GitOps", fmt.Sprintf("Recovered %d stale running GitOps deploy jobs after restart", recovered))
+		}
+	} else if diagService != nil {
+		diagService.Log("ERROR", "GitOps", fmt.Sprintf("Failed to reconcile stale GitOps deploy jobs on startup: %v", err))
+	}
 
 	rulesStore := rules.NewStore(db)
 	if err := rulesStore.Init(context.Background()); err != nil {

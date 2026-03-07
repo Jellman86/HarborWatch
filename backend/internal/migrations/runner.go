@@ -238,6 +238,26 @@ func migrateContainerRulesDependentRestartColumns(ctx context.Context, tx *sql.T
 	return nil
 }
 
+func migrateGitOpsDeployRuntimeColumns(ctx context.Context, tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		ddl  string
+	}{
+		{"last_job_id", "TEXT NOT NULL DEFAULT ''"},
+		{"deploy_status", "TEXT NOT NULL DEFAULT ''"},
+		{"deploy_status_message", "TEXT NOT NULL DEFAULT ''"},
+		{"deploy_started_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"deploy_finished_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"deploy_output_summary", "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, c := range columns {
+		if err := ensureColumnTx(ctx, tx, "git_deployments", c.name, c.ddl); err != nil {
+			return fmt.Errorf("ensure git_deployments.%s: %w", c.name, err)
+		}
+	}
+	return nil
+}
+
 func migrateUpdateRunsColumnsAndIndexes(ctx context.Context, tx *sql.Tx) error {
 	columns := []struct {
 		name string

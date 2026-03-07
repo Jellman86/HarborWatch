@@ -22,6 +22,7 @@
 
     const jobVerb = (type: string) => {
         if (type === "update") return "Updating";
+        if (type === "gitops_deploy") return "Deploying Stack";
         if (type.startsWith("scan:")) {
             if (type === "scan:trivy") return "Scanning (Vulnerability)";
             if (type === "scan:clamav") return "Scanning (Malware)";
@@ -32,6 +33,7 @@
     };
 
     const jobTag = (type: string) => {
+        if (type === "gitops_deploy") return { label: "GitOps Deploy", tone: "emerald" };
         if (type === "scan:trivy") return { label: "Vulnerability (Trivy)", tone: "amber" };
         if (type === "scan:clamav") return { label: "AV (ClamAV)", tone: "rose" };
         if (type === "update") return { label: "Upgrade", tone: "brand" };
@@ -42,6 +44,7 @@
 
     const jobTagClass = (type: string) => {
         const tone = jobTag(type).tone;
+        if (tone === "emerald") return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300";
         if (tone === "amber") return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
         if (tone === "rose") return "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300";
         if (tone === "brand") return "bg-brand-100 text-brand-800 dark:bg-brand-900/30 dark:text-brand-300";

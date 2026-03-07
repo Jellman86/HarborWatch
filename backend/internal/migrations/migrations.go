@@ -142,5 +142,10 @@ func defaultMigrations() []Migration {
 			Name:    "add_gitops_inline_env_override",
 			ApplyTx: migrateGitOpsInlineEnvColumns,
 		},
+		{
+			Version: 24,
+			Name:    "add_gitops_deploy_runtime_columns",
+			ApplyTx: migrateGitOpsDeployRuntimeColumns,
+		},
 	}
 }

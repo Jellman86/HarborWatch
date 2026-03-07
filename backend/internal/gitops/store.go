@@ -125,7 +125,7 @@ func (s *Store) DeleteSource(ctx context.Context, id string) error {
 // GitDeployment Operations
 
 func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) ([]GitDeployment, error) {
-	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, auto_created, enabled, last_deployed_hash, last_deployed_at, last_error FROM git_deployments WHERE git_source_id = ? ORDER BY compose_path ASC`
+	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, auto_created, enabled, last_deployed_hash, last_deployed_at, last_error, last_job_id, deploy_status, deploy_status_message, deploy_started_at, deploy_finished_at, deploy_output_summary FROM git_deployments WHERE git_source_id = ? ORDER BY compose_path ASC`
 	rows, err := s.db.QueryContext(ctx, query, sourceID)
 	if err != nil {
 		return nil, err
@@ -135,10 +135,10 @@ func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) (
 	deps := make([]GitDeployment, 0)
 	for rows.Next() {
 		var dep GitDeployment
-		var envVars, envFilePath, envInlineContent, lastDepHash, lastError sql.NullString
+		var envVars, envFilePath, envInlineContent, lastDepHash, lastError, lastJobID, deployStatus, deployStatusMessage, deployOutputSummary sql.NullString
 		if err := rows.Scan(
 			&dep.ID, &dep.GitSourceID, &dep.ComposePath, &envVars, &envFilePath, &envInlineContent, &dep.EnvInlineEnabled, &dep.AutoCreated, &dep.Enabled,
-			&lastDepHash, &dep.LastDeployedAt, &lastError,
+			&lastDepHash, &dep.LastDeployedAt, &lastError, &lastJobID, &deployStatus, &deployStatusMessage, &dep.DeployStartedAt, &dep.DeployFinishedAt, &deployOutputSummary,
 		); err != nil {
 			return nil, err
 		}
@@ -156,6 +156,18 @@ func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) (
 		}
 		if lastError.Valid {
 			dep.LastError = lastError.String
+		}
+		if lastJobID.Valid {
+			dep.LastJobID = lastJobID.String
+		}
+		if deployStatus.Valid {
+			dep.DeployStatus = deployStatus.String
+		}
+		if deployStatusMessage.Valid {
+			dep.DeployStatusMessage = deployStatusMessage.String
+		}
+		if deployOutputSummary.Valid {
+			dep.DeployOutputSummary = deployOutputSummary.String
 		}
 		deps = append(deps, dep)
 	}
@@ -214,14 +226,14 @@ func (s *Store) CreateDeploymentIfMissing(ctx context.Context, dep GitDeployment
 }
 
 func (s *Store) GetDeployment(ctx context.Context, id string) (GitDeployment, error) {
-	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, auto_created, enabled, last_deployed_hash, last_deployed_at, last_error FROM git_deployments WHERE id = ?`
+	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, auto_created, enabled, last_deployed_hash, last_deployed_at, last_error, last_job_id, deploy_status, deploy_status_message, deploy_started_at, deploy_finished_at, deploy_output_summary FROM git_deployments WHERE id = ?`
 	row := s.db.QueryRowContext(ctx, query, id)
 
 	var dep GitDeployment
-	var envVars, envFilePath, envInlineContent, lastDepHash, lastError sql.NullString
+	var envVars, envFilePath, envInlineContent, lastDepHash, lastError, lastJobID, deployStatus, deployStatusMessage, deployOutputSummary sql.NullString
 	if err := row.Scan(
 		&dep.ID, &dep.GitSourceID, &dep.ComposePath, &envVars, &envFilePath, &envInlineContent, &dep.EnvInlineEnabled, &dep.AutoCreated, &dep.Enabled,
-		&lastDepHash, &dep.LastDeployedAt, &lastError,
+		&lastDepHash, &dep.LastDeployedAt, &lastError, &lastJobID, &deployStatus, &deployStatusMessage, &dep.DeployStartedAt, &dep.DeployFinishedAt, &deployOutputSummary,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return GitDeployment{}, fmt.Errorf("git deployment not found: %s", id)
@@ -242,6 +254,18 @@ func (s *Store) GetDeployment(ctx context.Context, id string) (GitDeployment, er
 	}
 	if lastError.Valid {
 		dep.LastError = lastError.String
+	}
+	if lastJobID.Valid {
+		dep.LastJobID = lastJobID.String
+	}
+	if deployStatus.Valid {
+		dep.DeployStatus = deployStatus.String
+	}
+	if deployStatusMessage.Valid {
+		dep.DeployStatusMessage = deployStatusMessage.String
+	}
+	if deployOutputSummary.Valid {
+		dep.DeployOutputSummary = deployOutputSummary.String
 	}
 	return dep, nil
 }
@@ -278,7 +302,7 @@ func (s *Store) UpdateDeployment(ctx context.Context, dep GitDeployment) error {
 }
 
 func (s *Store) UpdateDeploymentStatus(ctx context.Context, id, deployedHash, deployError string) error {
-	query := `UPDATE git_deployments SET last_deployed_hash = ?, last_error = ?, last_deployed_at = ? WHERE id = ?`
+	query := `UPDATE git_deployments SET last_deployed_hash = ?, last_error = ?, last_deployed_at = CASE WHEN ? = '' THEN ? ELSE last_deployed_at END WHERE id = ?`
 
 	var lastDepHash, lastError sql.NullString
 	if deployedHash != "" {
@@ -291,8 +315,27 @@ func (s *Store) UpdateDeploymentStatus(ctx context.Context, id, deployedHash, de
 	}
 
 	now := time.Now().Unix()
-	_, err := s.db.ExecContext(ctx, query, lastDepHash, lastError, now, id)
+	_, err := s.db.ExecContext(ctx, query, lastDepHash, lastError, deployError, now, id)
 	return err
+}
+
+func (s *Store) UpdateDeploymentRuntimeStatus(ctx context.Context, dep GitDeployment) error {
+	query := `UPDATE git_deployments
+SET last_job_id = ?, deploy_status = ?, deploy_status_message = ?, deploy_started_at = ?, deploy_finished_at = ?, deploy_output_summary = ?
+WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, dep.LastJobID, dep.DeployStatus, dep.DeployStatusMessage, dep.DeployStartedAt, dep.DeployFinishedAt, dep.DeployOutputSummary, dep.ID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("git deployment not found: %s", dep.ID)
+	}
+	return nil
 }
 
 func (s *Store) DeleteDeployment(ctx context.Context, id string) error {
@@ -315,4 +358,23 @@ func (s *Store) UpdateDeploymentEnabled(ctx context.Context, id string, enabled 
 		return fmt.Errorf("git deployment not found: %s", id)
 	}
 	return err
+}
+
+func (s *Store) MarkInFlightDeploymentsFailed(ctx context.Context, reason string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+UPDATE git_deployments
+SET deploy_status = 'failed',
+    deploy_status_message = ?,
+    deploy_finished_at = ?,
+    last_error = CASE WHEN last_error = '' THEN ? ELSE last_error END
+WHERE deploy_status IN ('queued', 'running')
+`, reason, time.Now().UTC().Unix(), reason)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rows, nil
 }

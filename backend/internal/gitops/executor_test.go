@@ -1,10 +1,14 @@
 package gitops
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 )
 
 func TestBuildEnvFileSortsKeys(t *testing.T) {
@@ -74,5 +78,200 @@ func TestManagedInlineEnvFilePathLivesOutsideRepoCheckout(t *testing.T) {
 	}
 	if strings.HasPrefix(path, repoPath) {
 		t.Fatalf("managed env path must not live inside repo checkout: %q", path)
+	}
+}
+
+func TestRunTrackedDeployUpdatesDeploymentRuntimeStateOnSuccess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script test")
+	}
+	ctx := context.Background()
+	db := openStoreTestDB(t)
+	store := NewStore(db)
+	masterDir := t.TempDir()
+	repoPath := filepath.Join(masterDir, "source-success")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "docker-compose.yml"), []byte("services:\n  demo:\n    image: nginx:latest\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	src := GitSource{
+		ID:               "src-success",
+		Name:             "Success Source",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-success",
+		AuthMethod:       AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(ctx, src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.UpdateSourceSyncStatus(ctx, src.ID, "abc123", ""); err != nil {
+		t.Fatalf("update source sync status: %v", err)
+	}
+	if err := store.CreateDeployment(ctx, GitDeployment{
+		ID:          "dep-success",
+		GitSourceID: src.ID,
+		ComposePath: "docker-compose.yml",
+		Enabled:     true,
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	toolDir := t.TempDir()
+	writeTestScript(t, filepath.Join(toolDir, "docker"), `#!/bin/sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "container demo is up-to-date"
+  exit 0
+fi
+exit 1
+`)
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+originalPath)
+
+	svc := NewService(store, staticSettingsProvider{masterDir: masterDir})
+	events := []string{}
+	err := svc.RunTrackedDeploy(ctx, src.ID, "dep-success", "job-success", func(progress int, status, message string) {
+		events = append(events, status+":"+message)
+	})
+	if err != nil {
+		t.Fatalf("RunTrackedDeploy returned error: %v", err)
+	}
+
+	got, err := store.GetDeployment(ctx, "dep-success")
+	if err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if got.DeployStatus != "completed" {
+		t.Fatalf("expected completed deploy status, got %q", got.DeployStatus)
+	}
+	if got.LastJobID != "job-success" {
+		t.Fatalf("expected last job id persisted, got %q", got.LastJobID)
+	}
+	if got.LastDeployedHash != "abc123" {
+		t.Fatalf("expected last deployed hash abc123, got %q", got.LastDeployedHash)
+	}
+	if got.LastDeployedAt == 0 {
+		t.Fatalf("expected last deployed at to be set")
+	}
+	if got.DeployStartedAt == 0 || got.DeployFinishedAt == 0 {
+		t.Fatalf("expected deploy runtime timestamps to be set, got start=%d finish=%d", got.DeployStartedAt, got.DeployFinishedAt)
+	}
+	if got.DeployFinishedAt < got.DeployStartedAt {
+		t.Fatalf("expected deploy_finished_at >= deploy_started_at, got start=%d finish=%d", got.DeployStartedAt, got.DeployFinishedAt)
+	}
+	if got.LastError != "" {
+		t.Fatalf("expected last error cleared on success, got %q", got.LastError)
+	}
+	if len(events) == 0 {
+		t.Fatalf("expected progress callback events")
+	}
+}
+
+func TestRunTrackedDeployStoresBoundedFailureSummary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script test")
+	}
+	ctx := context.Background()
+	db := openStoreTestDB(t)
+	store := NewStore(db)
+	masterDir := t.TempDir()
+	repoPath := filepath.Join(masterDir, "source-failure")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "docker-compose.yml"), []byte("services:\n  demo:\n    image: nginx:latest\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	src := GitSource{
+		ID:               "src-failure",
+		Name:             "Failure Source",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-failure",
+		AuthMethod:       AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(ctx, src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.CreateDeployment(ctx, GitDeployment{
+		ID:          "dep-failure",
+		GitSourceID: src.ID,
+		ComposePath: "docker-compose.yml",
+		Enabled:     true,
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	toolDir := t.TempDir()
+	writeTestScript(t, filepath.Join(toolDir, "docker"), `#!/bin/sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  echo "compose plugin missing" >&2
+  exit 1
+fi
+exit 1
+`)
+	writeTestScript(t, filepath.Join(toolDir, "docker-compose"), `#!/bin/sh
+if [ "$1" = "version" ]; then
+  exit 0
+fi
+count=0
+while [ "$count" -lt 5000 ]; do
+  printf 'X'
+  count=$((count+1))
+done
+printf '\n'
+exit 1
+`)
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+originalPath)
+
+	svc := NewService(store, staticSettingsProvider{masterDir: masterDir})
+	err := svc.RunTrackedDeploy(ctx, src.ID, "dep-failure", "job-failure", nil)
+	if err == nil {
+		t.Fatalf("expected RunTrackedDeploy to fail")
+	}
+
+	got, err := store.GetDeployment(ctx, "dep-failure")
+	if err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if got.DeployStatus != "failed" {
+		t.Fatalf("expected failed deploy status, got %q", got.DeployStatus)
+	}
+	if got.LastDeployedAt != 0 {
+		t.Fatalf("expected last deployed at to remain unset on failure, got %d", got.LastDeployedAt)
+	}
+	if got.LastError == "" {
+		t.Fatalf("expected last error to be persisted")
+	}
+	if got.DeployOutputSummary == "" {
+		t.Fatalf("expected deploy output summary to be persisted")
+	}
+	if len(got.DeployOutputSummary) > 1200 {
+		t.Fatalf("expected bounded deploy output summary, got length %d", len(got.DeployOutputSummary))
+	}
+}
+
+type staticSettingsProvider struct {
+	masterDir string
+}
+
+func (s staticSettingsProvider) Get(ctx context.Context) (settings.Settings, error) {
+	return settings.Settings{GitOpsMasterDirectory: s.masterDir}, nil
+}
+
+func writeTestScript(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatalf("write script %s: %v", path, err)
 	}
 }

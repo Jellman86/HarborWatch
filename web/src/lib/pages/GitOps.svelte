@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     import { toasts } from "../stores/ToastStore";
     import { configStore } from "../stores/config.svelte";
 
@@ -35,6 +35,12 @@
         lastDeployedHash?: string;
         lastDeployedAt: number;
         lastError?: string;
+        lastJobId?: string;
+        deployStatus?: string;
+        deployStatusMessage?: string;
+        deployStartedAt?: number;
+        deployFinishedAt?: number;
+        deployOutputSummary?: string;
     }
 
     interface GitSourceFiles {
@@ -65,6 +71,7 @@
     let editingSourceId = $state<string | null>(null);
     let editingDeploymentId = $state<string | null>(null);
     let expandedSourceId = $state<string | null>(null);
+    let deploymentRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
     // Form State
     let newSource = $state({
@@ -95,6 +102,16 @@
 
     onMount(() => {
         loadSources();
+        deploymentRefreshTimer = setInterval(() => {
+            if (!hasActiveDeployments()) return;
+            for (const src of sources) {
+                void loadDeployments(src.id);
+            }
+        }, 5000);
+    });
+
+    onDestroy(() => {
+        if (deploymentRefreshTimer) clearInterval(deploymentRefreshTimer);
     });
 
     function asArray<T>(value: unknown): T[] {
@@ -313,16 +330,18 @@
     async function deployNow(id: string) {
         if (deploying[id]) return;
         deploying[id] = true;
-        toasts.info("Triggering deployment...");
         try {
             const res = await fetch(`/api/gitops/deployments/${id}/deploy`, { method: "POST" });
+            const data = await res.json().catch(() => ({}));
             if (res.ok) {
-                toasts.success("Deployment successful");
-                // Refresh list to show new hash/status
+                if (data.duplicate) {
+                    toasts.info("Deployment already queued or running");
+                } else {
+                    toasts.success("Deployment queued");
+                }
                 const sourceID = sources.find(s => (deployments[s.id] || []).some(d => d.id === id))?.id;
-                if (sourceID) loadDeployments(sourceID);
+                if (sourceID) void loadDeployments(sourceID);
             } else {
-                const data = await res.json();
                 toasts.error(data.message || "Deployment failed");
             }
         } catch (e) {
@@ -415,6 +434,37 @@
         if (dep.envFilePath) return "Deploy uses the configured env file path.";
         if (dep.envVarsJson) return "Deploy keeps the legacy HarborWatch env overlay on top of the base env source.";
         return "Deploy relies on Docker Compose default env resolution next to the compose file.";
+    }
+
+    function deploymentStateLabel(dep: GitDeployment): string {
+        if (dep.deployStatus === "queued") return "Queued";
+        if (dep.deployStatus === "running") return "Deploying";
+        if (dep.deployStatus === "completed") return "Completed";
+        if (dep.deployStatus === "failed") return "Failed";
+        if (dep.enabled === false) return "Disabled";
+        return "Ready";
+    }
+
+    function deploymentStateClass(dep: GitDeployment): string {
+        if (dep.deployStatus === "queued") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+        if (dep.deployStatus === "running") return "bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300";
+        if (dep.deployStatus === "completed") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+        if (dep.deployStatus === "failed") return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300";
+        if (dep.enabled === false) return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+        return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
+    }
+
+    function deploymentStatusSummary(dep: GitDeployment): string {
+        if (dep.deployStatusMessage) return dep.deployStatusMessage;
+        if (dep.lastError) return dep.lastError;
+        if (dep.lastDeployedAt) {
+            return `Last successful deploy ${formatRelativeTime(dep.lastDeployedAt)}${dep.lastDeployedHash ? ` (${dep.lastDeployedHash.slice(0, 7)})` : ''}`;
+        }
+        return "Deployment has not run yet.";
+    }
+
+    function hasActiveDeployments(): boolean {
+        return Object.values(deployments).some((items) => (items || []).some((dep) => dep.deployStatus === "queued" || dep.deployStatus === "running"));
     }
 </script>
 
@@ -569,6 +619,14 @@
                                                         <p class="text-[10px] text-slate-500 mt-0.5 font-mono break-all">Mapped: {resolvedComposeMapping(source.targetDir, dep.composePath)}</p>
                                                         <p class="text-[10px] text-slate-500 mt-0.5">Last deployed: {formatRelativeTime(dep.lastDeployedAt)} {dep.lastDeployedHash ? `(${dep.lastDeployedHash.slice(0, 7)})` : ''}</p>
                                                         <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                                            <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {deploymentStateClass(dep)}">
+                                                                {deploymentStateLabel(dep)}
+                                                            </span>
+                                                            <p class="text-[10px] text-slate-500">
+                                                                {deploymentStatusSummary(dep)}
+                                                            </p>
+                                                        </div>
+                                                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
                                                             <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {activeEnvSourceClass(dep)}">
                                                                 {activeEnvSourceLabel(dep)}
                                                             </span>
@@ -602,7 +660,7 @@
                                                         disabled={deploying[dep.id] || dep.enabled === false}
                                                         class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-all disabled:opacity-50"
                                                     >
-                                                        {deploying[dep.id] ? 'Deploying...' : 'Deploy Now'}
+                                                        {deploying[dep.id] ? 'Queueing...' : dep.deployStatus === 'running' ? 'Deploying...' : dep.deployStatus === 'queued' ? 'Queued' : 'Deploy Now'}
                                                     </button>
                                                     <button
                                                         onclick={() => toggleDeployment(dep.id, source.id, dep.enabled === false)}

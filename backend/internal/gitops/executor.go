@@ -8,12 +8,30 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/composecli"
 )
 
+const maxDeployOutputSummary = 1200
+
+type deployProgressFunc func(progress int, status, message string)
+
 // DeployCompose executes `docker compose up -d --remove-orphans` for a given deployment.
 func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID string) error {
+	return s.runDeploy(ctx, sourceID, depID, "", nil)
+}
+
+func (s *Service) RunTrackedDeploy(ctx context.Context, sourceID string, depID string, jobID string, progress deployProgressFunc) error {
+	return s.runDeploy(ctx, sourceID, depID, jobID, progress)
+}
+
+func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, jobID string, progress deployProgressFunc) (resultErr error) {
+	var (
+		dep           *GitDeployment
+		startedAt     int64
+		outputSummary string
+	)
 	src, err := s.store.GetSource(ctx, sourceID)
 	if err != nil {
 		return fmt.Errorf("failed to load source: %w", err)
@@ -27,7 +45,7 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 		return fmt.Errorf("failed to load deployments: %w", err)
 	}
 
-	var dep *GitDeployment
+	dep = nil
 	for _, d := range deps {
 		if d.ID == depID {
 			dep = &d
@@ -69,29 +87,80 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 
 	workDir := filepath.Dir(composeFile)
 
+	startedAt = time.Now().UTC().Unix()
+	if jobID != "" {
+		if err := s.store.UpdateDeploymentRuntimeStatus(ctx, GitDeployment{
+			ID:                  dep.ID,
+			LastJobID:           jobID,
+			DeployStatus:        "running",
+			DeployStatusMessage: "Validating deployment",
+			DeployStartedAt:     startedAt,
+			DeployFinishedAt:    0,
+			DeployOutputSummary: "",
+		}); err != nil {
+			return fmt.Errorf("persist deploy runtime status: %w", err)
+		}
+	}
+	notifyDeployProgress(progress, 10, "running", "Validating deployment")
+	defer func() {
+		if jobID == "" || dep == nil {
+			return
+		}
+		status := "completed"
+		message := "Deploy completed successfully"
+		finishedAt := time.Now().UTC().Unix()
+		if resultErr != nil {
+			status = "failed"
+			message = "Deploy failed"
+		}
+		if err := s.store.UpdateDeploymentRuntimeStatus(context.Background(), GitDeployment{
+			ID:                  dep.ID,
+			LastJobID:           jobID,
+			DeployStatus:        status,
+			DeployStatusMessage: message,
+			DeployStartedAt:     startedAt,
+			DeployFinishedAt:    finishedAt,
+			DeployOutputSummary: outputSummary,
+		}); err != nil {
+			if resultErr != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("failed to save deploy runtime status: %w", err))
+			} else {
+				resultErr = fmt.Errorf("failed to save deploy runtime status: %w", err)
+			}
+		}
+	}()
+
 	// Build the command
 	args := []string{"-f", composeFile}
 
 	// Handle env-file mapping and environment overrides.
 	inlineEnabled, inlineContent, err := deriveInlineEnvContent(*dep)
 	if err != nil {
-		return err
+		resultErr = err
+		outputSummary = truncateDeployOutput(err.Error())
+		return resultErr
 	}
 
 	envFilePath := ""
 	if inlineEnabled {
 		envFilePath, err = writeManagedInlineEnvFile(st.GitOpsMasterDirectory, sourceID, dep.ID, inlineContent)
 		if err != nil {
-			return err
+			resultErr = err
+			outputSummary = truncateDeployOutput(err.Error())
+			return resultErr
 		}
 		args = append(args, "--env-file", envFilePath)
 	} else if dep.EnvFilePath != "" {
 		envFilePath, err = resolveEnvFilePath(repoPath, dep.EnvFilePath)
 		if err != nil {
-			return fmt.Errorf("invalid deployment env file path: %w", err)
+			resultErr = fmt.Errorf("invalid deployment env file path: %w", err)
+			outputSummary = truncateDeployOutput(resultErr.Error())
+			return resultErr
 		}
 		if _, err := os.Stat(envFilePath); err != nil {
-			return fmt.Errorf("env file not found at %s", envFilePath)
+			resultErr = fmt.Errorf("env file not found at %s", envFilePath)
+			outputSummary = truncateDeployOutput(resultErr.Error())
+			return resultErr
 		}
 		args = append(args, "--env-file", envFilePath)
 	}
@@ -99,11 +168,15 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 	if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) != "" {
 		legacyOverride, err := legacyEnvVarsJSONToEnvContent(dep.EnvVarsJSON)
 		if err != nil {
-			return err
+			resultErr = err
+			outputSummary = truncateDeployOutput(err.Error())
+			return resultErr
 		}
 		overridePath, err := writeManagedInlineEnvFile(st.GitOpsMasterDirectory, sourceID, dep.ID, legacyOverride)
 		if err != nil {
-			return err
+			resultErr = err
+			outputSummary = truncateDeployOutput(err.Error())
+			return resultErr
 		}
 		args = append(args, "--env-file", overridePath)
 	} else if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) == "" {
@@ -112,37 +185,46 @@ func (s *Service) DeployCompose(ctx context.Context, sourceID string, depID stri
 		}
 	}
 	args = append(args, "up", "-d", "--remove-orphans")
+	notifyDeployProgress(progress, 25, "running", "Resolving compose runtime and env sources")
 
 	runner, err := composecli.Resolve(ctx)
 	if err != nil {
-		return fmt.Errorf("resolve compose runtime: %w", err)
+		resultErr = fmt.Errorf("resolve compose runtime: %w", err)
+		outputSummary = truncateDeployOutput(resultErr.Error())
+		return resultErr
 	}
 	cmd := runner.CommandContext(ctx, args...)
 	cmd.Dir = workDir
 
 	// We want to capture both stdout and stderr for logging
+	notifyDeployProgress(progress, 50, "running", "Running compose apply")
 	out, err := cmd.CombinedOutput()
+	outputSummary = truncateDeployOutput(string(out))
 
 	errStr := ""
 	if err != nil {
-		errStr = fmt.Sprintf("deploy failed: %s\nOutput:\n%s", err.Error(), string(out))
+		errStr = fmt.Sprintf("deploy failed: %s\nOutput:\n%s", err.Error(), outputSummary)
 	}
 
 	// Save the deployment result
+	notifyDeployProgress(progress, 90, "running", "Persisting deploy result")
 	dbErr := s.store.UpdateDeploymentStatus(ctx, dep.ID, src.LastCommitHash, errStr)
 	if dbErr != nil {
 		if err != nil {
 			err = errors.Join(err, fmt.Errorf("failed to save deployment status: %w", dbErr))
 		} else {
-			return fmt.Errorf("failed to save deployment status: %w", dbErr)
+			resultErr = fmt.Errorf("failed to save deployment status: %w", dbErr)
+			return resultErr
 		}
 	}
 
 	if err != nil {
-		return errors.New(errStr)
+		resultErr = errors.New(errStr)
+		return resultErr
 	}
 
-	return nil
+	notifyDeployProgress(progress, 100, "completed", "Deploy completed successfully")
+	return resultErr
 }
 
 // DeployAllForSource triggers a deployment for all defined GitDeployments tied to a source.
@@ -201,4 +283,21 @@ func buildEnvFile(envVars map[string]string) (string, error) {
 	}
 
 	return builder.String(), nil
+}
+
+func notifyDeployProgress(progress deployProgressFunc, step int, status, message string) {
+	if progress != nil {
+		progress(step, status, message)
+	}
+}
+
+func truncateDeployOutput(out string) string {
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return ""
+	}
+	if len(out) <= maxDeployOutputSummary {
+		return out
+	}
+	return out[:maxDeployOutputSummary-3] + "..."
 }

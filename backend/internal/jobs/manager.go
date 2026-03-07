@@ -16,6 +16,7 @@ type JobType string
 const (
 	JobTypeUpdate      JobType = "update"
 	JobTypeScan        JobType = "scan"
+	JobTypeGitOpsDeploy JobType = "gitops_deploy"
 	JobTypeRedeploy    JobType = "redeploy"
 	JobTypeRemediation JobType = "remediation"
 )
