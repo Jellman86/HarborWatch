@@ -209,11 +209,11 @@ func TestDiscoverLocalComposeProjects_GitOpsProjectKeepsComposeReadonlyButEnvEdi
 	if project.ComposeEditable {
 		t.Fatalf("expected compose editing disabled for gitops project")
 	}
-	if !project.EnvEditable {
-		t.Fatalf("expected env editing enabled for gitops project")
-	}
 	if !project.EnvCreatable {
 		t.Fatalf("expected env creation enabled for gitops project")
+	}
+	if project.EnvEditable {
+		t.Fatalf("expected missing env file to be creatable rather than editable")
 	}
 	if project.EnvPath != filepath.Join(workDir, ".env") {
 		t.Fatalf("unexpected env path: %q", project.EnvPath)

@@ -27,6 +27,10 @@
         sourceStatus: "unverified" | "verified_readonly" | "verified_writable" | string;
         sourceVerified?: boolean;
         sourceWritable?: boolean;
+        composeEditable?: boolean;
+        envEditable?: boolean;
+        envCreatable?: boolean;
+        envPath?: string;
         containerCount?: number;
         updateCandidates?: number;
         snapshotRootPath?: string;
@@ -202,6 +206,38 @@
         if (value === "changed") return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300";
         if (value === "unchanged") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
         return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+    }
+
+    function composeAuthorityLabel(project: LocalComposeProject): string {
+        if (project.composeEditable) return "Compose Editable";
+        if (project.sourceVerified) return "Compose Read-Only";
+        return "Compose Unverified";
+    }
+
+    function composeAuthorityClass(project: LocalComposeProject): string {
+        if (project.composeEditable) return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+        if (project.sourceVerified) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+        return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+    }
+
+    function envAuthorityLabel(project: LocalComposeProject): string {
+        if (project.envEditable) return "Local .env Editable";
+        if (project.envCreatable) return "Local .env Creatable";
+        if (project.envPath) return "Local .env Read-Only";
+        return "No Local .env";
+    }
+
+    function envAuthorityClass(project: LocalComposeProject): string {
+        if (project.envEditable || project.envCreatable) return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
+        if (project.envPath) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+        return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+    }
+
+    function automationSummary(project: LocalComposeProject): string {
+        if (project.composeEditable) return "Compose + .env managed locally";
+        if (project.sourceVerified && (project.envEditable || project.envCreatable)) return "Git-managed compose, local .env override";
+        if (project.sourceVerified) return "Compose-aware, read-only source";
+        return "Needs source access";
     }
 
     function openComposeEditor(project: LocalComposeProject) {
@@ -382,8 +418,36 @@
                                 </div>
                                 <div class="rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700 p-3">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Automation</p>
-                                    <p class="text-[10px] font-bold text-slate-700 dark:text-slate-300 mt-1">{p.sourceVerified ? "Compose-aware" : "Needs source access"}</p>
+                                    <p class="text-[10px] font-bold text-slate-700 dark:text-slate-300 mt-1">{automationSummary(p)}</p>
                                 </div>
+                            </div>
+
+                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 space-y-2">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Edit Authority</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span class="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {composeAuthorityClass(p)}">
+                                            {composeAuthorityLabel(p)}
+                                        </span>
+                                        <span class="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {envAuthorityClass(p)}">
+                                            {envAuthorityLabel(p)}
+                                        </span>
+                                    </div>
+                                </div>
+                                <p class="text-[11px] text-slate-600 dark:text-slate-300">
+                                    {#if p.composeEditable}
+                                        HarborWatch can edit the compose source and adjacent <span class="font-mono">.env</span> for this project.
+                                    {:else if p.sourceVerified && (p.envEditable || p.envCreatable)}
+                                        Compose source stays read-only here, but HarborWatch can manage the adjacent <span class="font-mono">.env</span> for machine-local overrides.
+                                    {:else if p.sourceVerified}
+                                        HarborWatch can inspect this compose source, but neither compose nor adjacent <span class="font-mono">.env</span> is writable here.
+                                    {:else}
+                                        HarborWatch has not verified direct filesystem access for this compose source yet.
+                                    {/if}
+                                </p>
+                                {#if p.envPath}
+                                    <p class="text-[10px] font-mono text-slate-500 break-all" title={p.envPath}>Env path: {p.envPath}</p>
+                                {/if}
                             </div>
 
                             <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 space-y-2">

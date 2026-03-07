@@ -346,8 +346,11 @@ func TestComposeProjectDetail_GitOpsComposeReadonlyButEnvCreatable(t *testing.T)
 	if payload.ComposeEditable {
 		t.Fatalf("expected composeEditable false")
 	}
-	if !payload.EnvEditable || !payload.EnvCreatable {
-		t.Fatalf("expected env editing and creation enabled")
+	if payload.EnvEditable {
+		t.Fatalf("expected missing env file to report envEditable false")
+	}
+	if !payload.EnvCreatable {
+		t.Fatalf("expected env creation enabled")
 	}
 	if payload.EnvFile == nil || payload.EnvFile.Path != filepath.Join(projectDir, ".env") {
 		t.Fatalf("expected adjacent env file metadata, got %+v", payload.EnvFile)

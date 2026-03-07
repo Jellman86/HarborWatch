@@ -323,10 +323,10 @@ func detectEnvAuthority(workingDir string) (string, bool, bool) {
 	envPath := filepath.Join(wd, ".env")
 	if _, err := os.Stat(envPath); err == nil {
 		writable := pathWritable(envPath)
-		return envPath, writable, writable
+		return envPath, writable, false
 	}
 	writable := pathWritable(envPath)
-	return envPath, writable, writable
+	return envPath, false, writable
 }
 
 func pathWritable(path string) bool {
