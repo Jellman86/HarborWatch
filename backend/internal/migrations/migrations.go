@@ -147,5 +147,10 @@ func defaultMigrations() []Migration {
 			Name:    "add_gitops_deploy_runtime_columns",
 			ApplyTx: migrateGitOpsDeployRuntimeColumns,
 		},
+		{
+			Version: 25,
+			Name:    "add_gitops_pull_on_deploy",
+			ApplyTx: migrateGitOpsPullOnDeployColumn,
+		},
 	}
 }

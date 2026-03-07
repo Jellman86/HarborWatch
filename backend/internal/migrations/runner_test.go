@@ -219,6 +219,7 @@ func TestRunCreatesGitOpsDeployRuntimeColumns(t *testing.T) {
 		"deploy_started_at",
 		"deploy_finished_at",
 		"deploy_output_summary",
+		"pull_on_deploy",
 	} {
 		if !hasColumn(t, db, "git_deployments", col) {
 			t.Fatalf("expected git_deployments.%s after migrations", col)

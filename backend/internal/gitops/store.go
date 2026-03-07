@@ -125,7 +125,7 @@ func (s *Store) DeleteSource(ctx context.Context, id string) error {
 // GitDeployment Operations
 
 func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) ([]GitDeployment, error) {
-	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, auto_created, enabled, last_deployed_hash, last_deployed_at, last_error, last_job_id, deploy_status, deploy_status_message, deploy_started_at, deploy_finished_at, deploy_output_summary FROM git_deployments WHERE git_source_id = ? ORDER BY compose_path ASC`
+	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, pull_on_deploy, auto_created, enabled, last_deployed_hash, last_deployed_at, last_error, last_job_id, deploy_status, deploy_status_message, deploy_started_at, deploy_finished_at, deploy_output_summary FROM git_deployments WHERE git_source_id = ? ORDER BY compose_path ASC`
 	rows, err := s.db.QueryContext(ctx, query, sourceID)
 	if err != nil {
 		return nil, err
@@ -137,7 +137,7 @@ func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) (
 		var dep GitDeployment
 		var envVars, envFilePath, envInlineContent, lastDepHash, lastError, lastJobID, deployStatus, deployStatusMessage, deployOutputSummary sql.NullString
 		if err := rows.Scan(
-			&dep.ID, &dep.GitSourceID, &dep.ComposePath, &envVars, &envFilePath, &envInlineContent, &dep.EnvInlineEnabled, &dep.AutoCreated, &dep.Enabled,
+			&dep.ID, &dep.GitSourceID, &dep.ComposePath, &envVars, &envFilePath, &envInlineContent, &dep.EnvInlineEnabled, &dep.PullOnDeploy, &dep.AutoCreated, &dep.Enabled,
 			&lastDepHash, &dep.LastDeployedAt, &lastError, &lastJobID, &deployStatus, &deployStatusMessage, &dep.DeployStartedAt, &dep.DeployFinishedAt, &deployOutputSummary,
 		); err != nil {
 			return nil, err
@@ -175,7 +175,7 @@ func (s *Store) ListDeploymentsForSource(ctx context.Context, sourceID string) (
 }
 
 func (s *Store) CreateDeployment(ctx context.Context, dep GitDeployment) error {
-	query := `INSERT INTO git_deployments (id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, auto_created, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO git_deployments (id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, pull_on_deploy, auto_created, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	var envVars, envFilePath, envInlineContent sql.NullString
 	if dep.EnvVarsJSON != "" {
@@ -191,13 +191,13 @@ func (s *Store) CreateDeployment(ctx context.Context, dep GitDeployment) error {
 		envInlineContent.String = dep.EnvInlineContent
 	}
 
-	_, err := s.db.ExecContext(ctx, query, dep.ID, dep.GitSourceID, dep.ComposePath, envVars, envFilePath, envInlineContent, dep.EnvInlineEnabled, dep.AutoCreated, dep.Enabled)
+	_, err := s.db.ExecContext(ctx, query, dep.ID, dep.GitSourceID, dep.ComposePath, envVars, envFilePath, envInlineContent, dep.EnvInlineEnabled, dep.PullOnDeploy, dep.AutoCreated, dep.Enabled)
 	return err
 }
 
 func (s *Store) CreateDeploymentIfMissing(ctx context.Context, dep GitDeployment) (bool, error) {
-	query := `INSERT INTO git_deployments (id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, auto_created, enabled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	query := `INSERT INTO git_deployments (id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, pull_on_deploy, auto_created, enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(git_source_id, compose_path) DO NOTHING`
 
 	var envVars, envFilePath, envInlineContent sql.NullString
@@ -214,7 +214,7 @@ func (s *Store) CreateDeploymentIfMissing(ctx context.Context, dep GitDeployment
 		envInlineContent.String = dep.EnvInlineContent
 	}
 
-	res, err := s.db.ExecContext(ctx, query, dep.ID, dep.GitSourceID, dep.ComposePath, envVars, envFilePath, envInlineContent, dep.EnvInlineEnabled, dep.AutoCreated, dep.Enabled)
+	res, err := s.db.ExecContext(ctx, query, dep.ID, dep.GitSourceID, dep.ComposePath, envVars, envFilePath, envInlineContent, dep.EnvInlineEnabled, dep.PullOnDeploy, dep.AutoCreated, dep.Enabled)
 	if err != nil {
 		return false, err
 	}
@@ -226,13 +226,13 @@ func (s *Store) CreateDeploymentIfMissing(ctx context.Context, dep GitDeployment
 }
 
 func (s *Store) GetDeployment(ctx context.Context, id string) (GitDeployment, error) {
-	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, auto_created, enabled, last_deployed_hash, last_deployed_at, last_error, last_job_id, deploy_status, deploy_status_message, deploy_started_at, deploy_finished_at, deploy_output_summary FROM git_deployments WHERE id = ?`
+	query := `SELECT id, git_source_id, compose_path, env_vars_json, env_file_path, env_inline_content, env_inline_enabled, pull_on_deploy, auto_created, enabled, last_deployed_hash, last_deployed_at, last_error, last_job_id, deploy_status, deploy_status_message, deploy_started_at, deploy_finished_at, deploy_output_summary FROM git_deployments WHERE id = ?`
 	row := s.db.QueryRowContext(ctx, query, id)
 
 	var dep GitDeployment
 	var envVars, envFilePath, envInlineContent, lastDepHash, lastError, lastJobID, deployStatus, deployStatusMessage, deployOutputSummary sql.NullString
 	if err := row.Scan(
-		&dep.ID, &dep.GitSourceID, &dep.ComposePath, &envVars, &envFilePath, &envInlineContent, &dep.EnvInlineEnabled, &dep.AutoCreated, &dep.Enabled,
+		&dep.ID, &dep.GitSourceID, &dep.ComposePath, &envVars, &envFilePath, &envInlineContent, &dep.EnvInlineEnabled, &dep.PullOnDeploy, &dep.AutoCreated, &dep.Enabled,
 		&lastDepHash, &dep.LastDeployedAt, &lastError, &lastJobID, &deployStatus, &deployStatusMessage, &dep.DeployStartedAt, &dep.DeployFinishedAt, &deployOutputSummary,
 	); err != nil {
 		if err == sql.ErrNoRows {
@@ -271,7 +271,7 @@ func (s *Store) GetDeployment(ctx context.Context, id string) (GitDeployment, er
 }
 
 func (s *Store) UpdateDeployment(ctx context.Context, dep GitDeployment) error {
-	query := `UPDATE git_deployments SET compose_path = ?, env_vars_json = ?, env_file_path = ?, env_inline_content = ?, env_inline_enabled = ?, auto_created = ?, enabled = ? WHERE id = ?`
+	query := `UPDATE git_deployments SET compose_path = ?, env_vars_json = ?, env_file_path = ?, env_inline_content = ?, env_inline_enabled = ?, pull_on_deploy = ?, auto_created = ?, enabled = ? WHERE id = ?`
 
 	var envVars, envFilePath, envInlineContent sql.NullString
 	if dep.EnvVarsJSON != "" {
@@ -287,7 +287,7 @@ func (s *Store) UpdateDeployment(ctx context.Context, dep GitDeployment) error {
 		envInlineContent.String = dep.EnvInlineContent
 	}
 
-	res, err := s.db.ExecContext(ctx, query, dep.ComposePath, envVars, envFilePath, envInlineContent, dep.EnvInlineEnabled, dep.AutoCreated, dep.Enabled, dep.ID)
+	res, err := s.db.ExecContext(ctx, query, dep.ComposePath, envVars, envFilePath, envInlineContent, dep.EnvInlineEnabled, dep.PullOnDeploy, dep.AutoCreated, dep.Enabled, dep.ID)
 	if err != nil {
 		return err
 	}

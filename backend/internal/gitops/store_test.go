@@ -164,3 +164,54 @@ func TestMarkInFlightDeploymentsFailedMarksQueuedAndRunningInterrupted(t *testin
 		t.Fatalf("expected completed deployment to stay completed, got %q", completed.DeployStatus)
 	}
 }
+
+func TestDeploymentPullOnDeployPersistsThroughStore(t *testing.T) {
+	ctx := context.Background()
+	db := openStoreTestDB(t)
+	store := NewStore(db)
+
+	src := GitSource{
+		ID:               "src-pull",
+		Name:             "Pull Source",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "pull-source",
+		AuthMethod:       AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(ctx, src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+
+	dep := GitDeployment{
+		ID:           "dep-pull",
+		GitSourceID:  src.ID,
+		ComposePath:  "docker-compose.yml",
+		Enabled:      true,
+		PullOnDeploy: true,
+	}
+	if err := store.CreateDeployment(ctx, dep); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	got, err := store.GetDeployment(ctx, dep.ID)
+	if err != nil {
+		t.Fatalf("get deployment after create: %v", err)
+	}
+	if !got.PullOnDeploy {
+		t.Fatalf("expected pull_on_deploy to persist on create")
+	}
+
+	got.PullOnDeploy = false
+	if err := store.UpdateDeployment(ctx, got); err != nil {
+		t.Fatalf("update deployment: %v", err)
+	}
+
+	updated, err := store.GetDeployment(ctx, dep.ID)
+	if err != nil {
+		t.Fatalf("get deployment after update: %v", err)
+	}
+	if updated.PullOnDeploy {
+		t.Fatalf("expected pull_on_deploy to persist on update")
+	}
+}

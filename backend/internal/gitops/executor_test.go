@@ -261,6 +261,146 @@ exit 1
 	}
 }
 
+func TestRunTrackedDeployPullOnDeployRunsPullBeforeUp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script test")
+	}
+	ctx := context.Background()
+	db := openStoreTestDB(t)
+	store := NewStore(db)
+	masterDir := t.TempDir()
+	repoPath := filepath.Join(masterDir, "source-pull-order")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "docker-compose.yml"), []byte("services:\n  demo:\n    image: nginx:latest\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	src := GitSource{
+		ID:               "src-pull-order",
+		Name:             "Pull Order Source",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-pull-order",
+		AuthMethod:       AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(ctx, src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.CreateDeployment(ctx, GitDeployment{
+		ID:           "dep-pull-order",
+		GitSourceID:  src.ID,
+		ComposePath:  "docker-compose.yml",
+		Enabled:      true,
+		PullOnDeploy: true,
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	toolDir := t.TempDir()
+	logPath := filepath.Join(toolDir, "compose.log")
+	writeTestScript(t, filepath.Join(toolDir, "docker"), `#!/bin/sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "$4" >> "$TEST_LOG"
+  exit 0
+fi
+exit 1
+`)
+	t.Setenv("TEST_LOG", logPath)
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+originalPath)
+
+	svc := NewService(store, staticSettingsProvider{masterDir: masterDir})
+	if err := svc.RunTrackedDeploy(ctx, src.ID, "dep-pull-order", "job-pull-order", nil); err != nil {
+		t.Fatalf("RunTrackedDeploy returned error: %v", err)
+	}
+
+	logBytes, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read compose log: %v", err)
+	}
+	if string(logBytes) != "pull\nup\n" {
+		t.Fatalf("expected pull before up, got %q", string(logBytes))
+	}
+}
+
+func TestRunTrackedDeployPullFailureSkipsUp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script test")
+	}
+	ctx := context.Background()
+	db := openStoreTestDB(t)
+	store := NewStore(db)
+	masterDir := t.TempDir()
+	repoPath := filepath.Join(masterDir, "source-pull-fail")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "docker-compose.yml"), []byte("services:\n  demo:\n    image: nginx:latest\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	src := GitSource{
+		ID:               "src-pull-fail",
+		Name:             "Pull Fail Source",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-pull-fail",
+		AuthMethod:       AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(ctx, src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.CreateDeployment(ctx, GitDeployment{
+		ID:           "dep-pull-fail",
+		GitSourceID:  src.ID,
+		ComposePath:  "docker-compose.yml",
+		Enabled:      true,
+		PullOnDeploy: true,
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	toolDir := t.TempDir()
+	logPath := filepath.Join(toolDir, "compose.log")
+	writeTestScript(t, filepath.Join(toolDir, "docker"), `#!/bin/sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "$4" >> "$TEST_LOG"
+  if [ "$4" = "pull" ]; then
+    echo "pull failed" >&2
+    exit 1
+  fi
+  exit 0
+fi
+exit 1
+`)
+	t.Setenv("TEST_LOG", logPath)
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+originalPath)
+
+	svc := NewService(store, staticSettingsProvider{masterDir: masterDir})
+	if err := svc.RunTrackedDeploy(ctx, src.ID, "dep-pull-fail", "job-pull-fail", nil); err == nil {
+		t.Fatalf("expected RunTrackedDeploy to fail when pull fails")
+	}
+
+	logBytes, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read compose log: %v", err)
+	}
+	if string(logBytes) != "pull\n" {
+		t.Fatalf("expected pull failure to skip up, got %q", string(logBytes))
+	}
+}
+
 type staticSettingsProvider struct {
 	masterDir string
 }

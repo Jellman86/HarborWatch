@@ -193,6 +193,22 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 		outputSummary = truncateDeployOutput(resultErr.Error())
 		return resultErr
 	}
+
+	if dep.PullOnDeploy {
+		notifyDeployProgress(progress, 40, "running", "Pulling images")
+		pullCmd := runner.CommandContext(ctx, "-f", composeFile, "pull")
+		pullCmd.Dir = workDir
+		pullOut, pullErr := pullCmd.CombinedOutput()
+		if len(strings.TrimSpace(string(pullOut))) > 0 {
+			outputSummary = truncateDeployOutput(string(pullOut))
+		}
+		if pullErr != nil {
+			outputSummary = truncateDeployOutput(string(pullOut))
+			resultErr = fmt.Errorf("pull failed: %s\nOutput:\n%s", pullErr.Error(), outputSummary)
+			return resultErr
+		}
+	}
+
 	cmd := runner.CommandContext(ctx, args...)
 	cmd.Dir = workDir
 

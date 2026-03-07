@@ -30,6 +30,7 @@ type updateDeploymentRequest struct {
 	EnvFilePath      *string `json:"envFilePath"`
 	EnvInlineContent *string `json:"envInlineContent"`
 	EnvInlineEnabled *bool   `json:"envInlineEnabled"`
+	PullOnDeploy     *bool   `json:"pullOnDeploy"`
 	Enabled          *bool   `json:"enabled"`
 }
 
@@ -240,6 +241,9 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 				}
 				if body.EnvInlineContent != nil || body.EnvInlineEnabled != nil {
 					current.EnvVarsJSON = ""
+				}
+				if body.PullOnDeploy != nil {
+					current.PullOnDeploy = *body.PullOnDeploy
 				}
 				if body.Enabled != nil {
 					current.Enabled = *body.Enabled

@@ -30,6 +30,7 @@
         envFilePath?: string;
         envInlineContent?: string;
         envInlineEnabled?: boolean;
+        pullOnDeploy?: boolean;
         autoCreated?: boolean;
         enabled?: boolean;
         lastDeployedHash?: string;
@@ -54,6 +55,7 @@
         enabled: boolean;
         envInlineEnabled: boolean;
         envInlineContent: string;
+        pullOnDeploy: boolean;
     }
 
     // Component State
@@ -89,7 +91,8 @@
         envFilePath: "",
         enabled: true,
         envInlineEnabled: false,
-        envInlineContent: ""
+        envInlineContent: "",
+        pullOnDeploy: false
     });
 
     let editDeployment = $state<DeploymentFormState>({
@@ -97,7 +100,8 @@
         envFilePath: "",
         enabled: true,
         envInlineEnabled: false,
-        envInlineContent: ""
+        envInlineContent: "",
+        pullOnDeploy: false
     });
 
     onMount(() => {
@@ -124,7 +128,8 @@
             envFilePath: "",
             enabled: true,
             envInlineEnabled: false,
-            envInlineContent: ""
+            envInlineContent: "",
+            pullOnDeploy: false
         };
     }
 
@@ -166,7 +171,8 @@
             envFilePath: dep.envFilePath || "",
             enabled: dep.enabled !== false,
             envInlineEnabled: dep.envInlineEnabled === true,
-            envInlineContent: dep.envInlineContent || ""
+            envInlineContent: dep.envInlineContent || "",
+            pullOnDeploy: dep.pullOnDeploy === true
         };
         showEditDeploymentModal = true;
         loadSourceFilesForPicker(sourceId);
@@ -247,7 +253,8 @@
                     enabled: newDeployment.enabled,
                     envVarsJson: "",
                     envInlineEnabled: newDeployment.envInlineEnabled,
-                    envInlineContent: newDeployment.envInlineContent
+                    envInlineContent: newDeployment.envInlineContent,
+                    pullOnDeploy: newDeployment.pullOnDeploy
                 })
             });
             if (res.ok) {
@@ -277,7 +284,8 @@
                     enabled: editDeployment.enabled,
                     envVarsJson: "",
                     envInlineEnabled: editDeployment.envInlineEnabled,
-                    envInlineContent: editDeployment.envInlineContent
+                    envInlineContent: editDeployment.envInlineContent,
+                    pullOnDeploy: editDeployment.pullOnDeploy
                 })
             });
             if (res.ok) {
@@ -434,6 +442,22 @@
         if (dep.envFilePath) return "Deploy uses the configured env file path.";
         if (dep.envVarsJson) return "Deploy keeps the legacy HarborWatch env overlay on top of the base env source.";
         return "Deploy relies on Docker Compose default env resolution next to the compose file.";
+    }
+
+    function deployImagePolicyLabel(dep: GitDeployment): string {
+        return dep.pullOnDeploy ? "Pull Before Deploy" : "Use Local Images";
+    }
+
+    function deployImagePolicyClass(dep: GitDeployment): string {
+        return dep.pullOnDeploy
+            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+            : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+    }
+
+    function deployImagePolicySummary(dep: GitDeployment): string {
+        return dep.pullOnDeploy
+            ? "HarborWatch pulls newer images before applying this stack."
+            : "HarborWatch applies this stack using currently available local images.";
     }
 
     function deploymentStateLabel(dep: GitDeployment): string {
@@ -631,6 +655,12 @@
                                                                 {activeEnvSourceLabel(dep)}
                                                             </span>
                                                             <p class="text-[10px] text-slate-500">{activeEnvSourceSummary(dep)}</p>
+                                                        </div>
+                                                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                                            <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {deployImagePolicyClass(dep)}">
+                                                                {deployImagePolicyLabel(dep)}
+                                                            </span>
+                                                            <p class="text-[10px] text-slate-500">{deployImagePolicySummary(dep)}</p>
                                                         </div>
                                                         {#if dep.envFilePath}
                                                             <p class="text-[10px] text-slate-500 mt-0.5 font-mono">Env file: {dep.envFilePath}</p>
@@ -866,6 +896,19 @@
                                 <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {editDeployment.envInlineEnabled ? 'right-1' : 'left-1'}"></div>
                             </button>
                         </div>
+                        <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-950/40 px-3 py-2">
+                            <div>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Image Refresh Policy</p>
+                                <p class="text-[10px] text-slate-500 mt-1">Pull newer images before applying this stack.</p>
+                            </div>
+                            <button
+                                onclick={() => editDeployment.pullOnDeploy = !editDeployment.pullOnDeploy}
+                                class="w-10 h-5 rounded-full relative transition-colors {editDeployment.pullOnDeploy ? 'bg-emerald-600' : 'bg-slate-300'}"
+                                aria-label="Toggle pull before deploy"
+                            >
+                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {editDeployment.pullOnDeploy ? 'right-1' : 'left-1'}"></div>
+                            </button>
+                        </div>
                         <textarea
                             bind:value={editDeployment.envInlineContent}
                             rows="10"
@@ -980,6 +1023,19 @@
                                 aria-label="Toggle HarborWatch env override"
                             >
                                 <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {newDeployment.envInlineEnabled ? 'right-1' : 'left-1'}"></div>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-950/40 px-3 py-2">
+                            <div>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Image Refresh Policy</p>
+                                <p class="text-[10px] text-slate-500 mt-1">Pull newer images before applying this stack.</p>
+                            </div>
+                            <button
+                                onclick={() => newDeployment.pullOnDeploy = !newDeployment.pullOnDeploy}
+                                class="w-10 h-5 rounded-full relative transition-colors {newDeployment.pullOnDeploy ? 'bg-emerald-600' : 'bg-slate-300'}"
+                                aria-label="Toggle pull before deploy"
+                            >
+                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {newDeployment.pullOnDeploy ? 'right-1' : 'left-1'}"></div>
                             </button>
                         </div>
                         <textarea

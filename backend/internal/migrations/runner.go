@@ -258,6 +258,13 @@ func migrateGitOpsDeployRuntimeColumns(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+func migrateGitOpsPullOnDeployColumn(ctx context.Context, tx *sql.Tx) error {
+	if err := ensureColumnTx(ctx, tx, "git_deployments", "pull_on_deploy", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("ensure git_deployments.pull_on_deploy: %w", err)
+	}
+	return nil
+}
+
 func migrateUpdateRunsColumnsAndIndexes(ctx context.Context, tx *sql.Tx) error {
 	columns := []struct {
 		name string

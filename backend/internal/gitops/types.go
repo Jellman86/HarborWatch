@@ -31,6 +31,7 @@ type GitDeployment struct {
 	EnvFilePath      string `json:"envFilePath"`
 	EnvInlineContent string `json:"envInlineContent"` // Raw .env content for HarborWatch-managed overrides
 	EnvInlineEnabled bool   `json:"envInlineEnabled"`
+	PullOnDeploy     bool   `json:"pullOnDeploy"`
 	AutoCreated      bool   `json:"autoCreated"`
 	Enabled          bool   `json:"enabled"`
 	LastDeployedHash string `json:"lastDeployedHash"`

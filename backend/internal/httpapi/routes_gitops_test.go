@@ -115,6 +115,7 @@ func TestGitOpsUpdateDeploymentRouteUpdatesFields(t *testing.T) {
 		"envVarsJson":"{\"APP_ENV\":\"prod\"}",
 		"envInlineEnabled":true,
 		"envInlineContent":"APP_ENV=prod\nFEATURE_FLAG=true\n",
+		"pullOnDeploy":true,
 		"enabled":true
 	}`)
 	rec := httptest.NewRecorder()
@@ -147,6 +148,9 @@ func TestGitOpsUpdateDeploymentRouteUpdatesFields(t *testing.T) {
 	}
 	if got.EnvInlineContent != "APP_ENV=prod\nFEATURE_FLAG=true\n" {
 		t.Fatalf("envInlineContent not updated: %q", got.EnvInlineContent)
+	}
+	if !got.PullOnDeploy {
+		t.Fatalf("expected pullOnDeploy true")
 	}
 	if !got.Enabled {
 		t.Fatalf("enabled flag not updated")
@@ -374,6 +378,45 @@ func TestGitOpsToggleDeploymentClearsAutoCreatedFlag(t *testing.T) {
 	}
 	if !got.Enabled {
 		t.Fatalf("expected enabled true after toggle")
+	}
+}
+
+func TestGitOpsCreateDeploymentPersistsPullOnDeploy(t *testing.T) {
+	db := openGitOpsTestDB(t)
+	store := gitops.NewStore(db)
+	mux := newGitOpsTestMux(db, t.TempDir())
+
+	src := gitops.GitSource{
+		ID:               "src-pull-create",
+		Name:             "Pull Create",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-pull-create",
+		AuthMethod:       gitops.AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(context.Background(), src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"gitSourceId":"src-pull-create","composePath":"docker-compose.yml","pullOnDeploy":true,"enabled":true}`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/gitops/deployments", body)
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	deps, err := store.ListDeploymentsForSource(context.Background(), src.ID)
+	if err != nil {
+		t.Fatalf("list deployments: %v", err)
+	}
+	if len(deps) != 1 {
+		t.Fatalf("expected 1 deployment, got %d", len(deps))
+	}
+	if !deps[0].PullOnDeploy {
+		t.Fatalf("expected pullOnDeploy persisted on create")
 	}
 }
 
