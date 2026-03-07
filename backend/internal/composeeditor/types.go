@@ -1,9 +1,13 @@
 package composeeditor
 
 type ProjectDescriptor struct {
-	ProjectName string
-	WorkingDir  string
-	ConfigFiles []string
+	ProjectName     string
+	WorkingDir      string
+	ConfigFiles     []string
+	ComposeEditable bool
+	EnvEditable     bool
+	EnvCreatable    bool
+	EnvPath         string
 }
 
 type FileState struct {

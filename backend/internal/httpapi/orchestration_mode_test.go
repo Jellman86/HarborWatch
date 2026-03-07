@@ -171,3 +171,51 @@ func TestDiscoverLocalComposeProjects(t *testing.T) {
 		t.Logf("readonly source status = %q (acceptable in privileged environments)", readonly.SourceStatus)
 	}
 }
+
+func TestDiscoverLocalComposeProjects_GitOpsProjectKeepsComposeReadonlyButEnvEditable(t *testing.T) {
+	tempDir := t.TempDir()
+	gitOpsRoot := filepath.Join(tempDir, "gitops")
+	workDir := filepath.Join(gitOpsRoot, "apps", "demo")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("mkdir work dir: %v", err)
+	}
+	composeFile := filepath.Join(workDir, "docker-compose.yml")
+	if err := os.WriteFile(composeFile, []byte("services:\n  app:\n    image: nginx:latest\n"), 0o644); err != nil {
+		t.Fatalf("write compose file: %v", err)
+	}
+
+	containers := []gen.ContainerSummary{
+		{
+			ID:    "gitops-1",
+			Names: []string{"/demo"},
+			Image: "nginx:latest",
+			Labels: map[string]string{
+				"com.docker.compose.project":              "demo",
+				"com.docker.compose.service":              "app",
+				"com.docker.compose.project.working_dir":  workDir,
+				"com.docker.compose.project.config_files": composeFile,
+			},
+		},
+	}
+
+	projects := discoverLocalComposeProjectsWithRoots(containers, "", gitOpsRoot)
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(projects))
+	}
+	project := projects[0]
+	if project.SourceWritable {
+		t.Fatalf("expected gitops compose project to be read-only")
+	}
+	if project.ComposeEditable {
+		t.Fatalf("expected compose editing disabled for gitops project")
+	}
+	if !project.EnvEditable {
+		t.Fatalf("expected env editing enabled for gitops project")
+	}
+	if !project.EnvCreatable {
+		t.Fatalf("expected env creation enabled for gitops project")
+	}
+	if project.EnvPath != filepath.Join(workDir, ".env") {
+		t.Fatalf("unexpected env path: %q", project.EnvPath)
+	}
+}

@@ -41,9 +41,10 @@ func TestSaveDraft_FailsOnHashConflict(t *testing.T) {
 
 	svc := NewService()
 	_, err := svc.SaveDraft(ProjectDescriptor{
-		ProjectName: "demo",
-		WorkingDir:  workdir,
-		ConfigFiles: []string{composeFile},
+		ProjectName:     "demo",
+		WorkingDir:      workdir,
+		ConfigFiles:     []string{composeFile},
+		ComposeEditable: true,
 	}, []DraftFile{
 		{
 			Path:           composeFile,
@@ -68,9 +69,10 @@ func TestSaveDraft_RejectsUnknownPath(t *testing.T) {
 
 	svc := NewService()
 	_, err := svc.SaveDraft(ProjectDescriptor{
-		ProjectName: "demo",
-		WorkingDir:  workdir,
-		ConfigFiles: []string{composeFile},
+		ProjectName:     "demo",
+		WorkingDir:      workdir,
+		ConfigFiles:     []string{composeFile},
+		ComposeEditable: true,
 	}, []DraftFile{
 		{
 			Path:    filepath.Join(workdir, "other.yml"),
@@ -99,9 +101,12 @@ func TestSaveDraft_SucceedsComposeAndEnv(t *testing.T) {
 
 	svc := NewService()
 	files, env, err := svc.LoadProjectFiles(ProjectDescriptor{
-		ProjectName: "demo",
-		WorkingDir:  workdir,
-		ConfigFiles: []string{composeFile},
+		ProjectName:     "demo",
+		WorkingDir:      workdir,
+		ConfigFiles:     []string{composeFile},
+		ComposeEditable: true,
+		EnvEditable:     true,
+		EnvCreatable:    true,
 	})
 	if err != nil {
 		t.Fatalf("load files: %v", err)
@@ -111,9 +116,12 @@ func TestSaveDraft_SucceedsComposeAndEnv(t *testing.T) {
 	}
 
 	_, err = svc.SaveDraft(ProjectDescriptor{
-		ProjectName: "demo",
-		WorkingDir:  workdir,
-		ConfigFiles: []string{composeFile},
+		ProjectName:     "demo",
+		WorkingDir:      workdir,
+		ConfigFiles:     []string{composeFile},
+		ComposeEditable: true,
+		EnvEditable:     true,
+		EnvCreatable:    true,
 	}, []DraftFile{
 		{
 			Path:           composeFile,
@@ -146,6 +154,41 @@ func TestSaveDraft_SucceedsComposeAndEnv(t *testing.T) {
 	}
 }
 
+func TestLoadProjectFiles_ReturnsCreatableEnvStateWhenAdjacentEnvMissing(t *testing.T) {
+	workdir := t.TempDir()
+	composeFile := filepath.Join(workdir, "docker-compose.yml")
+	if err := os.WriteFile(composeFile, []byte("services:\n  app:\n    image: nginx:1.25\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	svc := NewService()
+	files, env, err := svc.LoadProjectFiles(ProjectDescriptor{
+		ProjectName:  "demo",
+		WorkingDir:   workdir,
+		ConfigFiles:  []string{composeFile},
+		EnvEditable:  true,
+		EnvCreatable: true,
+	})
+	if err != nil {
+		t.Fatalf("load files: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 compose file, got %d", len(files))
+	}
+	if env == nil {
+		t.Fatalf("expected env state")
+	}
+	if env.Exists {
+		t.Fatalf("expected missing env file")
+	}
+	if !env.Writable {
+		t.Fatalf("expected creatable env file to be writable")
+	}
+	if env.Path != filepath.Join(workdir, ".env") {
+		t.Fatalf("unexpected env path: %q", env.Path)
+	}
+}
+
 func TestSaveDraft_FailsOnNonWritableEnvFile(t *testing.T) {
 	skipIfRoot(t)
 
@@ -169,9 +212,11 @@ func TestSaveDraft_FailsOnNonWritableEnvFile(t *testing.T) {
 
 	svc := NewService()
 	_, env, err := svc.LoadProjectFiles(ProjectDescriptor{
-		ProjectName: "demo",
-		WorkingDir:  lockedDir,
-		ConfigFiles: []string{composeFile},
+		ProjectName:  "demo",
+		WorkingDir:   lockedDir,
+		ConfigFiles:  []string{composeFile},
+		EnvEditable:  true,
+		EnvCreatable: true,
 	})
 	if err != nil {
 		t.Fatalf("load files: %v", err)
@@ -181,9 +226,11 @@ func TestSaveDraft_FailsOnNonWritableEnvFile(t *testing.T) {
 	}
 
 	_, err = svc.SaveDraft(ProjectDescriptor{
-		ProjectName: "demo",
-		WorkingDir:  lockedDir,
-		ConfigFiles: []string{composeFile},
+		ProjectName:  "demo",
+		WorkingDir:   lockedDir,
+		ConfigFiles:  []string{composeFile},
+		EnvEditable:  true,
+		EnvCreatable: true,
 	}, nil, &EnvDraft{
 		Path:           envFile,
 		Content:        "APP_ENV=staging\n",
@@ -217,9 +264,10 @@ func TestSaveDraft_FailsOnNonWritableComposeFile(t *testing.T) {
 
 	svc := NewService()
 	files, _, err := svc.LoadProjectFiles(ProjectDescriptor{
-		ProjectName: "demo",
-		WorkingDir:  lockedDir,
-		ConfigFiles: []string{composeFile},
+		ProjectName:     "demo",
+		WorkingDir:      lockedDir,
+		ConfigFiles:     []string{composeFile},
+		ComposeEditable: true,
 	})
 	if err != nil {
 		t.Fatalf("load files: %v", err)
@@ -229,9 +277,10 @@ func TestSaveDraft_FailsOnNonWritableComposeFile(t *testing.T) {
 	}
 
 	_, err = svc.SaveDraft(ProjectDescriptor{
-		ProjectName: "demo",
-		WorkingDir:  lockedDir,
-		ConfigFiles: []string{composeFile},
+		ProjectName:     "demo",
+		WorkingDir:      lockedDir,
+		ConfigFiles:     []string{composeFile},
+		ComposeEditable: true,
 	}, []DraftFile{
 		{
 			Path:           composeFile,

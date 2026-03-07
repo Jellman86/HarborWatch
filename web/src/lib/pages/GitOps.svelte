@@ -802,7 +802,7 @@
                                 {#each editDeployment.envVars as env, i}
                                     <div class="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200" style="--index: {i}">
                                         <input bind:value={env.key} placeholder="KEY" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
-                                        <input bind:value={env.value} type="password" placeholder="VALUE" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
+                                        <input bind:value={env.value} type="text" placeholder="VALUE" spellcheck="false" autocapitalize="off" autocomplete="off" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
                                         <button onclick={() => removeEditEnvVar(i)} aria-label={`Remove environment variable ${i + 1}`} class="p-2 text-slate-400 hover:text-rose-500">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -914,7 +914,7 @@
                                 {#each newDeployment.envVars as env, i}
                                     <div class="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200" style="--index: {i}">
                                         <input bind:value={env.key} placeholder="KEY" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
-                                        <input bind:value={env.value} type="password" placeholder="VALUE" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
+                                        <input bind:value={env.value} type="text" placeholder="VALUE" spellcheck="false" autocapitalize="off" autocomplete="off" class="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 text-slate-900 dark:text-white" />
                                         <button onclick={() => removeEnvVar(i)} aria-label={`Remove environment variable ${i + 1}`} class="p-2 text-slate-400 hover:text-rose-500">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

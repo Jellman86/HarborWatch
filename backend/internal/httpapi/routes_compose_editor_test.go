@@ -291,6 +291,155 @@ func TestComposeProjectSave_RejectsNonWritableEnvFile(t *testing.T) {
 	}
 }
 
+func TestComposeProjectDetail_GitOpsComposeReadonlyButEnvCreatable(t *testing.T) {
+	gitOpsRoot := filepath.Join(t.TempDir(), "gitops-root")
+	projectDir := filepath.Join(gitOpsRoot, "apps", "demo")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+	composeFile := filepath.Join(projectDir, "docker-compose.yml")
+	if err := os.WriteFile(composeFile, []byte("services:\n  app:\n    image: nginx:1.25\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	docker := fakeDockerClient{
+		containers: []gen.ContainerSummary{
+			{
+				ID:    "c1",
+				Names: []string{"/demo-app"},
+				Labels: map[string]string{
+					"com.docker.compose.project":              "demo",
+					"com.docker.compose.service":              "app",
+					"com.docker.compose.project.working_dir":  projectDir,
+					"com.docker.compose.project.config_files": composeFile,
+				},
+			},
+		},
+	}
+
+	mux := NewMuxWithDeps(nil, docker, nil, nil, nil, nil, nil, nil, nil, nil, nil, staticComposeSettingsService{settings.Settings{
+		GitOpsMasterDirectory: gitOpsRoot,
+	}}, fakePortainerClient{}, fakeRulesService{}, nil, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/compose/projects/demo", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		SourceWritable  bool `json:"sourceWritable"`
+		ComposeEditable bool `json:"composeEditable"`
+		EnvEditable     bool `json:"envEditable"`
+		EnvCreatable    bool `json:"envCreatable"`
+		EnvFile         *struct {
+			Path     string `json:"path"`
+			Exists   bool   `json:"exists"`
+			Writable bool   `json:"writable"`
+		} `json:"envFile"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.SourceWritable {
+		t.Fatalf("expected sourceWritable false for gitops compose")
+	}
+	if payload.ComposeEditable {
+		t.Fatalf("expected composeEditable false")
+	}
+	if !payload.EnvEditable || !payload.EnvCreatable {
+		t.Fatalf("expected env editing and creation enabled")
+	}
+	if payload.EnvFile == nil || payload.EnvFile.Path != filepath.Join(projectDir, ".env") {
+		t.Fatalf("expected adjacent env file metadata, got %+v", payload.EnvFile)
+	}
+	if payload.EnvFile.Exists {
+		t.Fatalf("expected env file to be reported missing")
+	}
+}
+
+func TestComposeProjectSave_GitOpsEnvOnlyCreateSucceeds(t *testing.T) {
+	gitOpsRoot := filepath.Join(t.TempDir(), "gitops-root")
+	projectDir := filepath.Join(gitOpsRoot, "apps", "demo")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+	composeFile := filepath.Join(projectDir, "docker-compose.yml")
+	if err := os.WriteFile(composeFile, []byte("services:\n  app:\n    image: nginx:1.25\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+	envFile := filepath.Join(projectDir, ".env")
+
+	docker := fakeDockerClient{
+		containers: []gen.ContainerSummary{
+			{
+				ID:    "c1",
+				Names: []string{"/demo-app"},
+				Labels: map[string]string{
+					"com.docker.compose.project":              "demo",
+					"com.docker.compose.service":              "app",
+					"com.docker.compose.project.working_dir":  projectDir,
+					"com.docker.compose.project.config_files": composeFile,
+				},
+			},
+		},
+	}
+
+	snapshotRoot := filepath.Join(t.TempDir(), "snapshots")
+	mux := NewMuxWithDeps(nil, docker, nil, nil, nil, nil, nil, nil, nil, nil, nil, staticComposeSettingsService{settings.Settings{
+		GitOpsMasterDirectory:   gitOpsRoot,
+		ComposeSnapshotRootPath: snapshotRoot,
+	}}, fakePortainerClient{}, fakeRulesService{}, nil, nil)
+
+	recDetail := httptest.NewRecorder()
+	mux.ServeHTTP(recDetail, httptest.NewRequest(http.MethodGet, "/api/compose/projects/demo", nil))
+	if recDetail.Code != http.StatusOK {
+		t.Fatalf("expected detail 200, got %d body=%s", recDetail.Code, recDetail.Body.String())
+	}
+	var detail struct {
+		ComposeFiles []struct {
+			Path    string `json:"path"`
+			SHA256  string `json:"sha256"`
+			Content string `json:"content"`
+		} `json:"composeFiles"`
+		EnvFile struct {
+			Path   string `json:"path"`
+			Exists bool   `json:"exists"`
+		} `json:"envFile"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(recDetail.Body.Bytes())).Decode(&detail); err != nil {
+		t.Fatalf("decode detail: %v", err)
+	}
+
+	body := stringsNewReader(t, `{
+		"composeFiles":[{"path":"`+composeFile+`","content":"`+"services:\\n  app:\\n    image: nginx:1.25\\n"+`","expectedSha256":"`+detail.ComposeFiles[0].SHA256+`"}],
+		"envFile":{"path":"`+envFile+`","content":"APP_ENV=staging\nMULTI_WORD=hello world\n","exists":false}
+	}`)
+
+	recSave := httptest.NewRecorder()
+	mux.ServeHTTP(recSave, httptest.NewRequest(http.MethodPut, "/api/compose/projects/demo", body))
+	if recSave.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", recSave.Code, recSave.Body.String())
+	}
+
+	gotEnv, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatalf("read env: %v", err)
+	}
+	if string(gotEnv) != "APP_ENV=staging\nMULTI_WORD=hello world\n" {
+		t.Fatalf("unexpected env content: %q", string(gotEnv))
+	}
+	gotCompose, err := os.ReadFile(composeFile)
+	if err != nil {
+		t.Fatalf("read compose: %v", err)
+	}
+	if string(gotCompose) != "services:\n  app:\n    image: nginx:1.25\n" {
+		t.Fatalf("compose file should remain unchanged: %q", string(gotCompose))
+	}
+	if _, err := os.Stat(snapshotRoot); !os.IsNotExist(err) {
+		t.Fatalf("expected env-only save to skip snapshot creation")
+	}
+}
+
 func TestComposeProjectSave_PreflightReadErrorIsNotHashConflict(t *testing.T) {
 	workdir := t.TempDir()
 	composeFile := filepath.Join(workdir, "docker-compose.yml")

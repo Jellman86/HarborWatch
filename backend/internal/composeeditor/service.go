@@ -43,13 +43,13 @@ func (s *Service) LoadProjectFiles(project ProjectDescriptor) ([]FileState, *Fil
 		if err != nil {
 			return nil, nil, err
 		}
+		if !project.ComposeEditable {
+			st.Writable = false
+		}
 		files = append(files, st)
 	}
 
-	envPath := ""
-	if wd := strings.TrimSpace(project.WorkingDir); wd != "" {
-		envPath = filepath.Join(wd, ".env")
-	}
+	envPath := resolveEnvPath(project)
 	if strings.TrimSpace(envPath) == "" {
 		return files, nil, nil
 	}
@@ -57,6 +57,14 @@ func (s *Service) LoadProjectFiles(project ProjectDescriptor) ([]FileState, *Fil
 	envState, err := readOptionalFileState(envPath)
 	if err != nil {
 		return nil, nil, err
+	}
+	if envState.Exists {
+		envState.Writable = project.EnvEditable && envState.Writable
+	} else {
+		envState.Writable = project.EnvCreatable
+	}
+	if !envState.Exists && !project.EnvCreatable && !project.EnvEditable {
+		return files, nil, nil
 	}
 	return files, &envState, nil
 }
@@ -241,11 +249,7 @@ func (s *Service) SaveDraft(project ProjectDescriptor, composeDrafts []DraftFile
 		allowedCompose[p] = struct{}{}
 	}
 
-	wd := strings.TrimSpace(project.WorkingDir)
-	allowedEnvPath := ""
-	if wd != "" {
-		allowedEnvPath = filepath.Join(wd, ".env")
-	}
+	allowedEnvPath := resolveEnvPath(project)
 
 	type pendingWrite struct {
 		path    string
@@ -257,6 +261,16 @@ func (s *Service) SaveDraft(project ProjectDescriptor, composeDrafts []DraftFile
 		path := strings.TrimSpace(draft.Path)
 		if _, ok := allowedCompose[path]; !ok {
 			return SaveResult{}, &SaveError{Path: path, Err: ErrPathNotAllowed}
+		}
+		if !project.ComposeEditable {
+			current, err := os.ReadFile(path)
+			if err != nil {
+				return SaveResult{}, &SaveError{Path: path, Err: err}
+			}
+			if string(current) != draft.Content {
+				return SaveResult{}, &SaveError{Path: path, Err: ErrFileNotWritable}
+			}
+			continue
 		}
 		if err := verifyExpectedHash(path, strings.TrimSpace(draft.ExpectedSHA256)); err != nil {
 			return SaveResult{}, &SaveError{Path: path, Err: err}
@@ -275,15 +289,21 @@ func (s *Service) SaveDraft(project ProjectDescriptor, composeDrafts []DraftFile
 		if allowedEnvPath == "" || envPath != allowedEnvPath {
 			return SaveResult{}, &SaveError{Path: envPath, Err: ErrPathNotAllowed}
 		}
+		if envDraft.Exists && !project.EnvEditable {
+			return SaveResult{}, &SaveError{Path: envPath, Err: ErrFileNotWritable}
+		}
+		if !envDraft.Exists && !project.EnvCreatable {
+			return SaveResult{}, &SaveError{Path: envPath, Err: ErrFileNotWritable}
+		}
 		if envDraft.Exists {
 			if err := verifyExpectedHash(envPath, strings.TrimSpace(envDraft.ExpectedSHA256)); err != nil {
 				return SaveResult{}, &SaveError{Path: envPath, Err: err}
 			}
-			if err := ensurePathWritable(envPath); err != nil {
-				return SaveResult{}, &SaveError{Path: envPath, Err: err}
-			}
-			writes = append(writes, pendingWrite{path: envPath, content: []byte(envDraft.Content)})
 		}
+		if err := ensurePathWritable(envPath); err != nil {
+			return SaveResult{}, &SaveError{Path: envPath, Err: err}
+		}
+		writes = append(writes, pendingWrite{path: envPath, content: []byte(envDraft.Content)})
 	}
 
 	for _, w := range writes {
@@ -326,6 +346,16 @@ func normalizePaths(paths []string) []string {
 		out = append(out, p)
 	}
 	return out
+}
+
+func resolveEnvPath(project ProjectDescriptor) string {
+	if p := strings.TrimSpace(project.EnvPath); p != "" {
+		return p
+	}
+	if wd := strings.TrimSpace(project.WorkingDir); wd != "" {
+		return filepath.Join(wd, ".env")
+	}
+	return ""
 }
 
 func readFileState(path string) (FileState, error) {

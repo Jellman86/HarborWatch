@@ -34,6 +34,10 @@
         sourceStatus: string;
         sourceVerified: boolean;
         sourceWritable: boolean;
+        composeEditable: boolean;
+        envEditable: boolean;
+        envCreatable: boolean;
+        envPath?: string;
         composeFiles: EditorFileState[];
         envFile?: EditorFileState;
         members?: LocalComposeProjectMember[];
@@ -76,13 +80,13 @@
     const envFileNotWritable = $derived(!!project?.envFile && !project.envFile.writable);
     const saveBlockedReason = $derived((() => {
         if (!project) return "";
-        if (!project.sourceWritable) {
-            return "Compose source is read-only for this project.";
+        if (hasComposeChanges && !project.composeEditable) {
+            return "Compose files are managed read-only for this project.";
         }
-        if (nonWritableComposePaths.length > 0) {
+        if (hasComposeChanges && nonWritableComposePaths.length > 0) {
             return "One or more compose files are not writable.";
         }
-        if (envFileNotWritable) {
+        if (hasEnvChanges && envFileNotWritable) {
             return "Project .env is not writable.";
         }
         return "";
@@ -328,6 +332,13 @@
                 </div>
             </div>
 
+            {#if !project.composeEditable && project.envFile?.writable}
+                <div class="rounded-xl border border-sky-200 dark:border-sky-900/50 bg-sky-50 dark:bg-sky-900/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-300 space-y-1">
+                    <p class="font-black uppercase tracking-widest text-[10px]">Git-Managed Compose</p>
+                    <p>Compose files are read-only here. The adjacent project <span class="font-mono">.env</span> remains editable for local overrides.</p>
+                </div>
+            {/if}
+
             {#if saveBlockedReason}
                 <div class="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 space-y-1">
                     <p class="font-black uppercase tracking-widest text-[10px]">Save Blocked</p>
@@ -376,7 +387,7 @@
             <section class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                 <div>
                     <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Project .env</p>
-                    <p class="text-xs text-slate-500">{project.envFile.path} {project.envFile.writable ? "" : "(readonly)"}</p>
+                    <p class="text-xs text-slate-500">{project.envFile.path} {project.envFile.exists ? "" : "(will be created)"} {project.envFile.writable ? "" : "(readonly)"}</p>
                 </div>
                 <textarea
                     class="w-full min-h-[12rem] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-3 text-xs font-mono text-slate-800 dark:text-slate-100"
@@ -385,6 +396,8 @@
                 ></textarea>
                 {#if !project.envFile.writable}
                     <p class="text-[10px] text-amber-600 dark:text-amber-300">This .env file is read-only from HarborWatch.</p>
+                {:else if !project.envFile.exists}
+                    <p class="text-[10px] text-sky-600 dark:text-sky-300">This project has no adjacent <span class="font-mono">.env</span> yet. Saving here will create it.</p>
                 {/if}
             </section>
         {/if}

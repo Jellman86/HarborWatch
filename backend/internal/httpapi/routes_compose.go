@@ -19,15 +19,19 @@ import (
 )
 
 type composeProjectEditorResponse struct {
-	ProjectKey     string                      `json:"projectKey"`
-	ProjectName    string                      `json:"projectName"`
-	WorkingDir     string                      `json:"workingDir,omitempty"`
-	SourceStatus   composeSourceStatus         `json:"sourceStatus"`
-	SourceVerified bool                        `json:"sourceVerified"`
-	SourceWritable bool                        `json:"sourceWritable"`
-	ComposeFiles   []composeeditor.FileState   `json:"composeFiles"`
-	EnvFile        *composeeditor.FileState    `json:"envFile,omitempty"`
-	Members        []localComposeProjectMember `json:"members,omitempty"`
+	ProjectKey      string                      `json:"projectKey"`
+	ProjectName     string                      `json:"projectName"`
+	WorkingDir      string                      `json:"workingDir,omitempty"`
+	SourceStatus    composeSourceStatus         `json:"sourceStatus"`
+	SourceVerified  bool                        `json:"sourceVerified"`
+	SourceWritable  bool                        `json:"sourceWritable"`
+	ComposeEditable bool                        `json:"composeEditable"`
+	EnvEditable     bool                        `json:"envEditable"`
+	EnvCreatable    bool                        `json:"envCreatable"`
+	EnvPath         string                      `json:"envPath,omitempty"`
+	ComposeFiles    []composeeditor.FileState   `json:"composeFiles"`
+	EnvFile         *composeeditor.FileState    `json:"envFile,omitempty"`
+	Members         []localComposeProjectMember `json:"members,omitempty"`
 }
 
 type composeProjectValidateRequest struct {
@@ -63,24 +67,32 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 			}
 			svc := composeeditor.NewService()
 			composeFiles, envFile, err := svc.LoadProjectFiles(composeeditor.ProjectDescriptor{
-				ProjectName: project.ProjectName,
-				WorkingDir:  project.WorkingDir,
-				ConfigFiles: project.ConfigFiles,
+				ProjectName:     project.ProjectName,
+				WorkingDir:      project.WorkingDir,
+				ConfigFiles:     project.ConfigFiles,
+				ComposeEditable: project.ComposeEditable,
+				EnvEditable:     project.EnvEditable,
+				EnvCreatable:    project.EnvCreatable,
+				EnvPath:         project.EnvPath,
 			})
 			if err != nil {
 				writeError(w, http.StatusBadGateway, "compose_source_read_failed", err.Error())
 				return
 			}
 			writeJSON(w, http.StatusOK, composeProjectEditorResponse{
-				ProjectKey:     project.ProjectKey,
-				ProjectName:    project.ProjectName,
-				WorkingDir:     project.WorkingDir,
-				SourceStatus:   project.SourceStatus,
-				SourceVerified: project.SourceVerified,
-				SourceWritable: project.SourceWritable,
-				ComposeFiles:   composeFiles,
-				EnvFile:        envFile,
-				Members:        project.Members,
+				ProjectKey:      project.ProjectKey,
+				ProjectName:     project.ProjectName,
+				WorkingDir:      project.WorkingDir,
+				SourceStatus:    project.SourceStatus,
+				SourceVerified:  project.SourceVerified,
+				SourceWritable:  project.SourceWritable,
+				ComposeEditable: project.ComposeEditable,
+				EnvEditable:     project.EnvEditable,
+				EnvCreatable:    project.EnvCreatable,
+				EnvPath:         project.EnvPath,
+				ComposeFiles:    composeFiles,
+				EnvFile:         envFile,
+				Members:         project.Members,
 			})
 		})
 
@@ -97,9 +109,13 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 			}
 			svc := composeeditor.NewService()
 			validation := svc.ValidateDraft(r.Context(), composeeditor.ProjectDescriptor{
-				ProjectName: project.ProjectName,
-				WorkingDir:  project.WorkingDir,
-				ConfigFiles: project.ConfigFiles,
+				ProjectName:     project.ProjectName,
+				WorkingDir:      project.WorkingDir,
+				ConfigFiles:     project.ConfigFiles,
+				ComposeEditable: project.ComposeEditable,
+				EnvEditable:     project.EnvEditable,
+				EnvCreatable:    project.EnvCreatable,
+				EnvPath:         project.EnvPath,
 			}, req.ComposeFiles, req.EnvFile)
 			if !validation.OK {
 				writeJSON(w, http.StatusBadRequest, validation)
@@ -135,11 +151,6 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 				writeError(w, http.StatusNotFound, "compose_project_not_found", "Compose project not found")
 				return
 			}
-			if !project.SourceWritable {
-				writeError(w, http.StatusConflict, "compose_source_readonly", "Compose source is read-only")
-				return
-			}
-
 			var req composeProjectSaveRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
@@ -148,9 +159,13 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 
 			svc := composeeditor.NewService()
 			validation := svc.ValidateDraft(r.Context(), composeeditor.ProjectDescriptor{
-				ProjectName: project.ProjectName,
-				WorkingDir:  project.WorkingDir,
-				ConfigFiles: project.ConfigFiles,
+				ProjectName:     project.ProjectName,
+				WorkingDir:      project.WorkingDir,
+				ConfigFiles:     project.ConfigFiles,
+				ComposeEditable: project.ComposeEditable,
+				EnvEditable:     project.EnvEditable,
+				EnvCreatable:    project.EnvCreatable,
+				EnvPath:         project.EnvPath,
 			}, req.ComposeFiles, req.EnvFile)
 			if !validation.OK {
 				writeJSON(w, http.StatusBadRequest, validation)
@@ -172,21 +187,27 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 					snapshotRoot = strings.TrimSpace(st.ComposeSnapshotRootPath)
 				}
 			}
-			if _, err := composesnapshots.CreateProjectSnapshot(composesnapshots.CreateSnapshotInput{
-				RootDir:      snapshotRoot,
-				ProjectName:  project.ProjectName,
-				WorkingDir:   project.WorkingDir,
-				ConfigFiles:  project.ConfigFiles,
-				CreatedAtUTC: time.Now().UTC(),
-			}); err != nil {
-				writeError(w, http.StatusBadGateway, "compose_snapshot_failed", err.Error())
-				return
+			if composeDraftsHaveChanges(project, req.ComposeFiles) {
+				if _, err := composesnapshots.CreateProjectSnapshot(composesnapshots.CreateSnapshotInput{
+					RootDir:      snapshotRoot,
+					ProjectName:  project.ProjectName,
+					WorkingDir:   project.WorkingDir,
+					ConfigFiles:  project.ConfigFiles,
+					CreatedAtUTC: time.Now().UTC(),
+				}); err != nil {
+					writeError(w, http.StatusBadGateway, "compose_snapshot_failed", err.Error())
+					return
+				}
 			}
 
 			saveResult, err := svc.SaveDraft(composeeditor.ProjectDescriptor{
-				ProjectName: project.ProjectName,
-				WorkingDir:  project.WorkingDir,
-				ConfigFiles: project.ConfigFiles,
+				ProjectName:     project.ProjectName,
+				WorkingDir:      project.WorkingDir,
+				ConfigFiles:     project.ConfigFiles,
+				ComposeEditable: project.ComposeEditable,
+				EnvEditable:     project.EnvEditable,
+				EnvCreatable:    project.EnvCreatable,
+				EnvPath:         project.EnvPath,
 			}, req.ComposeFiles, req.EnvFile)
 			if err != nil {
 				var saveErr *composeeditor.SaveError
@@ -220,12 +241,14 @@ func listLocalComposeProjects(ctx context.Context, deps adminRouteDeps) ([]local
 		return nil, "", err
 	}
 	snapshotRoot := ""
+	gitOpsRoot := ""
 	if deps.settingsService != nil {
 		if st, err := deps.settingsService.Get(ctx); err == nil {
 			snapshotRoot = strings.TrimSpace(st.ComposeSnapshotRootPath)
+			gitOpsRoot = strings.TrimSpace(st.GitOpsMasterDirectory)
 		}
 	}
-	return discoverLocalComposeProjectsWithSnapshotRoot(containers, snapshotRoot), snapshotRoot, nil
+	return discoverLocalComposeProjectsWithRoots(containers, snapshotRoot, gitOpsRoot), snapshotRoot, nil
 }
 
 func resolveComposeProject(ctx context.Context, deps adminRouteDeps, projectKey string) (*localComposeProject, error) {
@@ -265,6 +288,9 @@ func preflightComposeHashConflicts(project *localComposeProject, req composeProj
 		if expected != "" {
 			path := strings.TrimSpace(req.EnvFile.Path)
 			if path == "" {
+				path = strings.TrimSpace(project.EnvPath)
+			}
+			if path == "" {
 				path = filepath.Join(strings.TrimSpace(project.WorkingDir), ".env")
 			}
 			raw, err := os.ReadFile(path)
@@ -279,4 +305,33 @@ func preflightComposeHashConflicts(project *localComposeProject, req composeProj
 		}
 	}
 	return nil
+}
+
+func composeDraftsHaveChanges(project *localComposeProject, drafts []composeeditor.DraftFile) bool {
+	byPath := make(map[string]string, len(drafts))
+	for _, draft := range drafts {
+		path := strings.TrimSpace(draft.Path)
+		if path == "" {
+			continue
+		}
+		byPath[path] = draft.Content
+	}
+	for _, path := range project.ConfigFiles {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		content, ok := byPath[path]
+		if !ok {
+			continue
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return true
+		}
+		if string(raw) != content {
+			return true
+		}
+	}
+	return false
 }

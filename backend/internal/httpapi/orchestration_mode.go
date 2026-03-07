@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -42,6 +43,10 @@ type localComposeProject struct {
 	SourceStatus     composeSourceStatus         `json:"sourceStatus"`
 	SourceVerified   bool                        `json:"sourceVerified"`
 	SourceWritable   bool                        `json:"sourceWritable"`
+	ComposeEditable  bool                        `json:"composeEditable"`
+	EnvEditable      bool                        `json:"envEditable"`
+	EnvCreatable     bool                        `json:"envCreatable"`
+	EnvPath          string                      `json:"envPath,omitempty"`
 	ContainerCount   int                         `json:"containerCount"`
 	UpdateCandidates int                         `json:"updateCandidates"`
 	SnapshotRootPath string                      `json:"snapshotRootPath,omitempty"`
@@ -171,10 +176,14 @@ func detectComposeSourceStatus(configFiles []string) composeSourceStatus {
 }
 
 func discoverLocalComposeProjects(containers []gen.ContainerSummary) []localComposeProject {
-	return discoverLocalComposeProjectsWithSnapshotRoot(containers, "")
+	return discoverLocalComposeProjectsWithRoots(containers, "", "")
 }
 
 func discoverLocalComposeProjectsWithSnapshotRoot(containers []gen.ContainerSummary, snapshotRoot string) []localComposeProject {
+	return discoverLocalComposeProjectsWithRoots(containers, snapshotRoot, "")
+}
+
+func discoverLocalComposeProjectsWithRoots(containers []gen.ContainerSummary, snapshotRoot, gitOpsRoot string) []localComposeProject {
 	type key struct {
 		project    string
 		workingDir string
@@ -192,6 +201,12 @@ func discoverLocalComposeProjectsWithSnapshotRoot(containers []gen.ContainerSumm
 		p := grouped[k]
 		if p == nil {
 			status := detectComposeSourceStatus(configFiles)
+			gitOpsManaged := isGitOpsBackedComposeSource(workingDir, configFiles, gitOpsRoot)
+			composeEditable := status == composeSourceStatusVerifiedWritable && !gitOpsManaged
+			envPath, envEditable, envCreatable := detectEnvAuthority(workingDir)
+			if gitOpsManaged && status != composeSourceStatusUnverified {
+				status = composeSourceStatusVerifiedReadonly
+			}
 			snapshotStatus, snapshotErr := composesnapshots.DetectProjectChangeStatus(snapshotRoot, projectName, workingDir, configFiles)
 			p = &localComposeProject{
 				ProjectKey:       composeProjectKey(projectName, workingDir, configFiles),
@@ -200,7 +215,11 @@ func discoverLocalComposeProjectsWithSnapshotRoot(containers []gen.ContainerSumm
 				ConfigFiles:      append([]string(nil), configFiles...),
 				SourceStatus:     status,
 				SourceVerified:   status != composeSourceStatusUnverified,
-				SourceWritable:   status == composeSourceStatusVerifiedWritable,
+				SourceWritable:   composeEditable,
+				ComposeEditable:  composeEditable,
+				EnvEditable:      envEditable,
+				EnvCreatable:     envCreatable,
+				EnvPath:          envPath,
 				SnapshotRootPath: strings.TrimSpace(composesnapshots.ResolveRoot(snapshotRoot)),
 				Members:          []localComposeProjectMember{},
 			}
@@ -254,6 +273,72 @@ func discoverLocalComposeProjectsWithSnapshotRoot(containers []gen.ContainerSumm
 		return left < right
 	})
 	return out
+}
+
+func isGitOpsBackedComposeSource(workingDir string, configFiles []string, gitOpsRoot string) bool {
+	root := strings.TrimSpace(gitOpsRoot)
+	if root == "" {
+		return false
+	}
+	if pathWithinRoot(workingDir, root) {
+		return true
+	}
+	for _, path := range configFiles {
+		if pathWithinRoot(path, root) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathWithinRoot(path string, root string) bool {
+	p := strings.TrimSpace(path)
+	r := strings.TrimSpace(root)
+	if p == "" || r == "" {
+		return false
+	}
+	absRoot, err := filepath.Abs(r)
+	if err != nil {
+		return false
+	}
+	absPath, err := filepath.Abs(p)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
+func detectEnvAuthority(workingDir string) (string, bool, bool) {
+	wd := strings.TrimSpace(workingDir)
+	if wd == "" {
+		return "", false, false
+	}
+	if _, err := os.Stat(wd); err != nil {
+		return filepath.Join(wd, ".env"), false, false
+	}
+	envPath := filepath.Join(wd, ".env")
+	if _, err := os.Stat(envPath); err == nil {
+		writable := pathWritable(envPath)
+		return envPath, writable, writable
+	}
+	writable := pathWritable(envPath)
+	return envPath, writable, writable
+}
+
+func pathWritable(path string) bool {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".harborwatch-write-check-*")
+	if err != nil {
+		return false
+	}
+	name := tmp.Name()
+	_ = tmp.Close()
+	_ = os.Remove(name)
+	return true
 }
 
 func composeProjectKey(projectName, workingDir string, configFiles []string) string {
