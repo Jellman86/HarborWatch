@@ -395,6 +395,27 @@
         const normalizedComposePath = String(composePath || "").replace(/^\/+/, "");
         return [baseDir, normalizedTargetDir, normalizedComposePath].filter(Boolean).join("/");
     }
+
+    function activeEnvSourceLabel(dep: GitDeployment): string {
+        if (dep.envInlineEnabled) return "HarborWatch Override";
+        if (dep.envFilePath) return "Custom Env File";
+        if (dep.envVarsJson) return "Legacy Overlay";
+        return "Repo / Default Env";
+    }
+
+    function activeEnvSourceClass(dep: GitDeployment): string {
+        if (dep.envInlineEnabled) return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
+        if (dep.envFilePath) return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+        if (dep.envVarsJson) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+        return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+    }
+
+    function activeEnvSourceSummary(dep: GitDeployment): string {
+        if (dep.envInlineEnabled) return "Deploy ignores repo/default env files and uses HarborWatch-managed raw .env content.";
+        if (dep.envFilePath) return "Deploy uses the configured env file path.";
+        if (dep.envVarsJson) return "Deploy keeps the legacy HarborWatch env overlay on top of the base env source.";
+        return "Deploy relies on Docker Compose default env resolution next to the compose file.";
+    }
 </script>
 
 <div class="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
@@ -547,11 +568,14 @@
                                                         <p class="text-sm font-bold text-slate-900 dark:text-white font-mono">{dep.composePath}</p>
                                                         <p class="text-[10px] text-slate-500 mt-0.5 font-mono break-all">Mapped: {resolvedComposeMapping(source.targetDir, dep.composePath)}</p>
                                                         <p class="text-[10px] text-slate-500 mt-0.5">Last deployed: {formatRelativeTime(dep.lastDeployedAt)} {dep.lastDeployedHash ? `(${dep.lastDeployedHash.slice(0, 7)})` : ''}</p>
+                                                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                                            <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {activeEnvSourceClass(dep)}">
+                                                                {activeEnvSourceLabel(dep)}
+                                                            </span>
+                                                            <p class="text-[10px] text-slate-500">{activeEnvSourceSummary(dep)}</p>
+                                                        </div>
                                                         {#if dep.envFilePath}
                                                             <p class="text-[10px] text-slate-500 mt-0.5 font-mono">Env file: {dep.envFilePath}</p>
-                                                        {/if}
-                                                        {#if dep.envInlineEnabled}
-                                                            <p class="text-[10px] text-sky-600 dark:text-sky-300 mt-0.5 font-bold">HarborWatch-managed env override active</p>
                                                         {/if}
                                                     </div>
                                                 </div>
