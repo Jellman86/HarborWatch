@@ -2,6 +2,7 @@ package gitops
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
+	"github.com/docker/docker/api/types/container"
 )
 
 func TestBuildEnvFileSortsKeys(t *testing.T) {
@@ -401,6 +403,88 @@ exit 1
 	}
 }
 
+func TestRemoveStaleComposeReplacementContainersRemovesOnlyMatchingNonRunningReplacements(t *testing.T) {
+	ctx := context.Background()
+	client := &fakeComposeCleanupClient{
+		containers: []container.Summary{
+			{
+				ID:    "remove-me",
+				Names: []string{"/abc_yawamf-backend"},
+				State: "exited",
+				Labels: map[string]string{
+					"com.docker.compose.replace":              "yawamf-backend",
+					"com.docker.compose.project.config_files": "/repo/docker-compose.yml",
+					"com.docker.compose.project.working_dir":  "/repo",
+				},
+			},
+			{
+				ID:    "keep-running",
+				Names: []string{"/def_yawamf-backend"},
+				State: "running",
+				Labels: map[string]string{
+					"com.docker.compose.replace":              "yawamf-backend",
+					"com.docker.compose.project.config_files": "/repo/docker-compose.yml",
+					"com.docker.compose.project.working_dir":  "/repo",
+				},
+			},
+			{
+				ID:    "keep-nonreplacement",
+				Names: []string{"/plain-exited"},
+				State: "exited",
+				Labels: map[string]string{
+					"com.docker.compose.project.config_files": "/repo/docker-compose.yml",
+					"com.docker.compose.project.working_dir":  "/repo",
+				},
+			},
+			{
+				ID:    "keep-other-project",
+				Names: []string{"/other"},
+				State: "exited",
+				Labels: map[string]string{
+					"com.docker.compose.replace":              "yawamf-backend",
+					"com.docker.compose.project.config_files": "/other/docker-compose.yml",
+					"com.docker.compose.project.working_dir":  "/other",
+				},
+			},
+		},
+	}
+
+	removed, err := removeStaleComposeReplacementContainers(ctx, client, "/repo/docker-compose.yml", "/repo")
+	if err != nil {
+		t.Fatalf("removeStaleComposeReplacementContainers returned error: %v", err)
+	}
+	if len(removed) != 1 || removed[0] != "abc_yawamf-backend" {
+		t.Fatalf("expected one removed replacement container, got %#v", removed)
+	}
+	if len(client.removedIDs) != 1 || client.removedIDs[0] != "remove-me" {
+		t.Fatalf("expected only remove-me to be deleted, got %#v", client.removedIDs)
+	}
+}
+
+func TestRemoveStaleComposeReplacementContainersPropagatesRemoveError(t *testing.T) {
+	ctx := context.Background()
+	client := &fakeComposeCleanupClient{
+		containers: []container.Summary{
+			{
+				ID:    "remove-me",
+				Names: []string{"/abc_yawamf-backend"},
+				State: "created",
+				Labels: map[string]string{
+					"com.docker.compose.replace":              "yawamf-backend",
+					"com.docker.compose.project.config_files": "/repo/docker-compose.yml",
+					"com.docker.compose.project.working_dir":  "/repo",
+				},
+			},
+		},
+		removeErr: errors.New("boom"),
+	}
+
+	_, err := removeStaleComposeReplacementContainers(ctx, client, "/repo/docker-compose.yml", "/repo")
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("expected remove error to propagate, got %v", err)
+	}
+}
+
 type staticSettingsProvider struct {
 	masterDir string
 }
@@ -414,4 +498,22 @@ func writeTestScript(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
 		t.Fatalf("write script %s: %v", path, err)
 	}
+}
+
+type fakeComposeCleanupClient struct {
+	containers []container.Summary
+	removedIDs []string
+	removeErr  error
+}
+
+func (f *fakeComposeCleanupClient) ContainerList(_ context.Context, _ container.ListOptions) ([]container.Summary, error) {
+	return f.containers, nil
+}
+
+func (f *fakeComposeCleanupClient) ContainerRemove(_ context.Context, id string, _ container.RemoveOptions) error {
+	if f.removeErr != nil {
+		return f.removeErr
+	}
+	f.removedIDs = append(f.removedIDs, id)
+	return nil
 }

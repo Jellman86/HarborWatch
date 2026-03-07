@@ -11,9 +11,20 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/composecli"
+	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
+	"github.com/docker/docker/api/types/container"
 )
 
 const maxDeployOutputSummary = 1200
+
+type composeCleanupClient interface {
+	ContainerList(context.Context, container.ListOptions) ([]container.Summary, error)
+	ContainerRemove(context.Context, string, container.RemoveOptions) error
+}
+
+var newComposeCleanupClient = func() (composeCleanupClient, error) {
+	return dockerengine.NewRawClient()
+}
 
 type deployProgressFunc func(progress int, status, message string)
 
@@ -209,6 +220,23 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 		}
 	}
 
+	notifyDeployProgress(progress, 45, "running", "Cleaning stale compose replacements")
+	cleanupClient, err := newComposeCleanupClient()
+	if err != nil {
+		resultErr = fmt.Errorf("init docker client for compose cleanup: %w", err)
+		outputSummary = truncateDeployOutput(resultErr.Error())
+		return resultErr
+	}
+	removedContainers, err := removeStaleComposeReplacementContainers(ctx, cleanupClient, composeFile, workDir)
+	if err != nil {
+		resultErr = fmt.Errorf("cleanup stale compose replacements: %w", err)
+		outputSummary = truncateDeployOutput(resultErr.Error())
+		return resultErr
+	}
+	if len(removedContainers) > 0 {
+		outputSummary = truncateDeployOutput("Removed stale compose replacement containers: " + strings.Join(removedContainers, ", "))
+	}
+
 	cmd := runner.CommandContext(ctx, args...)
 	cmd.Dir = workDir
 
@@ -241,6 +269,42 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 
 	notifyDeployProgress(progress, 100, "completed", "Deploy completed successfully")
 	return resultErr
+}
+
+func removeStaleComposeReplacementContainers(ctx context.Context, cli composeCleanupClient, composeFile string, workDir string) ([]string, error) {
+	containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return nil, fmt.Errorf("list containers: %w", err)
+	}
+
+	removed := make([]string, 0)
+	for _, candidate := range containers {
+		if strings.EqualFold(strings.TrimSpace(candidate.State), "running") {
+			continue
+		}
+		if candidate.Labels["com.docker.compose.replace"] == "" {
+			continue
+		}
+		if candidate.Labels["com.docker.compose.project.config_files"] != composeFile {
+			continue
+		}
+		if candidate.Labels["com.docker.compose.project.working_dir"] != workDir {
+			continue
+		}
+		if err := cli.ContainerRemove(ctx, candidate.ID, container.RemoveOptions{Force: true}); err != nil {
+			return removed, fmt.Errorf("remove container %s: %w", composeContainerDisplayName(candidate), err)
+		}
+		removed = append(removed, composeContainerDisplayName(candidate))
+	}
+
+	return removed, nil
+}
+
+func composeContainerDisplayName(summary container.Summary) string {
+	if len(summary.Names) == 0 {
+		return summary.ID
+	}
+	return strings.TrimPrefix(summary.Names[0], "/")
 }
 
 // DeployAllForSource triggers a deployment for all defined GitDeployments tied to a source.
