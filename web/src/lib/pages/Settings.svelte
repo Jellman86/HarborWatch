@@ -1286,7 +1286,7 @@
         </div>
     </div>
 
-    <div class="settings-tab-strip flex flex-wrap gap-2 bg-slate-100/95 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit backdrop-blur">
+    <div class="settings-tab-strip flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-6">
         {#each [
             { id: "automations", label: "Automations" },
             { id: "ai", label: "AI", status: configStore.initialized && !configStore.aiActive ? "Inactive" : "" },
@@ -1297,7 +1297,7 @@
         ] as tab}
             <button
                 onclick={() => activeTab = tab.id}
-                class="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeTab === tab.id ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                class="py-2.5 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeTab === tab.id ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
             >
                 <span class="inline-flex items-center justify-center w-4 h-4 rounded-md bg-white/60 dark:bg-slate-800/70">
                     {#if tab.id === "automations"}
@@ -1322,12 +1322,12 @@
         {/each}
     </div>
 
-    <div class="settings-shell w-full bg-white dark:bg-slate-900 rounded-3xl min-h-[620px] overflow-hidden shadow-sm ring-1 ring-slate-200 dark:ring-slate-800">
+    <div class="settings-shell w-full min-h-[620px] pb-10">
         {#if loading}
             <div class="p-10 text-sm text-slate-500">Loading settings...</div>
         {:else if activeTab === "automations"}
             <div class="p-6 md:p-8 space-y-6 settings-pane">
-                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.automations.accentClass} p-5">
+                <div class="settings-pane-hero rounded-3xl bg-gradient-to-r border-y border-slate-200/50 dark:border-slate-800/50 -mx-6 md:-mx-8 px-6 md:px-8 py-8 mb-6 {settingsTabChrome.automations.accentClass} p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="max-w-3xl">
                             <div class="flex items-center gap-2 mb-2">
@@ -1345,7 +1345,7 @@
                     </div>
                 </div>
 
-                <div class="settings-subtab-strip flex flex-wrap gap-2 bg-slate-100/90 dark:bg-slate-900/70 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 w-fit backdrop-blur">
+                <div class="settings-subtab-strip flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-6 mt-4">
                     {#each [
                         { id: "general", label: "General" },
                         { id: "upgrades", label: "Upgrades" },
@@ -1355,7 +1355,7 @@
                     ] as tab}
                         <button
                             onclick={() => activeAutomationTab = tab.id as AutomationDomain}
-                            class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {activeAutomationTab === tab.id ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                            class="py-2 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-b-2 {activeAutomationTab === tab.id ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
                         >
                             {tab.label}
                         </button>
@@ -1441,7 +1441,7 @@
                                                 max="10"
                                                 bind:value={settings.autoUpgradeMaxConcurrency}
                                                 disabled={isLocked("autoUpgradeMaxConcurrency")}
-                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                             />
                                             <p class="text-[11px] text-slate-500">Global limit for all heavy background jobs across the appliance.</p>
                                         </div>
@@ -1494,7 +1494,7 @@
                                                 bind:value={settings.automationIgnoredContainers}
                                                 disabled={isLocked("automationIgnoredContainers")}
                                                 placeholder="harborwatch, plex, qbittorrent"
-                                                class="mt-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                class="mt-2 w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                             ></textarea>
                                             <p class="mt-1 text-[11px] text-slate-500">Supports container name, image text, or ID prefix tokens (comma/newline separated).</p>
                                         </details>
@@ -1526,7 +1526,7 @@
                                                         max="1440"
                                                         bind:value={settings.autoUpgradeMinRetryMinutes}
                                                         disabled={isLocked("autoUpgradeMinRetryMinutes")}
-                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                                     />
                                                     <p class="text-[11px] text-slate-500">Minimum wait before a previously failed upgrade can be retried automatically.</p>
                                                 </div>
@@ -1558,7 +1558,7 @@
                                             id="trivy-sweep-mode"
                                             bind:value={settings.trivySweepMode}
                                             disabled={isLocked("trivySweepMode")}
-                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                         >
                                             <option value="running-only">Running containers only (default)</option>
                                             <option value="all-images">All local images</option>
@@ -1592,7 +1592,7 @@
                                                             id="cadence-security-sweep-trivy"
                                                             value={trivyDraft.cadence}
                                                             onchange={(e) => patchScheduleDraft(trivyTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                         >
                                                             <option value="daily">Daily</option>
                                                             <option value="weekly">Weekly</option>
@@ -1606,7 +1606,7 @@
                                                             type="time"
                                                             value={trivyDraft.time}
                                                             onchange={(e) => patchScheduleDraft(trivyTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                         />
                                                     </div>
                                                     <button
@@ -1707,7 +1707,7 @@
                                                 min="1"
                                                 bind:value={settings.clamavSnapshotMaxBytes}
                                                 disabled={isLocked("clamavSnapshotMaxBytes")}
-                                                class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                             />
                                             <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>.</p>
                                         </div>
@@ -1738,7 +1738,7 @@
                                                                 id="cadence-malware-sweep-clamav"
                                                                 value={malwareDraft.cadence}
                                                                 onchange={(e) => patchScheduleDraft(malwareTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                             >
                                                                 <option value="daily">Daily</option>
                                                                 <option value="weekly">Weekly</option>
@@ -1752,7 +1752,7 @@
                                                                 type="time"
                                                                 value={malwareDraft.time}
                                                                 onchange={(e) => patchScheduleDraft(malwareTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                             />
                                                         </div>
                                                         <button
@@ -1810,7 +1810,7 @@
                                                                 id="cadence-clamav-signature-update"
                                                                 value={clamSigDraft.cadence}
                                                                 onchange={(e) => patchScheduleDraft(clamSigTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                             >
                                                                 <option value="daily">Daily</option>
                                                                 <option value="weekly">Weekly</option>
@@ -1824,7 +1824,7 @@
                                                                 type="time"
                                                                 value={clamSigDraft.time}
                                                                 onchange={(e) => patchScheduleDraft(clamSigTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                             />
                                                         </div>
                                                         <button
@@ -1869,7 +1869,7 @@
                                                 bind:value={settings.malwareIgnoredMounts}
                                                 disabled={isLocked("malwareIgnoredMounts")}
                                                 placeholder="/mnt/media, /srv/plex-library"
-                                                class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                             ></textarea>
                                         </div>
                                     </div>
@@ -1910,7 +1910,7 @@
                                                         min="0"
                                                         bind:value={settings.unhealthyRestartCooldownSecDefault}
                                                         disabled={isLocked("unhealthyRestartCooldownSecDefault")}
-                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                                     />
                                                 </div>
                                                 <div class="space-y-2">
@@ -1921,7 +1921,7 @@
                                                         min="0"
                                                         bind:value={settings.maxRestartsPerWindow}
                                                         disabled={isLocked("maxRestartsPerWindow")}
-                                                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                                     />
                                                 </div>
                                             </div>
@@ -1967,7 +1967,7 @@
                                                     id="retention-window-preset"
                                                     bind:value={retentionWindowPreset}
                                                     onchange={(e) => applyRetentionWindowPreset((e.currentTarget as HTMLSelectElement).value as RetentionWindowPreset)}
-                                                    class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                 >
                                                     <option value="7d">1 week</option>
                                                     <option value="30d">1 month</option>
@@ -1985,7 +1985,7 @@
                                                             type="time"
                                                             value={retentionDraft.time}
                                                             onchange={(e) => patchScheduleDraft(retentionTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                            class="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            class="flex-1 bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                         />
                                                         <button
                                                             onclick={() => saveTaskSchedule(retentionTask.id)}
@@ -2044,7 +2044,7 @@
                                                             value={intervalDraft}
                                                             onchange={(e) => handleUpdateCheckIntervalChange(task, (e.currentTarget as HTMLSelectElement).value as UpdateCheckIntervalOption)}
                                                             disabled={savingScheduleId === task.id}
-                                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                         >
                                                             {#each updateCheckIntervalOptions as option}
                                                                 <option value={option.value}>{option.label}</option>
@@ -2073,7 +2073,7 @@
                                                             id={"cadence-" + task.id}
                                                             value={draft.cadence}
                                                             onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                         >
                                                             <option value="daily">Daily</option>
                                                             <option value="weekly">Weekly</option>
@@ -2089,7 +2089,7 @@
                                                             type="time"
                                                             value={draft.time}
                                                             onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                                         />
                                                         <p class="text-[11px] text-slate-500">Local time used by the scheduler for this task.</p>
                                                     </div>
@@ -2241,7 +2241,7 @@
                                                                     id="default-validate-mode"
                                                                     bind:value={settings.defaultValidateMode}
                                                                     disabled={isLocked("defaultValidateMode")}
-                                                                    class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                                                 >
                                                                     <option value="docker">Docker health only</option>
                                                                     <option value="both">Docker + HTTP</option>
@@ -2257,7 +2257,7 @@
                                                                     max="3600"
                                                                     bind:value={settings.defaultValidateTimeoutSec}
                                                                     disabled={isLocked("defaultValidateTimeoutSec")}
-                                                                    class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                                                 />
                                                             </div>
                                                             <div class="space-y-2">
@@ -2269,7 +2269,7 @@
                                                                     max="300"
                                                                     bind:value={settings.defaultValidateIntervalSec}
                                                                     disabled={isLocked("defaultValidateIntervalSec")}
-                                                                    class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                                                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                                                                 />
                                                             </div>
                                                         </div>
@@ -2343,7 +2343,7 @@
             </div>
         {:else if activeTab === "ai"}
             <div class="p-6 md:p-8 space-y-8 settings-pane">
-                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.ai.accentClass} p-5">
+                <div class="settings-pane-hero rounded-3xl bg-gradient-to-r border-y border-slate-200/50 dark:border-slate-800/50 -mx-6 md:-mx-8 px-6 md:px-8 py-8 mb-6 {settingsTabChrome.ai.accentClass} p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="max-w-3xl">
                             <div class="flex items-center gap-2 mb-2">
@@ -2357,17 +2357,17 @@
                         </div>
                     </div>
                 </div>
-                <div class="inline-flex flex-wrap gap-1 bg-slate-100/95 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit backdrop-blur">
+                <div class="inline-flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-6">
                     <button
                         onclick={() => activeAITab = "settings"}
-                        class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeAITab === 'settings' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                        class="py-2 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeAITab === 'settings' ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h10M4 17h16" /></svg>
                         Settings
                     </button>
                     <button
                         onclick={() => activeAITab = "costs"}
-                        class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeAITab === 'costs' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                        class="py-2 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeAITab === 'costs' ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 1.12-3 2.5S10.343 13 12 13s3 1.12 3 2.5S13.657 18 12 18m0-10V6m0 12v-2M5 12a7 7 0 1014 0 7 7 0 10-14 0z" /></svg>
                         Costs
@@ -2400,7 +2400,7 @@
                 <div class="flex flex-wrap items-end gap-4">
                     <div class="space-y-2 min-w-[260px]">
                         <label for="ai-provider" class="text-[10px] font-black uppercase text-slate-400 ml-1">Preferred Provider</label>
-                        <select id="ai-provider" bind:value={settings.aiProvider} disabled={isLocked("aiProvider") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <select id="ai-provider" bind:value={settings.aiProvider} disabled={isLocked("aiProvider") || !settings.aiEnabled} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             <option value="">Auto (first configured)</option>
                             <option value="openai">OpenAI</option>
                             <option value="anthropic">Anthropic</option>
@@ -2419,7 +2419,7 @@
                         max="100"
                         bind:value={settings.aiBlockRiskThreshold}
                         disabled={isLocked("aiBlockRiskThreshold") || !settings.aiEnabled}
-                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                     />
                     <p class="text-[11px] text-slate-500">Updates are blocked when AI release analysis risk score is greater than or equal to this value.</p>
                 </div>
@@ -2436,7 +2436,7 @@
                             <select
                                 bind:value={aiUsageSpan}
                                 onchange={() => loadAIUsage()}
-                                class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                class="bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                             >
                                 <option value="24h">Last 24h</option>
                                 <option value="7d">Last 7d</option>
@@ -2596,7 +2596,7 @@
                         bind:value={settings.aiPricingJson}
                         disabled={isLocked("aiPricingJson")}
                         placeholder={`[\n  { "provider": "openai", "model": "gpt-5.2", "inputPer1M": 1.25, "outputPer1M": 10 },\n  { "provider": "anthropic", "model": "claude-sonnet-4-5", "inputPer1M": 3, "outputPer1M": 15 }\n]`}
-                        class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                     ></textarea>
                     <p class="text-[11px] text-slate-500">If empty, HarborWatch displays token usage only. No external pricing lookup is performed.</p>
                 </div>
@@ -2629,9 +2629,9 @@
                     <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">OpenAI</h3>
                         <label for="openai-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
-                        <input id="openai-key" type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey") || !settings.aiEnabled} placeholder="sk-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <input id="openai-key" type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey") || !settings.aiEnabled} placeholder="sk-..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                         <label for="openai-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
-                        <select id="openai-model" bind:value={settings.openaiModel} disabled={isLocked("openaiModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <select id="openai-model" bind:value={settings.openaiModel} disabled={isLocked("openaiModel") || !settings.aiEnabled} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("openai") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
@@ -2643,9 +2643,9 @@
                     <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Anthropic</h3>
                         <label for="anthropic-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
-                        <input id="anthropic-key" type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey") || !settings.aiEnabled} placeholder="sk-ant-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <input id="anthropic-key" type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey") || !settings.aiEnabled} placeholder="sk-ant-..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                         <label for="anthropic-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
-                        <select id="anthropic-model" bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <select id="anthropic-model" bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel") || !settings.aiEnabled} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("anthropic") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
@@ -2657,9 +2657,9 @@
                     <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Gemini</h3>
                         <label for="gemini-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
-                        <input id="gemini-key" type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey") || !settings.aiEnabled} placeholder="AIza..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <input id="gemini-key" type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey") || !settings.aiEnabled} placeholder="AIza..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                         <label for="gemini-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
-                        <select id="gemini-model" bind:value={settings.geminiModel} disabled={isLocked("geminiModel") || !settings.aiEnabled} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
+                        <select id="gemini-model" bind:value={settings.geminiModel} disabled={isLocked("geminiModel") || !settings.aiEnabled} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
                             {#each providerModels("gemini") as model}
                                 <option value={model.value}>{model.label}</option>
                             {/each}
@@ -2673,7 +2673,7 @@
 
         {:else if activeTab === "integrations"}
             <div class="p-6 md:p-8 space-y-8 settings-pane">
-                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.integrations.accentClass} p-5">
+                <div class="settings-pane-hero rounded-3xl bg-gradient-to-r border-y border-slate-200/50 dark:border-slate-800/50 -mx-6 md:-mx-8 px-6 md:px-8 py-8 mb-6 {settingsTabChrome.integrations.accentClass} p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="max-w-3xl">
                             <div class="flex items-center gap-2 mb-2">
@@ -2706,7 +2706,7 @@
 
                         <div class="space-y-2">
                             <label for="discord-webhook" class="text-[10px] font-black uppercase text-slate-400 ml-1">Discord Webhook</label>
-                            <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl") || !settings.discordEnabled} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                            <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl") || !settings.discordEnabled} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                             <p class="text-[11px] text-slate-500">Incoming webhook for detections, automation events, and failures.</p>
                         </div>
                     </div>
@@ -2734,13 +2734,13 @@
 
                         <div class="space-y-2">
                             <label for="portainer-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer URL</label>
-                            <input id="portainer-url" bind:value={settings.portainerUrl} disabled={isLocked("portainerUrl") || !settings.portainerEnabled} placeholder="https://portainer.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                            <input id="portainer-url" bind:value={settings.portainerUrl} disabled={isLocked("portainerUrl") || !settings.portainerEnabled} placeholder="https://portainer.example.com" class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                             <p class="text-[11px] text-slate-500">Base URL for Portainer API access and stack metadata enrichment.</p>
                         </div>
 
                         <div class="space-y-2">
                             <label for="portainer-api-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer API Key</label>
-                            <input id="portainer-api-key" type="password" bind:value={settings.portainerApiKey} disabled={isLocked("portainerApiKey") || !settings.portainerEnabled} placeholder="ptr_..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                            <input id="portainer-api-key" type="password" bind:value={settings.portainerApiKey} disabled={isLocked("portainerApiKey") || !settings.portainerEnabled} placeholder="ptr_..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                             <p class="text-[11px] text-slate-500">Token used for authenticated Portainer calls. Keep scope limited.</p>
                         </div>
                     </div>
@@ -2749,7 +2749,7 @@
 
         {:else if activeTab === "system"}
             <div class="p-6 md:p-8 space-y-6 settings-pane">
-                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.system.accentClass} p-5">
+                <div class="settings-pane-hero rounded-3xl bg-gradient-to-r border-y border-slate-200/50 dark:border-slate-800/50 -mx-6 md:-mx-8 px-6 md:px-8 py-8 mb-6 {settingsTabChrome.system.accentClass} p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="max-w-3xl">
                             <div class="flex items-center gap-2 mb-2">
@@ -2843,7 +2843,7 @@
                             min="1"
                             bind:value={settings.clamavSnapshotMaxBytes}
                             disabled={isLocked("clamavSnapshotMaxBytes")}
-                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                         />
                         <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>. Increase if large container mount snapshots are skipped.</p>
                     </div>
@@ -2852,12 +2852,12 @@
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
                     <div class="space-y-2">
                         <label for="instance-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Instance URL</label>
-                        <input id="instance-url" bind:value={settings.instanceUrl} disabled={isLocked("instanceUrl")} placeholder="https://harborwatch.example.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <input id="instance-url" bind:value={settings.instanceUrl} disabled={isLocked("instanceUrl")} placeholder="https://harborwatch.example.com" class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                         <p class="text-[11px] text-slate-500">Used for webhook callbacks and external links.</p>
                     </div>
                     <div class="space-y-2">
                         <label for="validate-pattern" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation URL Pattern</label>
-                        <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked("validateUrlPattern")} placeholder={"http://localhost:{{PORT}}/health"} class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
+                        <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked("validateUrlPattern")} placeholder={"http://localhost:{{PORT}}/health"} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
                         <p class="text-[11px] text-slate-500">Template for deriving per-container validation URLs.</p>
                     </div>
                 </div>
@@ -2868,7 +2868,7 @@
             {@const composeBackupSweepTask = scheduleById("compose_snapshot_on_change")}
             {@const composeBackupSweepDraft = composeBackupSweepTask ? draftForTask(composeBackupSweepTask) : null}
             <div class="p-6 md:p-8 space-y-6 settings-pane">
-                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.backups.accentClass} p-5">
+                <div class="settings-pane-hero rounded-3xl bg-gradient-to-r border-y border-slate-200/50 dark:border-slate-800/50 -mx-6 md:-mx-8 px-6 md:px-8 py-8 mb-6 {settingsTabChrome.backups.accentClass} p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="max-w-3xl">
                             <div class="flex items-center gap-2 mb-2">
@@ -2954,7 +2954,7 @@
                             bind:value={settings.composeSnapshotRootPath}
                             disabled={isLocked("composeSnapshotRootPath")}
                             placeholder="/data/compose-snapshots"
-                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                         />
                         <p class="text-[11px] text-slate-500">Leave blank to use the appliance default snapshot location.</p>
                     </div>
@@ -2979,7 +2979,7 @@
                             bind:value={settings.gitOpsMasterDirectory}
                             disabled={isLocked("gitOpsMasterDirectory")}
                             placeholder="/data/gitops"
-                            class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
+                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
                         />
                         <p class="text-[11px] text-slate-500">Local path where repositories will be cloned. Default is <span class="font-mono">/data/gitops</span>.</p>
                     </div>
@@ -3020,7 +3020,7 @@
                                     id="cadence-compose-backup-sweep"
                                     value={composeBackupSweepDraft.cadence}
                                     onchange={(e) => patchScheduleDraft(composeBackupSweepTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                    class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                 >
                                     <option value="daily">Daily</option>
                                     <option value="weekly">Weekly</option>
@@ -3034,7 +3034,7 @@
                                     type="time"
                                     value={composeBackupSweepDraft.time}
                                     onchange={(e) => patchScheduleDraft(composeBackupSweepTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                    class="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
+                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-transparent focus:border-brand-500 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
                                 />
                             </div>
                             <button
@@ -3071,7 +3071,7 @@
 
         {:else if activeTab === "appearance"}
             <div class="p-6 md:p-8 space-y-6 settings-pane">
-                <div class="settings-pane-hero rounded-2xl border bg-gradient-to-r {settingsTabChrome.appearance.accentClass} p-5">
+                <div class="settings-pane-hero rounded-3xl bg-gradient-to-r border-y border-slate-200/50 dark:border-slate-800/50 -mx-6 md:-mx-8 px-6 md:px-8 py-8 mb-6 {settingsTabChrome.appearance.accentClass} p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="max-w-3xl">
                             <div class="flex items-center gap-2 mb-2">
@@ -3082,11 +3082,12 @@
                         </div>
                     </div>
                 </div>
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex items-center justify-between gap-4">
-                    <div>
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                    <div class="md:col-span-2">
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">UI Animations</p>
                         <p class="text-[11px] text-slate-500 mt-1">Turn off transitions and motion effects for reduced visual movement.</p>
                     </div>
+                    <div class="flex justify-end">
                     <button
                         onclick={() => settings.uiAnimationsEnabled = !settings.uiAnimationsEnabled}
                         disabled={isLocked("uiAnimationsEnabled")}
@@ -3095,13 +3096,15 @@
                     >
                         <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.uiAnimationsEnabled ? 'right-1' : 'left-1'}"></div>
                     </button>
+                    </div>
                 </div>
 
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex items-center justify-between gap-4">
-                    <div>
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                    <div class="md:col-span-2">
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">Normalized CPU Metrics</p>
                         <p class="text-[11px] text-slate-500 mt-1">Scale CPU usage to 100% of total system capacity. Disable to see raw per-core values (e.g. 400% for 4 cores).</p>
                     </div>
+                    <div class="flex justify-end">
                     <button
                         onclick={() => settings.metricsNormalized = !settings.metricsNormalized}
                         disabled={isLocked("metricsNormalized")}
@@ -3110,6 +3113,7 @@
                     >
                         <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.metricsNormalized ? 'right-1' : 'left-1'}"></div>
                     </button>
+                    </div>
                 </div>
 
                 <p class="text-[11px] text-slate-500">Theme changes are applied globally across dashboards, tables, and settings views.</p>
