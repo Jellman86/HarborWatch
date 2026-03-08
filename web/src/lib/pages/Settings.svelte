@@ -1322,7 +1322,7 @@
         {/each}
     </div>
 
-    <div class="settings-shell w-full min-h-[620px] pb-10">
+    <div class="settings-shell w-full bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200/60 dark:border-slate-800/60 shadow-xl min-h-[620px] overflow-hidden">
         {#if loading}
             <div class="p-10 text-sm text-slate-500">Loading settings...</div>
         {:else if activeTab === "automations"}
@@ -1345,7 +1345,7 @@
                     </div>
                 </div>
 
-                <div class="settings-subtab-strip flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-6 mt-4">
+                <div class="settings-subtab-strip flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-8 mt-2">
                     {#each [
                         { id: "general", label: "General" },
                         { id: "upgrades", label: "Upgrades" },
@@ -1365,12 +1365,12 @@
                 <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex flex-wrap items-center justify-between gap-3 shadow-sm">
                     <div>
                         {#if activeAutomationTab !== "general"}
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">{automationConfig[activeAutomationTab].title}</p>
+                            <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">{automationConfig[activeAutomationTab].title}</p>
                             <p class="text-[11px] text-slate-500 mt-1">
                                 Domain status: <span class="font-bold">{domainEnabled(activeAutomationTab) ? "Enabled" : "Disabled"}</span>
                             </p>
                         {:else}
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">Global Configuration</p>
+                            <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">Global Configuration</p>
                             <p class="text-[11px] text-slate-500 mt-1">System-wide automation parameters</p>
                         {/if}
                     </div>
@@ -1397,7 +1397,7 @@
                 <div class="grid grid-cols-1 {activeAutomationTab === 'general' ? '' : 'xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]'} gap-6">
                     {#if activeAutomationTab !== "general"}
                         <div class="space-y-4">
-                            <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 bg-slate-50/60 dark:bg-slate-900/40 animate-in fade-in zoom-in duration-300">
+                            <div class="p-8 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-800/40 animate-in fade-in zoom-in duration-300 mb-2 mt-2">
                                 <AutomationFlowChart
                                     title={automationConfig[activeAutomationTab].title}
                                     subtitle={automationConfig[activeAutomationTab].subtitle}
@@ -2376,7 +2376,7 @@
                 {#if activeAITab === "settings"}
                 <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                     <div class="md:col-span-2">
-                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Features</p>
+                        <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">AI Features</p>
                         <p class="text-[11px] text-slate-500 mt-1">Disable this to fully turn off AI analysis and provider usage.</p>
                     </div>
                     <div class="flex md:justify-end items-center gap-3">
@@ -2429,7 +2429,7 @@
                 <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Usage</p>
+                            <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">AI Usage</p>
                             <p class="text-[11px] text-slate-500 mt-1">Token usage is captured per request. Estimated cost appears only when pricing is configured.</p>
                         </div>
                         <div class="flex items-center gap-2">
@@ -2691,7 +2691,7 @@
                     <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Discord Notifications</p>
+                                <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">Discord Notifications</p>
                                 <p class="text-[11px] text-slate-500 mt-1">Enable outbound Discord alerts without deleting stored credentials.</p>
                             </div>
                             <button
@@ -2714,7 +2714,7 @@
                     <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <p class="text-xs font-black uppercase tracking-wider text-slate-500">Portainer Integration</p>
+                                <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">Portainer Integration</p>
                                 <p class="text-[11px] text-slate-500 mt-1">Control whether HarborWatch should query Portainer APIs.</p>
                             </div>
                             <div class="flex items-center gap-3">
@@ -2762,7 +2762,7 @@
                 </div>
                 <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                     <div class="md:col-span-2">
-                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">Metrics Collection</p>
+                        <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">Metrics Collection</p>
                         <p class="text-[11px] text-slate-500 mt-1">Control background `metrics_collector` scheduler activity.</p>
                     </div>
                     <div class="flex md:justify-end items-center gap-3">
@@ -2780,7 +2780,7 @@
                 <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                            <p class="text-xs font-black uppercase tracking-wider text-slate-500">ClamAV Signatures</p>
+                            <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">ClamAV Signatures</p>
                             <p class="text-[11px] text-slate-500 mt-1">Manage malware signature definition freshness and update cadence.</p>
                         </div>
                         <div class="flex items-center gap-2">
@@ -3086,7 +3086,7 @@
                 </div>
                 <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                     <div class="md:col-span-2">
-                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">UI Animations</p>
+                        <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">UI Animations</p>
                         <p class="text-[11px] text-slate-500 mt-1">Turn off transitions and motion effects for reduced visual movement.</p>
                     </div>
                     <div class="flex justify-end">
@@ -3103,7 +3103,7 @@
 
                 <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                     <div class="md:col-span-2">
-                        <p class="text-xs font-black uppercase tracking-wider text-slate-500">Normalized CPU Metrics</p>
+                        <p class="text-sm font-black tracking-tight text-slate-900 dark:text-white">Normalized CPU Metrics</p>
                         <p class="text-[11px] text-slate-500 mt-1">Scale CPU usage to 100% of total system capacity. Disable to see raw per-core values (e.g. 400% for 4 cores).</p>
                     </div>
                     <div class="flex justify-end">
