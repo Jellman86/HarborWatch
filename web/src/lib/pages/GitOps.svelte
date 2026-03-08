@@ -523,7 +523,7 @@
             {/each}
         </div>
     {:else if sources.length === 0}
-        <div class="rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-slate-800 p-16 text-center">
+        <div class="rounded-3xl border-2 border-dashed border-slate-200/60 dark:border-slate-800/60 p-16 text-center bg-white/50 dark:bg-slate-800/30">
             <div class="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-6">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-300 dark:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 4a3 3 0 00-3 3v4a3 3 0 003 3h4a3 3 0 003-3V7a3 3 0 00-3-3H8zM2 14a2 2 0 012-2h16a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2z" />
@@ -541,7 +541,7 @@
     {:else}
         <div class="grid grid-cols-1 gap-6">
             {#each sources as source}
-                <div class="group relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-brand-500/5 {expandedSourceId === source.id ? 'border-brand-500/40' : 'hover:border-brand-500/30'}">
+                <div class="group relative bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-brand-500/5 {expandedSourceId === source.id ? 'border-brand-500/40' : 'hover:border-brand-500/30'}">
                     <div class="p-6 md:p-8 space-y-6">
                         <div class="flex items-start justify-between gap-4">
                             <div class="flex items-center gap-4">
@@ -595,21 +595,21 @@
                         </div>
 
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                            <div class="p-2">
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Last Sync</p>
                                 <p class="text-sm font-bold text-slate-700 dark:text-slate-200 mt-1">{formatRelativeTime(source.lastSyncAt)}</p>
                             </div>
-                            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                            <div class="p-2">
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Commit</p>
                                 <p class="text-sm font-mono font-bold text-slate-700 dark:text-slate-200 mt-1">{source.lastCommitHash ? source.lastCommitHash.slice(0, 7) : "N/A"}</p>
                             </div>
-                            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                            <div class="p-2">
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Auth</p>
                                 <p class="text-sm font-bold text-slate-700 dark:text-slate-200 mt-1 uppercase tracking-tight">
                                     {source.authMethod === 'none' ? 'Public' : source.authMethod === 'http_token' ? 'Token' : 'SSH Key'}
                                 </p>
                             </div>
-                            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                            <div class="p-2">
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Active Stacks</p>
                                 <p class="text-sm font-bold text-slate-700 dark:text-slate-200 mt-1">{deployments[source.id]?.length || 0}</p>
                             </div>
@@ -631,9 +631,9 @@
                                 {:else}
                                     <div class="grid grid-cols-1 gap-3">
                                         {#each deployments[source.id] as dep}
-                                            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                            <div class="flex flex-wrap md:flex-nowrap items-center justify-between py-6 border-b border-slate-200/40 dark:border-slate-700/60 last:border-0 gap-4">
                                                 <div class="flex items-center gap-4">
-                                                    <div class="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800">
+                                                    <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/50">
                                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
                                                         </svg>
