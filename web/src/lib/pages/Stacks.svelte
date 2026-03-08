@@ -247,65 +247,7 @@
     }
 </script>
 
-<style>
-    .stack-card-container {
-        position: relative;
-        z-index: 1;
-        border-radius: 1.5rem;
-        box-shadow: none;
-    }
-    .stack-card-container::before,
-    .stack-card-container::after {
-        content: '';
-        position: absolute;
-        border-radius: 1.5rem; /* Matches rounded-3xl */
-        border: 1px solid theme('colors.slate.200');
-        background: theme('colors.slate.50');
-        transition: all 0.3s ease;
-    }
 
-    .stack-card-container::before {
-        top: 8px;
-        left: 8px;
-        right: -8px;
-        bottom: -8px;
-        z-index: -1;
-    }
-    .stack-card-container::after {
-        top: 16px;
-        left: 16px;
-        right: -16px;
-        bottom: -16px;
-        z-index: -2;
-        opacity: 0.5;
-        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    }
-
-    :global(.dark) .stack-card-container,
-    :global(.dark) .stack-card-container::before,
-    :global(.dark) .stack-card-container::after {
-        border-color: theme('colors.slate.700');
-        background: theme('colors.slate.800');
-        box-shadow: none;
-    }
-
-    :global(.dark) .stack-card-container::after {
-        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4);
-    }
-    
-    .stack-card-container:hover::before {
-        top: 10px;
-        left: 10px;
-        right: -10px;
-        bottom: -10px;
-    }
-    .stack-card-container:hover::after {
-        top: 20px;
-        left: 20px;
-        right: -20px;
-        bottom: -20px;
-    }
-</style>
 
 <div class="space-y-6">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-0 animate-reveal">
@@ -324,10 +266,10 @@
         </button>
     </div>
 
-    <div class="inline-flex flex-wrap gap-1 bg-slate-100/95 dark:bg-slate-900/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit backdrop-blur">
+    <div class="inline-flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-6">
         <button
             onclick={() => activeSourceTab = "compose"}
-            class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'compose' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+            class="py-2 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeSourceTab === 'compose' ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
         >
             Compose Files
             <span class="px-1.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-600 dark:text-slate-300">{composeProjects.length}</span>
@@ -335,7 +277,7 @@
         {#if configStore.portainerActive}
             <button
                 onclick={() => activeSourceTab = "portainer"}
-                class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'portainer' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+                class="py-2 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeSourceTab === 'portainer' ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
             >
                 Portainer Stacks
                 <span class="px-1.5 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-800 text-[8px] font-black text-slate-600 dark:text-slate-300">{stacks.length}</span>
@@ -343,7 +285,7 @@
         {/if}
         <button
             onclick={() => activeSourceTab = "repositories"}
-            class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 {activeSourceTab === 'repositories' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
+            class="py-2 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeSourceTab === 'repositories' ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
         >
             Repositories
         </button>
@@ -386,11 +328,7 @@
                 />
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-10 opacity-0 animate-reveal stagger-1">
                     {#each pagedComposeProjects as p, i}
-                        <div
-                            class="stack-card-container opacity-0 animate-reveal"
-                            style="animation-delay: {0.08 + (i * 0.04)}s"
-                        >
-                        <article class="bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 p-5 space-y-4 shadow-sm h-full group hover:border-brand-500 transition-all">
+                        <article style="animation-delay: 0.1s" class="opacity-0 animate-reveal bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 p-6 space-y-5 shadow-sm h-full group hover:border-brand-500 hover:shadow-md transition-all">
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <button
@@ -408,21 +346,21 @@
                             </div>
 
                             <div class="grid grid-cols-3 gap-3">
-                                <div class="rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700 p-3">
+                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Services</p>
                                     <p class="text-sm font-black text-slate-900 dark:text-white mt-1">{p.containerCount || 0}</p>
                                 </div>
-                                <div class="rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700 p-3">
+                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Updates</p>
                                     <p class="text-sm font-black text-slate-900 dark:text-white mt-1">{p.updateCandidates || 0}</p>
                                 </div>
-                                <div class="rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700 p-3">
+                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Automation</p>
                                     <p class="text-[10px] font-bold text-slate-700 dark:text-slate-300 mt-1">{automationSummary(p)}</p>
                                 </div>
                             </div>
 
-                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 space-y-2">
+                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3 space-y-2">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Edit Authority</p>
                                     <div class="flex flex-wrap gap-2">
@@ -450,7 +388,7 @@
                                 {/if}
                             </div>
 
-                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 space-y-2">
+                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3 space-y-2">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Compose Protection</p>
                                     <span class="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {snapshotStatusClass(p.snapshotStatus)}">
@@ -521,7 +459,6 @@
                                 </button>
                             </div>
                         </article>
-                        </div>
                     {/each}
                 </div>
             {/if}
@@ -560,11 +497,7 @@
                 />
                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10 opacity-0 animate-reveal stagger-1">
                     {#each pagedStacks as s, i}
-                        <div
-                            class="stack-card-container opacity-0 animate-reveal"
-                            style="animation-delay: {0.1 + (i * 0.05)}s"
-                        >
-                            <article class="bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 overflow-hidden h-full flex flex-col group hover:border-brand-500 transition-all">
+                        <article style="animation-delay: 0.1s" class="opacity-0 animate-reveal bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden h-full flex flex-col group hover:border-brand-500 hover:shadow-md transition-all">
                                 <div class="p-6 flex-1 space-y-4 text-left">
                                     <div class="flex items-start justify-between gap-3">
                                         <div class="min-w-0 flex-1">
@@ -596,7 +529,7 @@
                                     </div>
                                 </div>
 
-                                <div class="px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                                <div class="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/20 border-t border-slate-100/50 dark:border-slate-800/50 flex justify-between items-center">
                                     <button
                                         onclick={() => onNavigate('containers', { search: s.Name })}
                                         class="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-slate-200 dark:border-slate-700 shadow-sm"
@@ -621,7 +554,6 @@
                                     {/if}
                                 </div>
                             </article>
-                        </div>
                     {/each}
                 </div>
             {/if}
