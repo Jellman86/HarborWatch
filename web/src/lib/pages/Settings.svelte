@@ -489,7 +489,7 @@
     }
 
     function domainEnabled(domain: AutomationDomain): boolean {
-        if (domain === "remediation") return settings.unhealthyAutoRemediationEnabled;
+        if (domain === "remediation") return settings.unhealthyAutoRemediationEnabled ?? false;
         const scoped = schedulesForDomain(domain);
         return scoped.length > 0 && scoped.some((s) => s.enabled);
     }
@@ -1322,7 +1322,7 @@
         {/each}
     </div>
 
-    <div class="settings-shell w-full bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm min-h-[620px] overflow-hidden">
+    <div class="settings-shell w-full bg-white dark:bg-slate-900 rounded-3xl min-h-[620px] overflow-hidden shadow-sm ring-1 ring-slate-200 dark:ring-slate-800">
         {#if loading}
             <div class="p-10 text-sm text-slate-500">Loading settings...</div>
         {:else if activeTab === "automations"}
@@ -1362,7 +1362,7 @@
                     {/each}
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex flex-wrap items-center justify-between gap-3 shadow-sm">
                     <div>
                         {#if activeAutomationTab !== "general"}
                             <p class="text-xs font-black uppercase tracking-wider text-slate-500">{automationConfig[activeAutomationTab].title}</p>
@@ -1397,7 +1397,7 @@
                 <div class="grid grid-cols-1 {activeAutomationTab === 'general' ? '' : 'xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]'} gap-6">
                     {#if activeAutomationTab !== "general"}
                         <div class="space-y-4">
-                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50/60 dark:bg-slate-900/40 animate-in fade-in zoom-in duration-300">
+                            <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 bg-slate-50/60 dark:bg-slate-900/40 animate-in fade-in zoom-in duration-300">
                                 <AutomationFlowChart
                                     title={automationConfig[activeAutomationTab].title}
                                     subtitle={automationConfig[activeAutomationTab].subtitle}
@@ -1426,7 +1426,7 @@
 
                         {#if activeAutomationTab === "general"}
                             <div class="flex flex-col gap-4">
-                                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0">
                                     <div class="mb-4">
                                         <p class="text-sm font-black text-slate-800 dark:text-slate-100">Global Task Concurrency</p>
                                         <p class="text-[11px] text-slate-500 mt-1">Control how many heavy background operations (updates, scans, redeployments) can run simultaneously.</p>
@@ -1450,7 +1450,7 @@
                             </div>
 
                             <div class="space-y-4">
-                                <div class="rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4">
+                                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0">
                                     <div class="mb-4">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Safety Policy</span>
@@ -1461,14 +1461,14 @@
                                     <div class="grid grid-cols-1 gap-4">
                                     <div class="space-y-2">
                                         <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
-                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 max-h-[260px] overflow-y-auto custom-scrollbar">
+                                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 max-h-[260px] overflow-y-auto custom-scrollbar">
                                             {#if discoveredContainers.length === 0}
                                                 <p class="px-3 py-3 text-[11px] text-slate-500 italic">No containers discovered. Start Docker to use auto-toggle exclusions.</p>
                                             {:else}
                                                 {#each discoveredContainers as container, i (i)}
                                                     {@const ignored = isContainerIgnored(container)}
                                                     {@const protectedContainer = isHarborWatchContainer(container)}
-                                                    <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 last:border-b-0 flex items-center justify-between gap-3">
+                                                    <div class="px-3 py-2 border-b border-slate-200/40 dark:border-slate-800/60 last:border-b-0 flex items-center justify-between gap-3">
                                                         <div class="min-w-0">
                                                             <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
                                                             <p class="text-[10px] text-slate-500 truncate">{container.image}</p>
@@ -1505,7 +1505,7 @@
                     {:else}
                             <div class="space-y-4">
                                 {#if activeAutomationTab === "upgrades"}
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                                         <div>
                                             <div class="flex items-center gap-2">
                                                 <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border border-sky-200/70 dark:border-sky-900/40">
@@ -1543,7 +1543,7 @@
                                     {@const malwareDraft = malwareTask ? draftForTask(malwareTask) : null}
                                     {@const clamSigTask = scheduleById("clamav_signature_update")}
                                     {@const clamSigDraft = clamSigTask ? draftForTask(clamSigTask) : null}
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
+                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                                         <div class="flex items-center gap-2">
                                             <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200/70 dark:border-orange-900/40">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L6 20.75 2.25 17M6 20.75V3m8.25 4h7.5m-7.5 5h5.25m-5.25 5h3" /></svg>
@@ -1565,7 +1565,7 @@
                                         </select>
                                         <p class="text-[11px] text-slate-500">`running-only` avoids queue inflation by scanning only images currently in use.</p>
                                         {#if trivyTask && trivyDraft}
-                                            <div class="mt-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                            <div class="mt-2 rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
                                                 <div class="flex flex-wrap items-center justify-between gap-3">
                                                     <div>
                                                         <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Scheduler Task</p>
@@ -1650,7 +1650,7 @@
                                         {/if}
                                     </div>
 
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                                         <div class="flex items-center gap-2">
                                             <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-900/40">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -1663,19 +1663,19 @@
 
 
                                         <div class="grid grid-cols-1 xl:grid-cols-4 gap-3">
-                                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                                                 <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Engine</p>
                                                 <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1 break-all">{clamavStatus?.engineVersion || "Unavailable"}</p>
                                             </div>
-                                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                                                 <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Signature Version</p>
                                                 <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databaseVersion || "Unknown"}</p>
                                             </div>
-                                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                                                 <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Published</p>
                                                 <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databasePublished ? new Date(clamavStatus.databasePublished * 1000).toLocaleString() : (clamavStatus?.databaseTimestamp || "Unknown")}</p>
                                             </div>
-                                            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                                                 <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Local DB Updated</p>
                                                 <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.lastLocalUpdate ? new Date(clamavStatus.lastLocalUpdate * 1000).toLocaleString() : "Unknown"}</p>
                                             </div>
@@ -1714,7 +1714,7 @@
 
                                         <div class="grid grid-cols-1 gap-4">
                                             {#if malwareTask && malwareDraft}
-                                                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
                                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                                         <div>
                                                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">ClamAV Malware Sweep</p>
@@ -1786,7 +1786,7 @@
                                             {/if}
 
                                             {#if clamSigTask && clamSigDraft}
-                                                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
                                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                                         <div>
                                                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">ClamAV Signature Update</p>
@@ -1858,7 +1858,7 @@
                                             {/if}
                                         </div>
 
-                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-3">
+                                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
                                             <div>
                                                 <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Ignored Malware Mount Paths</label>
                                                 <p class="text-[11px] text-slate-500 mt-0.5">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
@@ -1876,7 +1876,7 @@
                                 {/if}
 
                                 {#if activeAutomationTab === "remediation"}
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                                         <div>
                                             <div class="flex items-center gap-2">
                                                 <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300 border border-pink-200/70 dark:border-pink-900/40">
@@ -1932,7 +1932,7 @@
                                 {#if activeAutomationTab === "maintenance"}
                                     {@const retentionTask = scheduleById("history_retention_prune")}
                                     {@const retentionDraft = retentionTask ? draftForTask(retentionTask) : null}
-                                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                                         <div>
                                             <p class="text-sm font-black text-slate-800 dark:text-slate-100">Historical Data Retention</p>
                                             <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
@@ -1999,7 +1999,7 @@
                                             {/if}
                                         </div>
 
-                                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">
+                                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                                             <p class="text-[11px] text-slate-600 dark:text-slate-300">
                                                 Unified rolling window applied across metrics, logs, scan history, update lifecycle history, compose audit history, and AI usage history:
                                                 <span class="font-bold">{retentionPresetToDays[retentionWindowPreset]} days</span>.
@@ -2012,7 +2012,7 @@
                                 {#if activeAutomationTab !== "remediation" && activeAutomationTab !== "security"}
                                     {#each schedulesForDomain(activeAutomationTab) as task, i (task.id + i)}
                                         {@const draft = draftForTask(task)}
-                                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900/30 space-y-4">
+                                        <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-3">
                                                 <div>
                                                     <p class="text-sm font-black text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
@@ -2275,7 +2275,7 @@
                                                         </div>
 
                                                         <div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
-                                                            <div class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2">
+                                                            <div class="flex items-center justify-between rounded-xl bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2">
                                                                 <div class="pr-3">
                                                                     <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Auto Rollback</p>
                                                                     <p class="text-[10px] text-slate-500">Default for new containers (plain Docker rollback pipeline)</p>
@@ -2290,7 +2290,7 @@
                                                                 </button>
                                                             </div>
 
-                                                            <div class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2">
+                                                            <div class="flex items-center justify-between rounded-xl bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2">
                                                                 <div class="pr-3">
                                                                     <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">AI Log Validation</p>
                                                                     <p class="text-[10px] text-slate-500">Default for new containers</p>
@@ -2305,7 +2305,7 @@
                                                                 </button>
                                                             </div>
 
-                                                            <div class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-2">
+                                                            <div class="flex items-center justify-between rounded-xl bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2">
                                                                 <div class="pr-3">
                                                                     <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Restart on Unhealthy</p>
                                                                     <p class="text-[10px] text-slate-500">Per-container opt-in default</p>
@@ -2374,7 +2374,7 @@
                     </button>
                 </div>
                 {#if activeAITab === "settings"}
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex items-center justify-between gap-4">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Features</p>
                         <p class="text-[11px] text-slate-500 mt-1">Disable this to fully turn off AI analysis and provider usage.</p>
@@ -2410,7 +2410,7 @@
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-2">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-2">
                     <label for="ai-block-risk-threshold" class="text-[10px] font-black uppercase text-slate-400 ml-1">AI Update Block Risk Threshold</label>
                     <input
                         id="ai-block-risk-threshold"
@@ -2426,7 +2426,7 @@
                 {/if}
 
                 {#if activeAITab === "costs"}
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p class="text-xs font-black uppercase tracking-wider text-slate-500">AI Usage</p>
@@ -2458,23 +2458,23 @@
                     {/if}
 
                     <div class="grid grid-cols-2 xl:grid-cols-5 gap-3">
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Calls</p>
                             <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.calls)}</p>
                         </div>
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Input Tokens</p>
                             <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.inputTokens)}</p>
                         </div>
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Output Tokens</p>
                             <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.outputTokens)}</p>
                         </div>
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Tokens</p>
                             <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.totalTokens)}</p>
                         </div>
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Estimated Cost</p>
                             <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">
                                 {#if aiUsage?.pricingConfigured}
@@ -2487,7 +2487,7 @@
                     </div>
 
                     {#if aiSpendRows.length > 0}
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Spend History</p>
                                 <p class="text-[10px] text-slate-500">
@@ -2497,7 +2497,7 @@
 
                             {#if aiUsage?.pricingConfigured}
                                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3">
+                                    <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                                         <p class="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Daily Spend (USD)</p>
                                         <svg viewBox="0 0 100 44" class="w-full h-24">
                                             <line x1="2" y1="42" x2="98" y2="42" stroke="currentColor" class="text-slate-300 dark:text-slate-700" stroke-width="0.5"></line>
@@ -2521,7 +2521,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3">
+                                    <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                                         <p class="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Cumulative Spend (USD)</p>
                                         <svg viewBox="0 0 100 42" class="w-full h-24">
                                             <polyline
@@ -2604,7 +2604,7 @@
 
                 {#if activeAITab === "settings"}
                 <div class="space-y-4">
-                    <div class="flex items-center justify-between bg-white dark:bg-slate-900/30 p-6 rounded-3xl border border-slate-200 dark:border-slate-700">
+                    <div class="flex items-center justify-between py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0">
                         <div class="flex items-center gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-600">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2626,7 +2626,7 @@
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">OpenAI</h3>
                         <label for="openai-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
                         <input id="openai-key" type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey") || !settings.aiEnabled} placeholder="sk-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
@@ -2640,7 +2640,7 @@
                         <button onclick={() => testProvider("openai", settings.openaiModel || "")} disabled={testingProvider === "openai" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "openai" ? "Testing..." : "Test OpenAI"}</button>
                     </div>
 
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Anthropic</h3>
                         <label for="anthropic-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
                         <input id="anthropic-key" type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey") || !settings.aiEnabled} placeholder="sk-ant-..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
@@ -2654,7 +2654,7 @@
                         <button onclick={() => testProvider("anthropic", settings.anthropicModel || "")} disabled={testingProvider === "anthropic" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "anthropic" ? "Testing..." : "Test Anthropic"}</button>
                     </div>
 
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                         <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Gemini</h3>
                         <label for="gemini-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
                         <input id="gemini-key" type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey") || !settings.aiEnabled} placeholder="AIza..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
@@ -2688,7 +2688,7 @@
                     </div>
                 </div>
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-5 space-y-4">
+                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-xs font-black uppercase tracking-wider text-slate-500">Discord Notifications</p>
@@ -2711,7 +2711,7 @@
                         </div>
                     </div>
 
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-5 space-y-4">
+                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-xs font-black uppercase tracking-wider text-slate-500">Portainer Integration</p>
@@ -2760,7 +2760,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex items-center justify-between gap-4">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">Metrics Collection</p>
                         <p class="text-[11px] text-slate-500 mt-1">Control background `metrics_collector` scheduler activity.</p>
@@ -2775,7 +2775,7 @@
                     </button>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-3">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <p class="text-xs font-black uppercase tracking-wider text-slate-500">ClamAV Signatures</p>
@@ -2809,19 +2809,19 @@
                     </div>
 
                     <div class="grid grid-cols-1 xl:grid-cols-4 gap-3">
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Engine</p>
                             <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1 break-all">{clamavStatus?.engineVersion || "Unavailable"}</p>
                         </div>
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Signature Version</p>
                             <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databaseVersion || "Unknown"}</p>
                         </div>
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Published</p>
                             <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databasePublished ? new Date(clamavStatus.databasePublished * 1000).toLocaleString() : (clamavStatus?.databaseTimestamp || "Unknown")}</p>
                         </div>
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-3">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
                             <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Local DB Updated</p>
                             <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.lastLocalUpdate ? new Date(clamavStatus.lastLocalUpdate * 1000).toLocaleString() : "Unknown"}</p>
                         </div>
@@ -2883,7 +2883,7 @@
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                     <div class="flex items-center gap-2">
                         <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v8m-4-4h8M4 7h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" /></svg>
@@ -2895,7 +2895,7 @@
                     </div>
 
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-2">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-2">
                             <div class="flex items-center justify-between gap-2">
                                 <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Before Compose Auto-Apply</p>
                                 <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {(composeAutoApplyTask?.enabled ?? false) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">
@@ -2916,7 +2916,7 @@
                             >Open Upgrades Schedule</button>
                         </div>
 
-                        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-2">
+                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-2">
                             <div class="flex items-center justify-between gap-2">
                                 <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Scheduled Compose Backup Sweep</p>
                                 <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {(composeBackupSweepTask?.enabled ?? false) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">
@@ -2935,7 +2935,7 @@
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                     <div class="flex items-center gap-2">
                         <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-900/40">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7zm0 0l2-3h12l2 3" /></svg>
@@ -2960,7 +2960,7 @@
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                     <div class="flex items-center gap-2">
                         <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-900/40">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4a3 3 0 00-3 3v4a3 3 0 003 3h4a3 3 0 003-3V7a3 3 0 00-3-3H8zM2 14a2 2 0 012-2h16a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2z" /></svg>
@@ -2986,7 +2986,7 @@
                 </div>
 
                 {#if composeBackupSweepTask && composeBackupSweepDraft}
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 space-y-4">
+                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <div class="flex items-center gap-2">
@@ -3082,7 +3082,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex items-center justify-between gap-4">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">UI Animations</p>
                         <p class="text-[11px] text-slate-500 mt-1">Turn off transitions and motion effects for reduced visual movement.</p>
@@ -3097,7 +3097,7 @@
                     </button>
                 </div>
 
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 p-4 flex items-center justify-between gap-4">
+                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex items-center justify-between gap-4">
                     <div>
                         <p class="text-xs font-black uppercase tracking-wider text-slate-500">Normalized CPU Metrics</p>
                         <p class="text-[11px] text-slate-500 mt-1">Scale CPU usage to 100% of total system capacity. Disable to see raw per-core values (e.g. 400% for 4 cores).</p>
