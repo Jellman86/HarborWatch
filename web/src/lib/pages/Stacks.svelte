@@ -328,132 +328,86 @@
                 />
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-10 opacity-0 animate-reveal stagger-1">
                     {#each pagedComposeProjects as p, i}
-                        <article style="animation-delay: 0.1s" class="opacity-0 animate-reveal bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 p-6 space-y-5 shadow-sm h-full group hover:border-brand-500 hover:shadow-md transition-all">
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                    <button
-                                        onclick={() => openComposeEditor(p)}
-                                        class="text-lg font-black tracking-tight text-slate-900 dark:text-white truncate group-hover:text-brand-600 transition-colors text-left hover:underline"
-                                        title={p.projectName}
-                                    >
-                                        {p.projectName}
-                                    </button>
-                                    <p class="text-[10px] font-mono text-slate-400 mt-1 break-all">{p.workingDir || (p.configFiles && p.configFiles[0]) || "Path unavailable"}</p>
-                                </div>
-                                <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest {composeSourceStatusClass(p.sourceStatus)}">
-                                    {composeSourceStatusLabel(p.sourceStatus)}
-                                </span>
-                            </div>
-
-                            <div class="grid grid-cols-3 gap-3">
-                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Services</p>
-                                    <p class="text-sm font-black text-slate-900 dark:text-white mt-1">{p.containerCount || 0}</p>
-                                </div>
-                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Updates</p>
-                                    <p class="text-sm font-black text-slate-900 dark:text-white mt-1">{p.updateCandidates || 0}</p>
-                                </div>
-                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Automation</p>
-                                    <p class="text-[10px] font-bold text-slate-700 dark:text-slate-300 mt-1">{automationSummary(p)}</p>
-                                </div>
-                            </div>
-
-                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3 space-y-2">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Edit Authority</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <span class="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {composeAuthorityClass(p)}">
-                                            {composeAuthorityLabel(p)}
-                                        </span>
-                                        <span class="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {envAuthorityClass(p)}">
-                                            {envAuthorityLabel(p)}
-                                        </span>
+                        <article style="animation-delay: {0.1 + (i * 0.05)}s" class="opacity-0 animate-reveal bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden flex flex-col h-full group hover:border-brand-500 hover:shadow-md transition-all">
+                            <!-- Header Area -->
+                            <div class="p-6 border-b border-slate-100 dark:border-slate-700/50 space-y-4">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <h3 class="text-xl font-black tracking-tight text-slate-900 dark:text-white truncate group-hover:text-brand-600 transition-colors" title={p.projectName}>
+                                            <button class="hover:underline" onclick={() => openComposeEditor(p)}>{p.projectName}</button>
+                                        </h3>
+                                        <p class="text-[10px] font-mono text-slate-400 mt-1 truncate" title={p.workingDir || (p.configFiles && p.configFiles[0]) || "Path unavailable"}>
+                                            {p.workingDir || (p.configFiles && p.configFiles[0]) || "Path unavailable"}
+                                        </p>
                                     </div>
-                                </div>
-                                <p class="text-[11px] text-slate-600 dark:text-slate-300">
-                                    {#if p.composeEditable}
-                                        HarborWatch can edit the compose source and adjacent <span class="font-mono">.env</span> for this project.
-                                    {:else if p.sourceVerified && (p.envEditable || p.envCreatable)}
-                                        Compose source stays read-only here, but HarborWatch can manage the adjacent <span class="font-mono">.env</span> for machine-local overrides.
-                                    {:else if p.sourceVerified}
-                                        HarborWatch can inspect this compose source, but neither compose nor adjacent <span class="font-mono">.env</span> is writable here.
+                                    {#if p.updateCandidates && p.updateCandidates > 0}
+                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 whitespace-nowrap">
+                                            {p.updateCandidates} Update{p.updateCandidates > 1 ? 's' : ''}
+                                        </span>
                                     {:else}
-                                        HarborWatch has not verified direct filesystem access for this compose source yet.
+                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 whitespace-nowrap">
+                                            Up to date
+                                        </span>
                                     {/if}
-                                </p>
-                                {#if p.envPath}
-                                    <p class="text-[10px] font-mono text-slate-500 break-all" title={p.envPath}>Env path: {p.envPath}</p>
-                                {/if}
-                            </div>
+                                </div>
 
-                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-3 space-y-2">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Compose Protection</p>
-                                    <span class="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {snapshotStatusClass(p.snapshotStatus)}">
-                                        {snapshotStatusLabel(p.snapshotStatus)}
+                                <!-- Badges Row -->
+                                <div class="flex flex-wrap gap-2">
+                                    <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest {composeSourceStatusClass(p.sourceStatus)}" title="Source Status">
+                                        {composeSourceStatusLabel(p.sourceStatus)}
+                                    </span>
+                                    <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest {composeAuthorityClass(p)}" title="Compose Authority">
+                                        {composeAuthorityLabel(p)}
+                                    </span>
+                                    <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest {envAuthorityClass(p)}" title="Env Authority">
+                                        {envAuthorityLabel(p)}
+                                    </span>
+                                    <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest {snapshotStatusClass(p.snapshotStatus)}" title="Protection Status">
+                                        Snapshots: {snapshotStatusLabel(p.snapshotStatus)}
                                     </span>
                                 </div>
-                                <p class="text-[11px] text-slate-600 dark:text-slate-300">HarborWatch respects compose files and `.env` files. It stores zipped snapshots before compose upgrades and reports drift since the latest snapshot.</p>
-                                <div class="grid grid-cols-2 gap-2 text-[10px]">
-                                    <div>
-                                        <p class="text-slate-400 uppercase tracking-widest font-black">Snapshots</p>
-                                        <p class="mt-1 font-bold text-slate-800 dark:text-slate-100">{p.snapshotCount || 0}</p>
-                                    </div>
-                                    <div>
-                                        <p class="text-slate-400 uppercase tracking-widest font-black">Changed Files</p>
-                                        <p class="mt-1 font-bold text-slate-800 dark:text-slate-100">{p.changedFiles || 0}</p>
-                                    </div>
-                                </div>
-                                {#if p.lastSnapshotAt}
-                                    <p class="text-[10px] text-slate-500">Last snapshot: <span class="font-bold">{new Date((p.lastSnapshotAt || 0) * 1000).toLocaleString()}</span></p>
-                                {/if}
-                                {#if p.lastSnapshotPath}
-                                    <p class="text-[10px] font-mono text-slate-500 break-all" title={p.lastSnapshotPath}>Archive: {p.lastSnapshotPath}</p>
-                                {/if}
-                                {#if p.snapshotRootPath}
-                                    <p class="text-[10px] font-mono text-slate-400 break-all" title={p.snapshotRootPath}>Root: {p.snapshotRootPath}</p>
-                                {/if}
-                                {#if p.snapshotError}
-                                    <p class="text-[10px] text-amber-700 dark:text-amber-300">{p.snapshotError}</p>
-                                {/if}
                             </div>
 
-                            {#if p.configFiles && p.configFiles.length > 0}
-                                <div class="space-y-1">
-                                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Compose File(s)</p>
-                                    {#each p.configFiles as path}
-                                        <p class="text-[10px] font-mono text-slate-600 dark:text-slate-300 break-all">{path}</p>
-                                    {/each}
-                                </div>
-                            {/if}
-
-                            <div class="space-y-2">
-                                <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Services</p>
-                                <div class="flex flex-wrap gap-2">
+                            <!-- Services List -->
+                            <div class="flex-1 p-6 bg-slate-50/30 dark:bg-slate-900/20">
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Containers / Services ({p.containerCount || 0})</p>
+                                <div class="space-y-2">
                                     {#each p.members || [] as m}
                                         <button
                                             onclick={(event) => {
                                                 event.stopPropagation();
                                                 onNavigate('container-detail', { id: m.containerId, tab: 'lifecycle' });
                                             }}
-                                            class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 hover:border-brand-400 text-left"
-                                            title={m.image || ""}
+                                            class="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 hover:border-brand-400 hover:shadow-sm transition-all group/svc"
                                         >
-                                            <span class="block text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">{m.serviceName || m.containerName || m.containerId}</span>
-                                            <span class="block text-[9px] text-slate-500">{m.updateAvailable ? "Update available" : "No update detected"}</span>
+                                            <div class="flex items-center gap-3 min-w-0">
+                                                <div class="w-2 h-2 rounded-full {m.state === 'running' ? 'bg-emerald-500' : 'bg-slate-400'}"></div>
+                                                <div class="text-left min-w-0">
+                                                    <p class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{m.serviceName || m.containerName || m.containerId}</p>
+                                                    <p class="text-[9px] font-mono text-slate-500 truncate">{m.image || 'Unknown image'}</p>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-3 shrink-0">
+                                                {#if m.updateAvailable}
+                                                    <span class="w-2 h-2 rounded-full bg-brand-500" title="Update Available"></span>
+                                                {/if}
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-300 group-hover/svc:text-brand-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </div>
                                         </button>
                                     {/each}
                                 </div>
                             </div>
-                            <div class="pt-1">
+
+                            <!-- Actions -->
+                            <div class="p-6 border-t border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800">
                                 <button
                                     onclick={(event) => {
                                         event.stopPropagation();
                                         openComposeEditor(p);
                                     }}
-                                    class="w-full px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-black uppercase tracking-widest transition-all"
+                                    class="w-full px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-brand-500/20"
                                 >
                                     Open Compose Editor
                                 </button>
@@ -497,63 +451,64 @@
                 />
                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10 opacity-0 animate-reveal stagger-1">
                     {#each pagedStacks as s, i}
-                        <article style="animation-delay: 0.1s" class="opacity-0 animate-reveal bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden h-full flex flex-col group hover:border-brand-500 hover:shadow-md transition-all">
-                                <div class="p-6 flex-1 space-y-4 text-left">
-                                    <div class="flex items-start justify-between gap-3">
-                                        <div class="min-w-0 flex-1">
-                                            <h3 class="font-black text-slate-900 dark:text-white truncate text-xl tracking-tight group-hover:text-brand-600 transition-colors" title={s.Name}>
-                                                {s.Name}
-                                            </h3>
-                                            <p class="text-[10px] font-mono text-slate-400 mt-1 uppercase tracking-widest">ID: {s.Id}</p>
-                                        </div>
-                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest {statusColor(s.Status)}">
-                                            {s.Status === 1 ? 'Active' : 'Inactive'}
-                                        </span>
+                        <article style="animation-delay: {0.1 + (i * 0.05)}s" class="opacity-0 animate-reveal bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden flex flex-col h-full group hover:border-brand-500 hover:shadow-md transition-all">
+                            <div class="p-6 border-b border-slate-100 dark:border-slate-700/50 space-y-4">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0 flex-1">
+                                        <h3 class="font-black text-slate-900 dark:text-white truncate text-xl tracking-tight group-hover:text-brand-600 transition-colors" title={s.Name}>
+                                            {s.Name}
+                                        </h3>
+                                        <p class="text-[10px] font-mono text-slate-400 mt-1 uppercase tracking-widest truncate">ID: {s.Id} | EP-{s.EndpointId}</p>
                                     </div>
-
-                                    <div class="grid grid-cols-2 gap-4 py-2 border-y border-slate-100 dark:border-slate-700/50">
-                                        <div class="space-y-1">
-                                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Engine Type</p>
-                                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200">{stackType(s.Type)}</p>
-                                        </div>
-                                        <div class="space-y-1">
-                                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Endpoint</p>
-                                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-tighter">EP-{s.EndpointId}</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="flex items-center gap-2 pt-2">
-                                        <span class="px-2 py-1 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg text-[9px] font-black text-cyan-700 dark:text-cyan-300 uppercase border border-cyan-100 dark:border-cyan-900/30">
-                                            Portainer Compose Stack
-                                        </span>
-                                    </div>
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest {statusColor(s.Status)} whitespace-nowrap">
+                                        {s.Status === 1 ? 'Active' : 'Inactive'}
+                                    </span>
                                 </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <span class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[9px] font-black uppercase tracking-widest border border-slate-200 dark:border-slate-700">
+                                        Engine: {stackType(s.Type)}
+                                    </span>
+                                    <span class="px-2 py-1 rounded-md bg-cyan-50 dark:bg-cyan-900/20 text-[9px] font-black text-cyan-700 dark:text-cyan-300 uppercase tracking-widest border border-cyan-100 dark:border-cyan-900/30">
+                                        Portainer API
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div class="flex-1 p-6 bg-slate-50/30 dark:bg-slate-900/20 flex flex-col justify-center items-center text-center">
+                                <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3 text-slate-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg>
+                                </div>
+                                <p class="text-sm font-bold text-slate-700 dark:text-slate-300">Remote Stack</p>
+                                <p class="text-[11px] text-slate-500 mt-1 max-w-[200px]">Managed through Portainer. Detailed service introspection is limited.</p>
+                            </div>
 
-                                <div class="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/20 border-t border-slate-100/50 dark:border-slate-800/50 flex justify-between items-center">
+                            <div class="p-6 border-t border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800 flex flex-col gap-2">
+                                <button
+                                    onclick={() => onNavigate('containers', { search: s.Name })}
+                                    class="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-slate-200 dark:border-slate-700"
+                                >
+                                    View Containers
+                                </button>
+                                {#if s.Type === 2}
                                     <button
-                                        onclick={() => onNavigate('containers', { search: s.Name })}
-                                        class="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-slate-200 dark:border-slate-700 shadow-sm"
+                                        onclick={() => redeployStack(s.Id)}
+                                        disabled={redeploying[s.Id]}
+                                        class="w-full px-4 py-2.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md shadow-brand-500/20 flex justify-center items-center gap-2"
                                     >
-                                        Manage Fleet
+                                        {#if redeploying[s.Id]}
+                                            <div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        {:else}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                        {/if}
+                                        Redeploy
                                     </button>
-                                    {#if s.Type === 2}
-                                        <button
-                                            onclick={() => redeployStack(s.Id)}
-                                            disabled={redeploying[s.Id]}
-                                            class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-brand-500/20 flex items-center gap-2"
-                                        >
-                                            {#if redeploying[s.Id]}
-                                                <div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                            {:else}
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                            {/if}
-                                            Redeploy
-                                        </button>
-                                    {/if}
-                                </div>
-                            </article>
+                                {/if}
+                            </div>
+                        </article>
                     {/each}
                 </div>
             {/if}
