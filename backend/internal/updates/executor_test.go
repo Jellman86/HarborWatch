@@ -47,9 +47,10 @@ func TestLiveContainerRefFallsBackToContainerID(t *testing.T) {
 func TestComposeUpArgsIncludesAllComposeFiles(t *testing.T) {
 	req := Request{
 		ComposeConfigFiles: []string{"/tmp/base.yml", "/tmp/override.yml"},
+		ComposeEnvFiles:    []string{"/tmp/.env", "/tmp/.harborwatch.env"},
 	}
 	got := composeUpArgs(req, "web")
-	want := []string{"compose", "-f", "/tmp/base.yml", "-f", "/tmp/override.yml", "up", "-d", "--no-deps", "--force-recreate", "web"}
+	want := []string{"compose", "-f", "/tmp/base.yml", "-f", "/tmp/override.yml", "--env-file", "/tmp/.env", "--env-file", "/tmp/.harborwatch.env", "up", "-d", "--no-deps", "--force-recreate", "web"}
 	if len(got) != len(want) {
 		t.Fatalf("unexpected arg length: got=%v want=%v", got, want)
 	}
@@ -63,9 +64,10 @@ func TestComposeUpArgsIncludesAllComposeFiles(t *testing.T) {
 func TestComposePullArgsIncludesAllComposeFiles(t *testing.T) {
 	req := Request{
 		ComposeConfigFiles: []string{"/tmp/base.yml", "/tmp/override.yml"},
+		ComposeEnvFiles:    []string{"/tmp/.env", "/tmp/.harborwatch.env"},
 	}
 	got := composePullArgs(req, "web")
-	want := []string{"compose", "-f", "/tmp/base.yml", "-f", "/tmp/override.yml", "pull", "web"}
+	want := []string{"compose", "-f", "/tmp/base.yml", "-f", "/tmp/override.yml", "--env-file", "/tmp/.env", "--env-file", "/tmp/.harborwatch.env", "pull", "web"}
 	if len(got) != len(want) {
 		t.Fatalf("unexpected arg length: got=%v want=%v", got, want)
 	}

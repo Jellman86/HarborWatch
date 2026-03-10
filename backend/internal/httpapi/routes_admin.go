@@ -37,6 +37,7 @@ type adminRouteDeps struct {
 	aiService             AIService
 	rulesService          RulesService
 	intelService          ContainerIntelService
+	gitOpsLookup          GitOpsLookup
 	jobManager            *jobs.Manager
 	currentPortainerState *PortainerClient
 	loadContainerSummary  func(context.Context, string) gen.ContainerSummary

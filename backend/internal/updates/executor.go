@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/composeexec"
 	"github.com/Jellman86/HarborWatch/backend/internal/composesnapshots"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -325,21 +326,11 @@ func truncate(s string, n int) string {
 }
 
 func composeUpArgs(req Request, service string) []string {
-	args := []string{"compose"}
-	for _, file := range composeConfigFileList(req) {
-		args = append(args, "-f", file)
-	}
-	args = append(args, "up", "-d", "--no-deps", "--force-recreate", service)
-	return args
+	return composeContext(req).DockerArgs("up", "-d", "--no-deps", "--force-recreate", service)
 }
 
 func composePullArgs(req Request, service string) []string {
-	args := []string{"compose"}
-	for _, file := range composeConfigFileList(req) {
-		args = append(args, "-f", file)
-	}
-	args = append(args, "pull", service)
-	return args
+	return composeContext(req).DockerArgs("pull", service)
 }
 
 func composeWorkingDir(req Request) string {
@@ -368,6 +359,27 @@ func composeConfigFileList(req Request) []string {
 		out = append(out, p)
 	}
 	return out
+}
+
+func composeEnvFileList(req Request) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(req.ComposeEnvFiles))
+	for _, raw := range req.ComposeEnvFiles {
+		p := strings.TrimSpace(raw)
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
+}
+
+func composeContext(req Request) composeexec.Context {
+	return composeexec.New(composeWorkingDir(req), composeConfigFileList(req), composeEnvFileList(req))
 }
 
 func newestBackupName(backups []string, containerID string) (string, error) {

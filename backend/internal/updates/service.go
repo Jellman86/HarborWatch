@@ -50,6 +50,7 @@ type Request struct {
 	ComposeService      string
 	ComposeWorkingDir   string
 	ComposeConfigFiles  []string
+	ComposeEnvFiles     []string
 	ComposeSnapshotRoot string
 
 	// Portainer support

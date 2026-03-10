@@ -581,6 +581,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 					intelStore,
 					releaseService,
 					diagService,
+					gitOpsStore,
 					func(ctx context.Context, containerID string) bool {
 						return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_apply")
 					},
@@ -596,6 +597,7 @@ func NewMuxWithSchedulerE() (http.Handler, *scheduler.Service, error) {
 				intelStore,
 				releaseService,
 				diagService,
+				gitOpsStore,
 				func(ctx context.Context, containerID string) bool {
 					return containerAutomationEnabled(ctx, containerID, "upgrades", "container_update_apply")
 				},
@@ -952,6 +954,7 @@ func extractAIBlockedSignal(run gen.UpdateJobStatus) (updateAIBlockedSignal, boo
 func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, scanService ScanService, releaseService ReleaseService, updateService UpdateService, auditService AuditService, aiService AIService, schedSvc SchedulerService, metricService MetricsService, diagService DiagService, notificationService NotificationService, settingsService SettingsService, portainerService PortainerClient, rulesService RulesService, intelService ContainerIntelService, composeAuditStore composeAuditHistoryStore, jobManager *jobs.Manager) http.Handler {
 	r := chi.NewRouter()
 	currentPortainerService := portainerService
+	gitOpsStore := gitops.NewStore(db)
 
 	loadContainerSummary := func(ctx context.Context, id string) gen.ContainerSummary {
 		summary := gen.ContainerSummary{ID: id}
@@ -2093,6 +2096,7 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 			aiService:             aiService,
 			rulesService:          rulesService,
 			intelService:          intelService,
+			gitOpsLookup:          gitOpsStore,
 			jobManager:            jobManager,
 			currentPortainerState: &currentPortainerService,
 			loadContainerSummary:  loadContainerSummary,

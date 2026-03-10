@@ -49,6 +49,7 @@ func TestBuildUpdateRequestForContainer_PortainerManualRejectsTargetThatRequires
 		nil,
 		nil,
 		nil,
+		nil,
 		updateRequestBuildOptions{},
 	)
 	if err == nil {
@@ -137,6 +138,7 @@ func TestBuildUpdateRequestForContainer_UsesGlobalValidationDefaultsWhenNoRulesS
 		nil,
 		nil,
 		nil,
+		nil,
 		updateRequestBuildOptions{},
 	)
 	if err != nil {
@@ -175,6 +177,7 @@ func TestBuildUpdateRequestForContainer_PropagatesDependentRestartRuleFields(t *
 			RestartDependentsAfterUpgrade: true,
 			DependentRestartDelaySec:      30,
 		}},
+		nil,
 		nil,
 		nil,
 		nil,

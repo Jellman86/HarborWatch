@@ -40,7 +40,7 @@ func TestResolveDeclaredLocalComposeImageRef_UsesResolvedComposeConfigForInterpo
 	originalRunner := dockerComposeConfigRunner
 	t.Cleanup(func() { dockerComposeConfigRunner = originalRunner })
 	called := false
-	dockerComposeConfigRunner = func(ctx context.Context, workingDir string, configFiles []string) ([]byte, error) {
+	dockerComposeConfigRunner = func(ctx context.Context, workingDir string, configFiles, envFiles []string) ([]byte, error) {
 		called = true
 		if workingDir != dir {
 			t.Fatalf("unexpected workingDir: %q", workingDir)
@@ -48,7 +48,13 @@ func TestResolveDeclaredLocalComposeImageRef_UsesResolvedComposeConfigForInterpo
 		if len(configFiles) != 1 || configFiles[0] != composeFile {
 			t.Fatalf("unexpected config files: %#v", configFiles)
 		}
+		if len(envFiles) != 1 || envFiles[0] != filepath.Join(dir, ".env") {
+			t.Fatalf("unexpected env files: %#v", envFiles)
+		}
 		return []byte("services:\n  web:\n    image: ghcr.io/acme/app:1.2.3\n"), nil
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_TAG=1.2.3\n"), 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
 	}
 
 	summary := gen.ContainerSummary{
@@ -62,7 +68,7 @@ func TestResolveDeclaredLocalComposeImageRef_UsesResolvedComposeConfigForInterpo
 		},
 	}
 
-	got, err := resolveDeclaredLocalComposeImageRef(context.Background(), summary)
+	got, err := resolveDeclaredLocalComposeImageRef(context.Background(), summary, []string{filepath.Join(dir, ".env")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

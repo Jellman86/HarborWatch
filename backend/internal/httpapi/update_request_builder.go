@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Jellman86/HarborWatch/backend/internal/composeexec"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/rules"
+	"github.com/Jellman86/HarborWatch/backend/internal/settings"
 	"github.com/Jellman86/HarborWatch/backend/internal/updates"
 )
 
@@ -47,6 +49,7 @@ func buildUpdateRequestForContainer(
 	intelService ContainerIntelService,
 	releaseService ReleaseService,
 	diagService DiagService,
+	gitOpsLookup GitOpsLookup,
 	opts updateRequestBuildOptions,
 ) (updateRequestBuildResult, error) {
 	out := updateRequestBuildResult{}
@@ -136,9 +139,11 @@ func buildUpdateRequestForContainer(
 	globalBypassAI := false
 	globalSkipHealthCheck := false
 	composeSnapshotRoot := ""
+	st := settings.Settings{}
 	if settingsService != nil {
 		settingsCtx, settingsCancel := context.WithTimeout(ctx, 2*time.Second)
-		if st, err := settingsService.Get(settingsCtx); err == nil {
+		if loaded, err := settingsService.Get(settingsCtx); err == nil {
+			st = loaded
 			if st.AIBlockRiskThreshold >= 0 && st.AIBlockRiskThreshold <= 100 {
 				aiBlockRiskThreshold = st.AIBlockRiskThreshold
 			}
@@ -177,8 +182,14 @@ func buildUpdateRequestForContainer(
 	mode := detectContainerOrchestrationMode(out.Summary)
 	composeProject, composeService, composeWorkingDir, composeConfigFiles, composeMetaOK := localComposeProjectMetadata(out.Summary)
 	composeStatus := composeSourceStatus("")
+	composeCtx := composeexec.Context{}
 	if composeMetaOK {
 		composeStatus = detectComposeSourceStatus(composeConfigFiles)
+		resolvedComposeCtx, err := resolveComposeExecutionContextForSummary(ctx, out.Summary, st, gitOpsLookup)
+		if err != nil {
+			return out, err
+		}
+		composeCtx = resolvedComposeCtx
 	}
 	if out.Summary.Labels != nil {
 		sid, hasSID := out.Summary.Labels["io.portainer.stack_id"]
@@ -230,7 +241,7 @@ func buildUpdateRequestForContainer(
 		return out, fmt.Errorf("%w: local compose source is %s for container %s", ErrComposeSourceVerificationUnavailable, firstNonEmpty(string(composeStatus), string(composeSourceStatusUnverified)), containerID)
 	}
 	if isComposeManagedContainer(out.Summary) {
-		if err := enforceComposeSourceAuthorityForAuto(ctx, out.Summary, targetImage, portainerService); err != nil {
+		if err := enforceComposeSourceAuthorityForAuto(ctx, out.Summary, targetImage, portainerService, composeCtx.EnvFiles); err != nil {
 			return out, err
 		}
 	}
@@ -257,8 +268,9 @@ func buildUpdateRequestForContainer(
 		OrchestrationMode:             string(mode),
 		ComposeProject:                composeProject,
 		ComposeService:                composeService,
-		ComposeWorkingDir:             composeWorkingDir,
-		ComposeConfigFiles:            composeConfigFiles,
+		ComposeWorkingDir:             firstNonEmpty(composeCtx.WorkingDir, composeWorkingDir),
+		ComposeConfigFiles:            firstNonEmptySlice(composeCtx.ConfigFiles, composeConfigFiles),
+		ComposeEnvFiles:               composeCtx.EnvFiles,
 		ComposeSnapshotRoot:           composeSnapshotRoot,
 		IsPortainerManaged:            isPortainer,
 		PortainerStackID:              stackID,

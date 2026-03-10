@@ -49,6 +49,7 @@ func registerUpdateRoutes(r chi.Router, deps adminRouteDeps) {
 				deps.intelService,
 				deps.releaseService,
 				deps.diagService,
+				deps.gitOpsLookup,
 				updateRequestBuildOptions{
 					EnforceLocked: true,
 				},

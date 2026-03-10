@@ -145,6 +145,7 @@ func TestAutomatedUpdateApplyTask_StartsAutoContainersWithUpdates(t *testing.T) 
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	if err := task.Run(context.Background()); err != nil {
@@ -197,6 +198,7 @@ func TestAutomatedUpdateApplyTask_SkipsWhenJobAlreadyRunning(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	if err := task.Run(context.Background()); err != nil {
@@ -240,6 +242,7 @@ func TestAutomatedUpdateApplyTask_RefreshesUpdateStatusBeforeApply(t *testing.T)
 			UpdatePolicy: "auto",
 			ValidateURL:  "http://localhost:8080/health",
 		}},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -302,6 +305,7 @@ func TestAutomatedUpdateApplyTask_UsesRuleBypassAIAndSkipHealth(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	if err := task.Run(context.Background()); err != nil {
@@ -351,6 +355,7 @@ func TestAutomatedUpdateApplyTask_SkipsWhenPortainerComposeSourceDriftDetected(t
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	if err := task.Run(context.Background()); err != nil {
@@ -385,6 +390,7 @@ func TestAutomatedUpdateApplyTask_SkipsComposeManagedWhenSourceCannotBeVerified(
 			UpdatePolicy: "auto",
 			ValidateURL:  "http://localhost:8080/health",
 		}},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -433,6 +439,7 @@ func TestAutomatedUpdateApplyTask_StartsLocalComposeWhenSourceIsWritable(t *test
 			UpdatePolicy: "auto",
 			ValidateURL:  "http://localhost:8080/health",
 		}},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -491,6 +498,7 @@ func TestAutomatedUpdateApplyTask_StartsLocalComposeWithMultipleConfigFiles(t *t
 			UpdatePolicy: "auto",
 			ValidateURL:  "http://localhost:8080/health",
 		}},
+		nil,
 		nil,
 		nil,
 		nil,

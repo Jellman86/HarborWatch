@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/composecli"
+	"github.com/Jellman86/HarborWatch/backend/internal/composeexec"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"gopkg.in/yaml.v3"
 )
@@ -19,21 +20,13 @@ var (
 	ErrComposeSourceDriftDetected           = errors.New("runtime image diverges from compose source")
 	ErrComposeTargetDivergesFromSource      = errors.New("target image diverges from compose source")
 
-	dockerComposeConfigRunner = func(ctx context.Context, workingDir string, configFiles []string) ([]byte, error) {
-		args := make([]string, 0, len(configFiles)*2+1)
-		for _, raw := range configFiles {
-			p := strings.TrimSpace(raw)
-			if p == "" {
-				continue
-			}
-			args = append(args, "-f", p)
-		}
-		args = append(args, "config")
+	dockerComposeConfigRunner = func(ctx context.Context, workingDir string, configFiles, envFiles []string) ([]byte, error) {
+		composeCtx := composeexec.New(workingDir, configFiles, envFiles)
 		runner, err := composecli.Resolve(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("resolve compose runtime: %w", err)
 		}
-		cmd := runner.CommandContext(ctx, args...)
+		cmd := runner.CommandContext(ctx, composeCtx.RunnerArgs("config")...)
 		if wd := strings.TrimSpace(workingDir); wd != "" {
 			cmd.Dir = wd
 		}
@@ -50,12 +43,13 @@ func enforceComposeSourceAuthorityForAuto(
 	summary gen.ContainerSummary,
 	targetImage string,
 	portainerService PortainerClient,
+	composeEnvFiles []string,
 ) error {
 	if !isComposeManagedContainer(summary) {
 		return nil
 	}
 
-	declared, err := resolveDeclaredComposeImageRef(ctx, summary, portainerService)
+	declared, err := resolveDeclaredComposeImageRef(ctx, summary, portainerService, composeEnvFiles)
 	if err != nil {
 		return err
 	}
@@ -77,12 +71,12 @@ func isComposeManagedContainer(summary gen.ContainerSummary) bool {
 	return project != "" && service != ""
 }
 
-func resolveDeclaredComposeImageRef(ctx context.Context, summary gen.ContainerSummary, portainerService PortainerClient) (string, error) {
+func resolveDeclaredComposeImageRef(ctx context.Context, summary gen.ContainerSummary, portainerService PortainerClient, composeEnvFiles []string) (string, error) {
 	if !isComposeManagedContainer(summary) {
 		return "", nil
 	}
 	if detectContainerOrchestrationMode(summary) == orchestrationModeDockerCompose {
-		return resolveDeclaredLocalComposeImageRef(ctx, summary)
+		return resolveDeclaredLocalComposeImageRef(ctx, summary, composeEnvFiles)
 	}
 	service := strings.TrimSpace(summary.Labels["com.docker.compose.service"])
 	if service == "" {
@@ -108,7 +102,7 @@ func resolveDeclaredComposeImageRef(ctx context.Context, summary gen.ContainerSu
 	return imageRef, nil
 }
 
-func resolveDeclaredLocalComposeImageRef(ctx context.Context, summary gen.ContainerSummary) (string, error) {
+func resolveDeclaredLocalComposeImageRef(ctx context.Context, summary gen.ContainerSummary, composeEnvFiles []string) (string, error) {
 	project, service, workingDir, configFiles, ok := localComposeProjectMetadata(summary)
 	if !ok {
 		return "", fmt.Errorf("%w: compose labels missing", ErrComposeSourceVerificationUnavailable)
@@ -125,7 +119,7 @@ func resolveDeclaredLocalComposeImageRef(ctx context.Context, summary gen.Contai
 		return "", fmt.Errorf("%w: %v", ErrComposeSourceVerificationUnavailable, err)
 	}
 	if composeImageRefNeedsResolution(imageRef) {
-		resolved, err := resolveComposeServiceImageRefViaDockerConfig(ctx, workingDir, configFiles, service)
+		resolved, err := resolveComposeServiceImageRefViaDockerConfig(ctx, workingDir, configFiles, composeEnvFiles, service)
 		if err != nil {
 			return "", fmt.Errorf("%w: resolve interpolated compose image for %q: %v", ErrComposeSourceVerificationUnavailable, service, err)
 		}
@@ -164,7 +158,7 @@ func extractComposeServiceImageRefFromFiles(configFiles []string, service string
 	return lastImage, nil
 }
 
-func resolveComposeServiceImageRefViaDockerConfig(ctx context.Context, workingDir string, configFiles []string, service string) (string, error) {
+func resolveComposeServiceImageRefViaDockerConfig(ctx context.Context, workingDir string, configFiles, envFiles []string, service string) (string, error) {
 	if strings.TrimSpace(service) == "" {
 		return "", errors.New("missing compose service name")
 	}
@@ -174,7 +168,7 @@ func resolveComposeServiceImageRefViaDockerConfig(ctx context.Context, workingDi
 	if strings.TrimSpace(workingDir) == "" {
 		workingDir = filepath.Dir(strings.TrimSpace(configFiles[0]))
 	}
-	out, err := dockerComposeConfigRunner(ctx, workingDir, configFiles)
+	out, err := dockerComposeConfigRunner(ctx, workingDir, configFiles, envFiles)
 	if err != nil {
 		return "", err
 	}

@@ -94,3 +94,46 @@ func RemoveManagedInlineEnvSourceDir(masterDir, sourceID string) error {
 	}
 	return nil
 }
+
+func ResolveDeploymentOverrideEnvFiles(masterDir, repoPath string, dep GitDeployment) ([]string, error) {
+	envFiles := make([]string, 0, 2)
+
+	inlineEnabled, inlineContent, err := deriveInlineEnvContent(dep)
+	if err != nil {
+		return nil, err
+	}
+	if inlineEnabled {
+		path, err := writeManagedInlineEnvFile(masterDir, dep.GitSourceID, dep.ID, inlineContent)
+		if err != nil {
+			return nil, err
+		}
+		envFiles = append(envFiles, path)
+	} else if dep.EnvFilePath != "" {
+		path, err := resolveEnvFilePath(repoPath, dep.EnvFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("invalid deployment env file path: %w", err)
+		}
+		if _, err := os.Stat(path); err != nil {
+			return nil, fmt.Errorf("env file not found at %s", path)
+		}
+		envFiles = append(envFiles, path)
+	}
+
+	if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) != "" {
+		legacyOverride, err := legacyEnvVarsJSONToEnvContent(dep.EnvVarsJSON)
+		if err != nil {
+			return nil, err
+		}
+		path, err := writeManagedInlineEnvFile(masterDir, dep.GitSourceID, dep.ID, legacyOverride)
+		if err != nil {
+			return nil, err
+		}
+		envFiles = append(envFiles, path)
+	} else if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) == "" {
+		if path, pathErr := managedInlineEnvFilePath(masterDir, dep.GitSourceID, dep.ID); pathErr == nil {
+			_ = os.Remove(path)
+		}
+	}
+
+	return envFiles, nil
+}

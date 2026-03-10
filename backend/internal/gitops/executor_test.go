@@ -418,6 +418,9 @@ func TestRunTrackedDeployPullOnDeployUsesManagedEnvFileForPullAndUp(t *testing.T
 	if err := os.WriteFile(filepath.Join(repoPath, "docker-compose.yml"), []byte("services:\n  demo:\n    image: ${IMAGE_NAME}\n"), 0o644); err != nil {
 		t.Fatalf("write compose: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(repoPath, ".env"), []byte("BASE_IMAGE=busybox:latest\n"), 0o644); err != nil {
+		t.Fatalf("write env: %v", err)
+	}
 
 	src := GitSource{
 		ID:               "src-pull-env",
@@ -482,6 +485,12 @@ exit 1
 	for _, line := range lines {
 		if !strings.Contains(line, "--env-file") {
 			t.Fatalf("expected compose command to include --env-file, got %q", line)
+		}
+		if !strings.Contains(line, filepath.Join(repoPath, ".env")) {
+			t.Fatalf("expected compose command to include project .env, got %q", line)
+		}
+		if !strings.Contains(line, filepath.Join(masterDir, ".harborwatch", "gitops-env", src.ID, "dep-pull-env.env")) {
+			t.Fatalf("expected compose command to include managed override env file, got %q", line)
 		}
 	}
 	if !strings.Contains(lines[0], " pull ") {

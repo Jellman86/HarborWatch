@@ -23,6 +23,7 @@ type automatedUpdateApplyTask struct {
 	intelService          ContainerIntelService
 	releaseService        ReleaseService
 	diagService           DiagService
+	gitOpsLookup          GitOpsLookup
 	allow                 func(ctx context.Context, containerID string) bool
 	refreshUpdates        func(ctx context.Context) error
 	defaultMaxPerRun      int
@@ -38,6 +39,7 @@ func newAutomatedUpdateApplyTask(
 	intelService ContainerIntelService,
 	releaseService ReleaseService,
 	diagService DiagService,
+	gitOpsLookup GitOpsLookup,
 	allow func(ctx context.Context, containerID string) bool,
 	refreshUpdates func(ctx context.Context) error,
 ) scheduler.Task {
@@ -50,6 +52,7 @@ func newAutomatedUpdateApplyTask(
 		intelService:          intelService,
 		releaseService:        releaseService,
 		diagService:           diagService,
+		gitOpsLookup:          gitOpsLookup,
 		allow:                 allow,
 		refreshUpdates:        refreshUpdates,
 		defaultMaxPerRun:      envIntWithBounds("HW_AUTO_UPGRADE_MAX_CONCURRENCY", 1, 1, 20),
@@ -118,6 +121,7 @@ func (t *automatedUpdateApplyTask) Run(ctx context.Context) error {
 			t.intelService,
 			t.releaseService,
 			t.diagService,
+			t.gitOpsLookup,
 			updateRequestBuildOptions{
 				RequireAutoPolicy: true,
 				EnforceLocked:     true,

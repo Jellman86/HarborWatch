@@ -276,6 +276,15 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func firstNonEmptySlice(values ...[]string) []string {
+	for _, v := range values {
+		if len(v) > 0 {
+			return v
+		}
+	}
+	return nil
+}
+
 type validationHints struct {
 	host   string
 	port   string

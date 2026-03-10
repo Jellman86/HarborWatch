@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Jellman86/HarborWatch/backend/internal/composecli"
+	"github.com/Jellman86/HarborWatch/backend/internal/composeexec"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/docker/docker/api/types/container"
 )
@@ -141,61 +142,21 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 		}
 	}()
 
-	// Build the shared compose argument prefix so pull/up use identical env wiring.
-	composeArgs := []string{"-f", composeFile}
-
-	// Handle env-file mapping and environment overrides.
-	inlineEnabled, inlineContent, err := deriveInlineEnvContent(*dep)
+	envFiles := make([]string, 0, 3)
+	projectEnvPath := filepath.Join(workDir, ".env")
+	if _, err := os.Stat(projectEnvPath); err == nil {
+		envFiles = append(envFiles, projectEnvPath)
+	}
+	overrideEnvFiles, err := ResolveDeploymentOverrideEnvFiles(st.GitOpsMasterDirectory, repoPath, *dep)
 	if err != nil {
 		resultErr = err
 		outputSummary = truncateDeployOutput(err.Error())
 		return resultErr
 	}
+	envFiles = append(envFiles, overrideEnvFiles...)
 
-	envFilePath := ""
-	if inlineEnabled {
-		envFilePath, err = writeManagedInlineEnvFile(st.GitOpsMasterDirectory, sourceID, dep.ID, inlineContent)
-		if err != nil {
-			resultErr = err
-			outputSummary = truncateDeployOutput(err.Error())
-			return resultErr
-		}
-		composeArgs = append(composeArgs, "--env-file", envFilePath)
-	} else if dep.EnvFilePath != "" {
-		envFilePath, err = resolveEnvFilePath(repoPath, dep.EnvFilePath)
-		if err != nil {
-			resultErr = fmt.Errorf("invalid deployment env file path: %w", err)
-			outputSummary = truncateDeployOutput(resultErr.Error())
-			return resultErr
-		}
-		if _, err := os.Stat(envFilePath); err != nil {
-			resultErr = fmt.Errorf("env file not found at %s", envFilePath)
-			outputSummary = truncateDeployOutput(resultErr.Error())
-			return resultErr
-		}
-		composeArgs = append(composeArgs, "--env-file", envFilePath)
-	}
-
-	if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) != "" {
-		legacyOverride, err := legacyEnvVarsJSONToEnvContent(dep.EnvVarsJSON)
-		if err != nil {
-			resultErr = err
-			outputSummary = truncateDeployOutput(err.Error())
-			return resultErr
-		}
-		overridePath, err := writeManagedInlineEnvFile(st.GitOpsMasterDirectory, sourceID, dep.ID, legacyOverride)
-		if err != nil {
-			resultErr = err
-			outputSummary = truncateDeployOutput(err.Error())
-			return resultErr
-		}
-		composeArgs = append(composeArgs, "--env-file", overridePath)
-	} else if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) == "" {
-		if path, pathErr := managedInlineEnvFilePath(st.GitOpsMasterDirectory, sourceID, dep.ID); pathErr == nil {
-			_ = os.Remove(path)
-		}
-	}
-	upArgs := append(append([]string{}, composeArgs...), "up", "-d", "--remove-orphans")
+	composeCtx := composeexec.New(workDir, []string{composeFile}, envFiles)
+	upArgs := composeCtx.RunnerArgs("up", "-d", "--remove-orphans")
 	notifyDeployProgress(progress, 25, "running", "Resolving compose runtime and env sources")
 
 	runner, err := composecli.Resolve(ctx)
@@ -207,7 +168,7 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 
 	if dep.PullOnDeploy {
 		notifyDeployProgress(progress, 40, "running", "Pulling images")
-		pullArgs := append(append([]string{}, composeArgs...), "pull")
+		pullArgs := composeCtx.RunnerArgs("pull")
 		pullCmd := runner.CommandContext(ctx, pullArgs...)
 		pullCmd.Dir = workDir
 		pullOut, pullErr := pullCmd.CombinedOutput()
