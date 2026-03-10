@@ -45,13 +45,14 @@ type Request struct {
 	DependentRestartDelaySec      int
 
 	// Orchestration mode metadata
-	OrchestrationMode   string
-	ComposeProject      string
-	ComposeService      string
-	ComposeWorkingDir   string
-	ComposeConfigFiles  []string
-	ComposeEnvFiles     []string
-	ComposeSnapshotRoot string
+	OrchestrationMode        string
+	ComposeProject           string
+	ComposeService           string
+	ComposeWorkingDir        string
+	ComposeConfigFiles       []string
+	ComposeEnvFiles          []string
+	ComposeManagedEnvContent string
+	ComposeSnapshotRoot      string
 
 	// Portainer support
 	IsPortainerManaged  bool

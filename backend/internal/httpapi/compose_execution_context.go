@@ -17,10 +17,15 @@ type GitOpsLookup interface {
 	ListDeploymentsForSource(ctx context.Context, sourceID string) ([]gitops.GitDeployment, error)
 }
 
-func resolveComposeExecutionContextForSummary(ctx context.Context, summary gen.ContainerSummary, st settings.Settings, gitOpsLookup GitOpsLookup) (composeexec.Context, error) {
+type composeExecutionContext struct {
+	composeexec.Context
+	ManagedEnvContent string
+}
+
+func resolveComposeExecutionContextForSummary(ctx context.Context, summary gen.ContainerSummary, st settings.Settings, gitOpsLookup GitOpsLookup) (composeExecutionContext, error) {
 	_, _, workingDir, configFiles, ok := localComposeProjectMetadata(summary)
 	if !ok {
-		return composeexec.Context{}, nil
+		return composeExecutionContext{}, nil
 	}
 
 	envFiles := make([]string, 0, 3)
@@ -30,24 +35,27 @@ func resolveComposeExecutionContextForSummary(ctx context.Context, summary gen.C
 		}
 	}
 
-	overrideEnvFiles, err := resolveGitOpsOverrideEnvFiles(ctx, workingDir, configFiles, st.GitOpsMasterDirectory, gitOpsLookup)
+	managedEnvContent, overrideEnvFiles, err := resolveGitOpsOverrideEnvFiles(ctx, workingDir, configFiles, st.GitOpsMasterDirectory, gitOpsLookup)
 	if err != nil {
-		return composeexec.Context{}, err
+		return composeExecutionContext{}, err
 	}
 	envFiles = append(envFiles, overrideEnvFiles...)
 
-	return composeexec.New(workingDir, configFiles, envFiles), nil
+	return composeExecutionContext{
+		Context:           composeexec.New(workingDir, configFiles, envFiles),
+		ManagedEnvContent: managedEnvContent,
+	}, nil
 }
 
-func resolveGitOpsOverrideEnvFiles(ctx context.Context, workingDir string, configFiles []string, gitOpsRoot string, gitOpsLookup GitOpsLookup) ([]string, error) {
+func resolveGitOpsOverrideEnvFiles(ctx context.Context, workingDir string, configFiles []string, gitOpsRoot string, gitOpsLookup GitOpsLookup) (string, []string, error) {
 	root := strings.TrimSpace(gitOpsRoot)
 	if root == "" || gitOpsLookup == nil || !isGitOpsBackedComposeSource(workingDir, configFiles, root) {
-		return nil, nil
+		return "", nil, nil
 	}
 
 	sources, err := gitOpsLookup.ListSources(ctx)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	for _, src := range sources {
 		repoPath, err := gitops.ResolvePathUnder(root, src.TargetDir)
@@ -56,9 +64,12 @@ func resolveGitOpsOverrideEnvFiles(ctx context.Context, workingDir string, confi
 		}
 		deps, err := gitOpsLookup.ListDeploymentsForSource(ctx, src.ID)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		for _, dep := range deps {
+			if !dep.Enabled {
+				continue
+			}
 			composePath, err := gitops.ResolvePathUnder(repoPath, dep.ComposePath)
 			if err != nil {
 				continue
@@ -66,10 +77,14 @@ func resolveGitOpsOverrideEnvFiles(ctx context.Context, workingDir string, confi
 			if !pathMatchesAny(composePath, configFiles) {
 				continue
 			}
-			return gitops.ResolveDeploymentOverrideEnvFiles(root, repoPath, dep)
+			managedEnvContent, envFiles, err := gitops.ResolveDeploymentOverrideEnvContent(repoPath, dep)
+			if err != nil {
+				return "", nil, err
+			}
+			return managedEnvContent, envFiles, nil
 		}
 	}
-	return nil, nil
+	return "", nil, nil
 }
 
 func pathMatchesAny(path string, candidates []string) bool {

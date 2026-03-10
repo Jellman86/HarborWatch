@@ -79,6 +79,8 @@ func (CommandExecutor) Backup(ctx context.Context, req Request) error {
 
 func (CommandExecutor) Pull(ctx context.Context, req Request) error {
 	var cmd *exec.Cmd
+	cleanupEnvFile := func() {}
+	defer cleanupEnvFile()
 	if strings.EqualFold(strings.TrimSpace(req.OrchestrationMode), OrchestrationModeDockerCompose) {
 		service := strings.TrimSpace(req.ComposeService)
 		if service == "" {
@@ -92,6 +94,12 @@ func (CommandExecutor) Pull(ctx context.Context, req Request) error {
 		if workdir == "" {
 			workdir = composeWorkingDir(req)
 		}
+		tempReq, cleanup, err := materializeManagedComposeEnv(req)
+		if err != nil {
+			return err
+		}
+		req = tempReq
+		cleanupEnvFile = cleanup
 		cmd = exec.CommandContext(ctx, "docker", composePullArgs(req, service)...)
 		cmd.Dir = workdir
 	} else {
@@ -174,6 +182,12 @@ func (CommandExecutor) ComposeApply(ctx context.Context, req Request) error {
 		return errors.New("compose file path is required")
 	}
 	workdir := composeWorkingDir(req)
+	tempReq, cleanup, err := materializeManagedComposeEnv(req)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	req = tempReq
 	args := composeUpArgs(req, service)
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = workdir
@@ -380,6 +394,30 @@ func composeEnvFileList(req Request) []string {
 
 func composeContext(req Request) composeexec.Context {
 	return composeexec.New(composeWorkingDir(req), composeConfigFileList(req), composeEnvFileList(req))
+}
+
+func materializeManagedComposeEnv(req Request) (Request, func(), error) {
+	content := strings.TrimSpace(req.ComposeManagedEnvContent)
+	if content == "" {
+		return req, func() {}, nil
+	}
+	workdir := composeWorkingDir(req)
+	tempFile, err := os.CreateTemp(workdir, ".harborwatch-compose-env-*")
+	if err != nil {
+		return req, func() {}, fmt.Errorf("create managed compose env file: %w", err)
+	}
+	path := tempFile.Name()
+	if _, err := tempFile.WriteString(req.ComposeManagedEnvContent); err != nil {
+		_ = tempFile.Close()
+		_ = os.Remove(path)
+		return req, func() {}, fmt.Errorf("write managed compose env file: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		_ = os.Remove(path)
+		return req, func() {}, fmt.Errorf("close managed compose env file: %w", err)
+	}
+	req.ComposeEnvFiles = append(append([]string{}, req.ComposeEnvFiles...), path)
+	return req, func() { _ = os.Remove(path) }, nil
 }
 
 func newestBackupName(backups []string, containerID string) (string, error) {

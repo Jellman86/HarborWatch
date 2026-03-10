@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Jellman86/HarborWatch/backend/internal/composeexec"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
 	"github.com/Jellman86/HarborWatch/backend/internal/rules"
 	"github.com/Jellman86/HarborWatch/backend/internal/settings"
@@ -182,7 +181,7 @@ func buildUpdateRequestForContainer(
 	mode := detectContainerOrchestrationMode(out.Summary)
 	composeProject, composeService, composeWorkingDir, composeConfigFiles, composeMetaOK := localComposeProjectMetadata(out.Summary)
 	composeStatus := composeSourceStatus("")
-	composeCtx := composeexec.Context{}
+	composeCtx := composeExecutionContext{}
 	if composeMetaOK {
 		composeStatus = detectComposeSourceStatus(composeConfigFiles)
 		resolvedComposeCtx, err := resolveComposeExecutionContextForSummary(ctx, out.Summary, st, gitOpsLookup)
@@ -241,7 +240,7 @@ func buildUpdateRequestForContainer(
 		return out, fmt.Errorf("%w: local compose source is %s for container %s", ErrComposeSourceVerificationUnavailable, firstNonEmpty(string(composeStatus), string(composeSourceStatusUnverified)), containerID)
 	}
 	if isComposeManagedContainer(out.Summary) {
-		if err := enforceComposeSourceAuthorityForAuto(ctx, out.Summary, targetImage, portainerService, composeCtx.EnvFiles); err != nil {
+		if err := enforceComposeSourceAuthorityForAuto(ctx, out.Summary, targetImage, portainerService, composeCtx.EnvFiles, composeCtx.ManagedEnvContent); err != nil {
 			return out, err
 		}
 	}
@@ -271,6 +270,7 @@ func buildUpdateRequestForContainer(
 		ComposeWorkingDir:             firstNonEmpty(composeCtx.WorkingDir, composeWorkingDir),
 		ComposeConfigFiles:            firstNonEmptySlice(composeCtx.ConfigFiles, composeConfigFiles),
 		ComposeEnvFiles:               composeCtx.EnvFiles,
+		ComposeManagedEnvContent:      composeCtx.ManagedEnvContent,
 		ComposeSnapshotRoot:           composeSnapshotRoot,
 		IsPortainerManaged:            isPortainer,
 		PortainerStackID:              stackID,

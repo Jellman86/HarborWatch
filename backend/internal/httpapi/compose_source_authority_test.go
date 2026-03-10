@@ -68,7 +68,7 @@ func TestResolveDeclaredLocalComposeImageRef_UsesResolvedComposeConfigForInterpo
 		},
 	}
 
-	got, err := resolveDeclaredLocalComposeImageRef(context.Background(), summary, []string{filepath.Join(dir, ".env")})
+	got, err := resolveDeclaredLocalComposeImageRef(context.Background(), summary, []string{filepath.Join(dir, ".env")}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -44,12 +44,13 @@ func enforceComposeSourceAuthorityForAuto(
 	targetImage string,
 	portainerService PortainerClient,
 	composeEnvFiles []string,
+	composeManagedEnvContent string,
 ) error {
 	if !isComposeManagedContainer(summary) {
 		return nil
 	}
 
-	declared, err := resolveDeclaredComposeImageRef(ctx, summary, portainerService, composeEnvFiles)
+	declared, err := resolveDeclaredComposeImageRef(ctx, summary, portainerService, composeEnvFiles, composeManagedEnvContent)
 	if err != nil {
 		return err
 	}
@@ -71,12 +72,12 @@ func isComposeManagedContainer(summary gen.ContainerSummary) bool {
 	return project != "" && service != ""
 }
 
-func resolveDeclaredComposeImageRef(ctx context.Context, summary gen.ContainerSummary, portainerService PortainerClient, composeEnvFiles []string) (string, error) {
+func resolveDeclaredComposeImageRef(ctx context.Context, summary gen.ContainerSummary, portainerService PortainerClient, composeEnvFiles []string, composeManagedEnvContent string) (string, error) {
 	if !isComposeManagedContainer(summary) {
 		return "", nil
 	}
 	if detectContainerOrchestrationMode(summary) == orchestrationModeDockerCompose {
-		return resolveDeclaredLocalComposeImageRef(ctx, summary, composeEnvFiles)
+		return resolveDeclaredLocalComposeImageRef(ctx, summary, composeEnvFiles, composeManagedEnvContent)
 	}
 	service := strings.TrimSpace(summary.Labels["com.docker.compose.service"])
 	if service == "" {
@@ -102,7 +103,7 @@ func resolveDeclaredComposeImageRef(ctx context.Context, summary gen.ContainerSu
 	return imageRef, nil
 }
 
-func resolveDeclaredLocalComposeImageRef(ctx context.Context, summary gen.ContainerSummary, composeEnvFiles []string) (string, error) {
+func resolveDeclaredLocalComposeImageRef(ctx context.Context, summary gen.ContainerSummary, composeEnvFiles []string, composeManagedEnvContent string) (string, error) {
 	project, service, workingDir, configFiles, ok := localComposeProjectMetadata(summary)
 	if !ok {
 		return "", fmt.Errorf("%w: compose labels missing", ErrComposeSourceVerificationUnavailable)
@@ -119,7 +120,7 @@ func resolveDeclaredLocalComposeImageRef(ctx context.Context, summary gen.Contai
 		return "", fmt.Errorf("%w: %v", ErrComposeSourceVerificationUnavailable, err)
 	}
 	if composeImageRefNeedsResolution(imageRef) {
-		resolved, err := resolveComposeServiceImageRefViaDockerConfig(ctx, workingDir, configFiles, composeEnvFiles, service)
+		resolved, err := resolveComposeServiceImageRefViaDockerConfig(ctx, workingDir, configFiles, composeEnvFiles, composeManagedEnvContent, service)
 		if err != nil {
 			return "", fmt.Errorf("%w: resolve interpolated compose image for %q: %v", ErrComposeSourceVerificationUnavailable, service, err)
 		}
@@ -158,7 +159,7 @@ func extractComposeServiceImageRefFromFiles(configFiles []string, service string
 	return lastImage, nil
 }
 
-func resolveComposeServiceImageRefViaDockerConfig(ctx context.Context, workingDir string, configFiles, envFiles []string, service string) (string, error) {
+func resolveComposeServiceImageRefViaDockerConfig(ctx context.Context, workingDir string, configFiles, envFiles []string, managedEnvContent, service string) (string, error) {
 	if strings.TrimSpace(service) == "" {
 		return "", errors.New("missing compose service name")
 	}
@@ -168,6 +169,11 @@ func resolveComposeServiceImageRefViaDockerConfig(ctx context.Context, workingDi
 	if strings.TrimSpace(workingDir) == "" {
 		workingDir = filepath.Dir(strings.TrimSpace(configFiles[0]))
 	}
+	envFiles, cleanup, err := materializeManagedComposeEnvForVerification(workingDir, envFiles, managedEnvContent)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
 	out, err := dockerComposeConfigRunner(ctx, workingDir, configFiles, envFiles)
 	if err != nil {
 		return "", err
@@ -177,6 +183,29 @@ func resolveComposeServiceImageRefViaDockerConfig(ctx context.Context, workingDi
 		return "", err
 	}
 	return imageRef, nil
+}
+
+func materializeManagedComposeEnvForVerification(workingDir string, envFiles []string, managedEnvContent string) ([]string, func(), error) {
+	out := append([]string(nil), envFiles...)
+	if strings.TrimSpace(managedEnvContent) == "" {
+		return out, func() {}, nil
+	}
+	tempFile, err := os.CreateTemp(workingDir, ".harborwatch-compose-verify-*")
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("create managed compose verification env file: %w", err)
+	}
+	path := tempFile.Name()
+	if _, err := tempFile.WriteString(managedEnvContent); err != nil {
+		_ = tempFile.Close()
+		_ = os.Remove(path)
+		return nil, func() {}, fmt.Errorf("write managed compose verification env file: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		_ = os.Remove(path)
+		return nil, func() {}, fmt.Errorf("close managed compose verification env file: %w", err)
+	}
+	out = append(out, path)
+	return out, func() { _ = os.Remove(path) }, nil
 }
 
 func composeImageRefNeedsResolution(imageRef string) bool {

@@ -137,3 +137,33 @@ func ResolveDeploymentOverrideEnvFiles(masterDir, repoPath string, dep GitDeploy
 
 	return envFiles, nil
 }
+
+func ResolveDeploymentOverrideEnvContent(repoPath string, dep GitDeployment) (string, []string, error) {
+	envFiles := make([]string, 0, 1)
+
+	inlineEnabled, inlineContent, err := deriveInlineEnvContent(dep)
+	if err != nil {
+		return "", nil, err
+	}
+	if inlineEnabled {
+		return normalizeEnvContent(inlineContent), envFiles, nil
+	}
+	if dep.EnvFilePath != "" {
+		path, err := resolveEnvFilePath(repoPath, dep.EnvFilePath)
+		if err != nil {
+			return "", nil, fmt.Errorf("invalid deployment env file path: %w", err)
+		}
+		if _, err := os.Stat(path); err != nil {
+			return "", nil, fmt.Errorf("env file not found at %s", path)
+		}
+		envFiles = append(envFiles, path)
+	}
+	if strings.TrimSpace(dep.EnvVarsJSON) != "" {
+		legacyOverride, err := legacyEnvVarsJSONToEnvContent(dep.EnvVarsJSON)
+		if err != nil {
+			return "", nil, err
+		}
+		return legacyOverride, envFiles, nil
+	}
+	return "", envFiles, nil
+}
