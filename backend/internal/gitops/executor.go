@@ -141,8 +141,8 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 		}
 	}()
 
-	// Build the command
-	args := []string{"-f", composeFile}
+	// Build the shared compose argument prefix so pull/up use identical env wiring.
+	composeArgs := []string{"-f", composeFile}
 
 	// Handle env-file mapping and environment overrides.
 	inlineEnabled, inlineContent, err := deriveInlineEnvContent(*dep)
@@ -160,7 +160,7 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 			outputSummary = truncateDeployOutput(err.Error())
 			return resultErr
 		}
-		args = append(args, "--env-file", envFilePath)
+		composeArgs = append(composeArgs, "--env-file", envFilePath)
 	} else if dep.EnvFilePath != "" {
 		envFilePath, err = resolveEnvFilePath(repoPath, dep.EnvFilePath)
 		if err != nil {
@@ -173,7 +173,7 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 			outputSummary = truncateDeployOutput(resultErr.Error())
 			return resultErr
 		}
-		args = append(args, "--env-file", envFilePath)
+		composeArgs = append(composeArgs, "--env-file", envFilePath)
 	}
 
 	if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) != "" {
@@ -189,13 +189,13 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 			outputSummary = truncateDeployOutput(err.Error())
 			return resultErr
 		}
-		args = append(args, "--env-file", overridePath)
+		composeArgs = append(composeArgs, "--env-file", overridePath)
 	} else if !dep.EnvInlineEnabled && strings.TrimSpace(dep.EnvVarsJSON) == "" {
 		if path, pathErr := managedInlineEnvFilePath(st.GitOpsMasterDirectory, sourceID, dep.ID); pathErr == nil {
 			_ = os.Remove(path)
 		}
 	}
-	args = append(args, "up", "-d", "--remove-orphans")
+	upArgs := append(append([]string{}, composeArgs...), "up", "-d", "--remove-orphans")
 	notifyDeployProgress(progress, 25, "running", "Resolving compose runtime and env sources")
 
 	runner, err := composecli.Resolve(ctx)
@@ -207,7 +207,8 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 
 	if dep.PullOnDeploy {
 		notifyDeployProgress(progress, 40, "running", "Pulling images")
-		pullCmd := runner.CommandContext(ctx, "-f", composeFile, "pull")
+		pullArgs := append(append([]string{}, composeArgs...), "pull")
+		pullCmd := runner.CommandContext(ctx, pullArgs...)
 		pullCmd.Dir = workDir
 		pullOut, pullErr := pullCmd.CombinedOutput()
 		if len(strings.TrimSpace(string(pullOut))) > 0 {
@@ -237,7 +238,7 @@ func (s *Service) runDeploy(ctx context.Context, sourceID string, depID string, 
 		outputSummary = truncateDeployOutput("Removed stale compose replacement containers: " + strings.Join(removedContainers, ", "))
 	}
 
-	cmd := runner.CommandContext(ctx, args...)
+	cmd := runner.CommandContext(ctx, upArgs...)
 	cmd.Dir = workDir
 
 	// We want to capture both stdout and stderr for logging

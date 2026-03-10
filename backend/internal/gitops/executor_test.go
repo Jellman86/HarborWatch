@@ -403,6 +403,95 @@ exit 1
 	}
 }
 
+func TestRunTrackedDeployPullOnDeployUsesManagedEnvFileForPullAndUp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script test")
+	}
+	ctx := context.Background()
+	db := openStoreTestDB(t)
+	store := NewStore(db)
+	masterDir := t.TempDir()
+	repoPath := filepath.Join(masterDir, "source-pull-env")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "docker-compose.yml"), []byte("services:\n  demo:\n    image: ${IMAGE_NAME}\n"), 0o644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	src := GitSource{
+		ID:               "src-pull-env",
+		Name:             "Pull Env Source",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-pull-env",
+		AuthMethod:       AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(ctx, src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.CreateDeployment(ctx, GitDeployment{
+		ID:               "dep-pull-env",
+		GitSourceID:      src.ID,
+		ComposePath:      "docker-compose.yml",
+		Enabled:          true,
+		PullOnDeploy:     true,
+		EnvInlineEnabled: true,
+		EnvInlineContent: "IMAGE_NAME=nginx:latest\n",
+	}); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	toolDir := t.TempDir()
+	logPath := filepath.Join(toolDir, "compose.log")
+	writeTestScript(t, filepath.Join(toolDir, "docker"), `#!/bin/sh
+if [ "$1" = "compose" ] && [ "$2" = "version" ]; then
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  printf '%s|' "$0" >> "$TEST_LOG"
+  idx=1
+  while [ "$idx" -le "$#" ]; do
+    eval "arg=\${$idx}"
+    printf '%s ' "$arg" >> "$TEST_LOG"
+    idx=$((idx+1))
+  done
+  printf '\n' >> "$TEST_LOG"
+  exit 0
+fi
+exit 1
+`)
+	t.Setenv("TEST_LOG", logPath)
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+originalPath)
+
+	svc := NewService(store, staticSettingsProvider{masterDir: masterDir})
+	if err := svc.RunTrackedDeploy(ctx, src.ID, "dep-pull-env", "job-pull-env", nil); err != nil {
+		t.Fatalf("RunTrackedDeploy returned error: %v", err)
+	}
+
+	logBytes, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read compose log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(logBytes)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected two compose invocations, got %d (%q)", len(lines), string(logBytes))
+	}
+	for _, line := range lines {
+		if !strings.Contains(line, "--env-file") {
+			t.Fatalf("expected compose command to include --env-file, got %q", line)
+		}
+	}
+	if !strings.Contains(lines[0], " pull ") {
+		t.Fatalf("expected first command to be pull, got %q", lines[0])
+	}
+	if !strings.Contains(lines[1], " up ") {
+		t.Fatalf("expected second command to be up, got %q", lines[1])
+	}
+}
+
 func TestRemoveStaleComposeReplacementContainersRemovesOnlyMatchingNonRunningReplacements(t *testing.T) {
 	ctx := context.Background()
 	client := &fakeComposeCleanupClient{
