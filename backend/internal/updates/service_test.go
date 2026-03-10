@@ -703,3 +703,65 @@ func TestPortainerUpdateFailsWhenAIHealthAssessmentUnhealthy(t *testing.T) {
 	}
 	t.Fatal("timeout waiting for failed status")
 }
+
+func TestPortainerUpdateCompletesWhenDependentRestartTimesOut(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "updates.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	if _, err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(db)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	exec := &countingExecutor{}
+	svc := NewService(store, exec, nil, nil, nil, fakePortainerClient{}, jobs.NewManager(1))
+	svc.dependentRestartTimeout = 25 * time.Millisecond
+	svc.discoverDependentTargets = func(ctx context.Context, req Request) ([]dependentRestartTarget, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	res, err := svc.StartUpdate(Request{
+		ContainerID:                   "test-c",
+		ContainerName:                 "test-c",
+		TargetImage:                   "img",
+		ValidateURL:                   "http://x",
+		IsPortainerManaged:            true,
+		PortainerStackID:              1,
+		PortainerEndpointID:           1,
+		SkipHealthCheck:               true,
+		RestartDependentsAfterUpgrade: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := svc.GetJob(context.Background(), res.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job != nil && job.Status == "completed" {
+			foundTimeoutCompletion := false
+			for _, step := range job.Steps {
+				if step.Step == "restart_dependents" && step.Status == "completed" && strings.Contains(strings.ToLower(step.Message), "timed out") {
+					foundTimeoutCompletion = true
+				}
+			}
+			if !foundTimeoutCompletion {
+				t.Fatalf("expected timed out completion for restart_dependents, got %+v", job.Steps)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for completed status")
+}

@@ -86,6 +86,10 @@ type Service struct {
 	portainer  PortainerClient
 	jobManager *jobs.Manager
 
+	dependentRestartTimeout   time.Duration
+	discoverDependentTargets  func(context.Context, Request) ([]dependentRestartTarget, error)
+	restartDependentContainer func(context.Context, dependentRestartTarget, Request) error
+
 	startMu     sync.Mutex
 	mu          sync.RWMutex
 	subscribers map[string][]chan gen.UpdateStepEvent
@@ -93,14 +97,17 @@ type Service struct {
 
 func NewService(store *Store, executor Executor, aiSvc *ai.Service, notif *notifications.Service, diag DiagService, portainer PortainerClient, jm *jobs.Manager) *Service {
 	return &Service{
-		store:       store,
-		executor:    executor,
-		ai:          aiSvc,
-		notif:       notif,
-		diag:        diag,
-		portainer:   portainer,
-		jobManager:  jm,
-		subscribers: map[string][]chan gen.UpdateStepEvent{},
+		store:                     store,
+		executor:                  executor,
+		ai:                        aiSvc,
+		notif:                     notif,
+		diag:                      diag,
+		portainer:                 portainer,
+		jobManager:                jm,
+		dependentRestartTimeout:   2 * time.Minute,
+		discoverDependentTargets:  discoverDependentRestartTargets,
+		restartDependentContainer: restartDependentContainer,
+		subscribers:               map[string][]chan gen.UpdateStepEvent{},
 	}
 }
 
@@ -681,6 +688,13 @@ func (s *Service) restartDependentsBestEffort(ctx context.Context, jobID string,
 		Timestamp: startTs,
 	})
 
+	timeout := s.dependentRestartTimeout
+	if timeout <= 0 {
+		timeout = 2 * time.Minute
+	}
+	restartCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	delaySec := req.DependentRestartDelaySec
 	if delaySec < 0 {
 		delaySec = 0
@@ -693,17 +707,25 @@ func (s *Service) restartDependentsBestEffort(ctx context.Context, jobID string,
 		s.jobManager.UpdateJob(jobID, -1, "running", msg)
 		timer := time.NewTimer(time.Duration(delaySec) * time.Second)
 		select {
-		case <-ctx.Done():
+		case <-restartCtx.Done():
 			timer.Stop()
-			s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: "Skipped: update context cancelled before dependent restarts", Timestamp: time.Now().UTC().Unix()})
+			timeoutMsg := restartCtx.Err()
+			message := "Skipped: update context cancelled before dependent restarts"
+			if errors.Is(timeoutMsg, context.DeadlineExceeded) {
+				message = "Dependent restarts timed out before execution"
+			}
+			s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: message, Timestamp: time.Now().UTC().Unix()})
 			return
 		case <-timer.C:
 		}
 	}
 
-	targets, err := discoverDependentRestartTargets(ctx, req)
+	targets, err := s.discoverDependentTargets(restartCtx, req)
 	if err != nil {
 		msg := "Dependent restart discovery failed: " + err.Error()
+		if errors.Is(restartCtx.Err(), context.DeadlineExceeded) {
+			msg = "Dependent restarts timed out during discovery"
+		}
 		if s.diag != nil {
 			s.diag.Log("WARN", "UpdateEngine", msg)
 		}
@@ -715,30 +737,24 @@ func (s *Service) restartDependentsBestEffort(ctx context.Context, jobID string,
 		return
 	}
 
-	cli, err := dockerengine.NewRawClient()
-	if err != nil || cli == nil {
-		msg := "Docker client unavailable for dependent restarts"
-		if err != nil {
-			msg += ": " + err.Error()
-		}
-		if s.diag != nil {
-			s.diag.Log("WARN", "UpdateEngine", msg)
-		}
-		s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: msg, Timestamp: time.Now().UTC().Unix()})
-		return
-	}
-	defer cli.Close()
-
 	restarted := 0
 	failures := make([]string, 0)
 	for _, dep := range targets {
+		if err := restartCtx.Err(); err != nil {
+			msg := "Dependent restarts timed out"
+			if s.diag != nil {
+				s.diag.Log("WARN", "UpdateEngine", msg)
+			}
+			s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: msg, Timestamp: time.Now().UTC().Unix()})
+			return
+		}
 		name := strings.TrimSpace(dep.Name)
 		if name == "" {
 			name = dep.ID
 		}
 		s.jobManager.UpdateJob(jobID, -1, "running", "Restarting dependent: "+name)
-		restartCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-		err := cli.ContainerRestart(restartCtx, dep.ID, container.StopOptions{})
+		perRestartCtx, cancel := context.WithTimeout(restartCtx, 45*time.Second)
+		err := s.restartDependentContainer(perRestartCtx, dep, req)
 		cancel()
 		if err != nil {
 			failures = append(failures, name)
@@ -755,6 +771,18 @@ func (s *Service) restartDependentsBestEffort(ctx context.Context, jobID string,
 		msg += fmt.Sprintf(", failed=%d (%s)", len(failures), strings.Join(failures, ", "))
 	}
 	s.emit(jobID, gen.UpdateStepEvent{JobID: jobID, Step: "restart_dependents", Status: "completed", Message: msg, Timestamp: time.Now().UTC().Unix()})
+}
+
+func restartDependentContainer(ctx context.Context, dep dependentRestartTarget, req Request) error {
+	cli, err := dockerengine.NewRawClient()
+	if err != nil {
+		return err
+	}
+	if cli == nil {
+		return errors.New("docker client unavailable")
+	}
+	defer cli.Close()
+	return cli.ContainerRestart(ctx, dep.ID, container.StopOptions{})
 }
 
 func discoverDependentRestartTargets(ctx context.Context, req Request) ([]dependentRestartTarget, error) {
