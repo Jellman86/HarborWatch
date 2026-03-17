@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
     import type { ContainerSummary, Metric } from "../api-types";
     import Sparkline from "../components/Sparkline.svelte";
     import PortainerLogo from "../components/PortainerLogo.svelte";
@@ -116,6 +116,12 @@
             logsRefreshTimer = null;
         }
     }
+
+    onDestroy(() => {
+        if (logsRefreshTimer) {
+            clearInterval(logsRefreshTimer);
+        }
+    });
 
     interface ContainerIntelIssue {
         code: string;

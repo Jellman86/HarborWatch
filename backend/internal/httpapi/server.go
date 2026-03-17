@@ -45,6 +45,10 @@ type DockerClient interface {
 	GetContainerLogs(ctx context.Context, id string, tail int, since time.Time, timestamps bool) (dockerengine.ContainerLogs, error)
 	GetContainerComposeConfig(ctx context.Context, id string, portainer *portainer.Client) (string, error)
 	RestartContainer(ctx context.Context, id string) error
+	StopContainer(ctx context.Context, id string) error
+	StartContainer(ctx context.Context, id string) error
+	PauseContainer(ctx context.Context, id string) error
+	UnpauseContainer(ctx context.Context, id string) error
 	ListImages(ctx context.Context) ([]gen.ImageSummary, error)
 	OpenEventStream(ctx context.Context) (io.ReadCloser, error)
 	GetNetworkTopology(ctx context.Context) (dockerengine.NetworkTopologySnapshot, error)
