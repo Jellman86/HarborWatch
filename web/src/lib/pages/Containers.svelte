@@ -52,6 +52,71 @@
     let loadingIgnoreTokens = $state(false);
     let loadingIntelReadiness = $state(false);
 
+    // Container Actions
+    let actionInProgress = $state<Record<string, boolean>>({});
+
+    async function handleContainerAction(id: string, action: "start" | "stop" | "restart" | "pause" | "unpause") {
+        if (actionInProgress[id]) return;
+        actionInProgress[id] = true;
+        try {
+            const res = await fetch(`/api/docker/${id}/${action}`, { method: "POST" });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                alert(`Failed to ${action} container: ${data.error || res.statusText}`);
+            }
+        } catch (e: any) {
+            alert(`Error: ${e.message}`);
+        } finally {
+            actionInProgress[id] = false;
+        }
+    }
+
+    let viewingLogsFor = $state<string | null>(null);
+    let logsContent = $state<string>("");
+    let logsLoading = $state(false);
+    let logsRefreshTimer: ReturnType<typeof setInterval> | null = null;
+    let logsContainerEl = $state<HTMLElement | null>(null);
+
+    async function fetchLogs(id: string) {
+        logsLoading = true;
+        try {
+            const res = await fetch(`/api/docker/${id}/logs?tail=200`);
+            if (res.ok) {
+                const data = await res.json();
+                logsContent = data.combined || data.stdout || data.stderr || "No logs available.";
+                
+                // Auto-scroll to bottom like Dozzle
+                setTimeout(() => {
+                    if (logsContainerEl) {
+                        logsContainerEl.scrollTop = logsContainerEl.scrollHeight;
+                    }
+                }, 50);
+            } else {
+                logsContent = "Failed to load logs.";
+            }
+        } catch {
+            logsContent = "Error loading logs.";
+        } finally {
+            logsLoading = false;
+        }
+    }
+
+    function openLogs(id: string) {
+        viewingLogsFor = id;
+        logsContent = "";
+        fetchLogs(id);
+        if (logsRefreshTimer) clearInterval(logsRefreshTimer);
+        logsRefreshTimer = setInterval(() => fetchLogs(id), 3000);
+    }
+
+    function closeLogs() {
+        viewingLogsFor = null;
+        if (logsRefreshTimer) {
+            clearInterval(logsRefreshTimer);
+            logsRefreshTimer = null;
+        }
+    }
+
     interface ContainerIntelIssue {
         code: string;
         severity: "info" | "warning" | "error";
@@ -861,6 +926,72 @@
                                 </svg>
                             </a>
                         {/if}
+                        <button
+                            onclick={() => openLogs(c.id)}
+                            class="p-2 text-slate-400 hover:text-brand-600 transition-colors"
+                            title="View Logs (Dozzle)"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </button>
+                        {#if c.state.toLowerCase() === 'running'}
+                            <button
+                                onclick={() => handleContainerAction(c.id, 'stop')}
+                                disabled={actionInProgress[c.id]}
+                                class="p-2 text-slate-400 hover:text-rose-500 transition-colors disabled:opacity-50"
+                                title="Stop Container"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                                </svg>
+                            </button>
+                            <button
+                                onclick={() => handleContainerAction(c.id, 'restart')}
+                                disabled={actionInProgress[c.id]}
+                                class="p-2 text-slate-400 hover:text-brand-600 transition-colors disabled:opacity-50"
+                                title="Restart Container"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+                            <button
+                                onclick={() => handleContainerAction(c.id, 'pause')}
+                                disabled={actionInProgress[c.id]}
+                                class="p-2 text-slate-400 hover:text-amber-500 transition-colors disabled:opacity-50"
+                                title="Pause Container"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </button>
+                        {:else if c.state.toLowerCase() === 'paused'}
+                            <button
+                                onclick={() => handleContainerAction(c.id, 'unpause')}
+                                disabled={actionInProgress[c.id]}
+                                class="p-2 text-slate-400 hover:text-emerald-500 transition-colors disabled:opacity-50"
+                                title="Unpause Container"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </button>
+                        {:else}
+                            <button
+                                onclick={() => handleContainerAction(c.id, 'start')}
+                                disabled={actionInProgress[c.id]}
+                                class="p-2 text-slate-400 hover:text-emerald-500 transition-colors disabled:opacity-50"
+                                title="Start Container"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </button>
+                        {/if}
                     </div>
                     <div class="flex gap-2">
                         <button
@@ -895,3 +1026,35 @@
         <p class="text-[11px] text-slate-500">Resolving container intelligence readiness...</p>
     {/if}
 </div>
+
+{#if viewingLogsFor}
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-8" onclick={closeLogs}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="bg-[#1e1e1e] w-full max-w-5xl h-full max-h-[800px] rounded-2xl flex flex-col overflow-hidden shadow-2xl border border-slate-700" onclick={(e) => e.stopPropagation()}>
+            <div class="flex items-center justify-between px-4 py-3 bg-[#2d2d2d] border-b border-slate-700">
+                <div class="flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div>
+                        <h3 class="font-bold text-white text-sm">{containers.find(c => c.id === viewingLogsFor)?.names?.[0]?.replace(/^\//, "") || formatId(viewingLogsFor)}</h3>
+                        <p class="text-xs text-slate-400 font-mono">Dozzle-style Logs</p>
+                    </div>
+                </div>
+                <button onclick={closeLogs} class="p-2 text-slate-400 hover:text-white transition-colors bg-slate-800 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="flex-1 p-4 overflow-y-auto font-mono text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap select-text custom-scrollbar logs-container" bind:this={logsContainerEl}>
+                {#if logsLoading && !logsContent}
+                    <div class="flex items-center justify-center h-full text-slate-500 animate-pulse">Loading logs...</div>
+                {:else}
+                    {logsContent}
+                {/if}
+            </div>
+        </div>
+    </div>
+{/if}

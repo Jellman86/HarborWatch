@@ -5,6 +5,8 @@ All notable changes to HarborWatch are documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Fleet Control Surfaces:** Added quick action icons in the Fleet view for container lifecycle management (Start, Stop, Restart, Pause, Unpause).
+- **Dozzle-style Logs Viewer:** Added a real-time log viewer modal directly in the Fleet view for quick troubleshooting, featuring auto-scroll and mono-spaced formatting.
 - **Migration + Schema Versioning Foundation (2026-02-24):**
   - Centralized SQLite schema migrations with `schema_migrations` and startup migration execution before store init.
   - Added diagnostics reporting for current schema version and migrated core tables (`settings`, `rules`, `updates`, `scanning`, `metrics`, `scheduler`, `diag`, `healthremediation`, `containerintel`, AI stores) into versioned migrations.

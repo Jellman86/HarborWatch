@@ -1375,6 +1375,82 @@ func newMuxWithDepsAndComposeAuditStore(db *sql.DB, dockerClient DockerClient, s
 				writeJSON(w, http.StatusOK, map[string]string{"status": "restarted"})
 			})
 
+			r.Post("/{id}/stop", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				id := chi.URLParam(r, "id")
+				ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				defer cancel()
+				if err := dockerClient.StopContainer(ctx, id); err != nil {
+					status := http.StatusBadGateway
+					if isContainerNotFoundError(err) {
+						status = http.StatusNotFound
+					}
+					writeError(w, status, "stop_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "stopped"})
+			})
+
+			r.Post("/{id}/start", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				id := chi.URLParam(r, "id")
+				ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				defer cancel()
+				if err := dockerClient.StartContainer(ctx, id); err != nil {
+					status := http.StatusBadGateway
+					if isContainerNotFoundError(err) {
+						status = http.StatusNotFound
+					}
+					writeError(w, status, "start_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
+			})
+
+			r.Post("/{id}/pause", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				id := chi.URLParam(r, "id")
+				ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				defer cancel()
+				if err := dockerClient.PauseContainer(ctx, id); err != nil {
+					status := http.StatusBadGateway
+					if isContainerNotFoundError(err) {
+						status = http.StatusNotFound
+					}
+					writeError(w, status, "pause_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "paused"})
+			})
+
+			r.Post("/{id}/unpause", func(w http.ResponseWriter, r *http.Request) {
+				if dockerClient == nil {
+					writeError(w, http.StatusServiceUnavailable, "docker_unavailable", "Docker socket is not available")
+					return
+				}
+				id := chi.URLParam(r, "id")
+				ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				defer cancel()
+				if err := dockerClient.UnpauseContainer(ctx, id); err != nil {
+					status := http.StatusBadGateway
+					if isContainerNotFoundError(err) {
+						status = http.StatusNotFound
+					}
+					writeError(w, status, "unpause_failed", err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "unpaused"})
+			})
+
 			registerRulesRoutes := func(router chi.Router) {
 				getRules := func(w http.ResponseWriter, r *http.Request) {
 					if rulesService == nil {

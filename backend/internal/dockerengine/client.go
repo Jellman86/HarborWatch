@@ -236,6 +236,86 @@ func (c *Client) RestartContainer(ctx context.Context, id string) error {
 	return nil
 }
 
+func (c *Client) StopContainer(ctx context.Context, id string) error {
+	path := fmt.Sprintf("/containers/%s/stop", url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL.String()+path, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("docker stop request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotModified {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("docker stop failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func (c *Client) StartContainer(ctx context.Context, id string) error {
+	path := fmt.Sprintf("/containers/%s/start", url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL.String()+path, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("docker start request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotModified {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("docker start failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func (c *Client) PauseContainer(ctx context.Context, id string) error {
+	path := fmt.Sprintf("/containers/%s/pause", url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL.String()+path, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("docker pause request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("docker pause failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func (c *Client) UnpauseContainer(ctx context.Context, id string) error {
+	path := fmt.Sprintf("/containers/%s/unpause", url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL.String()+path, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("docker unpause request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("docker unpause failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
 func (c *Client) GetContainerLogs(ctx context.Context, id string, tail int, since time.Time, timestamps bool) (ContainerLogs, error) {
 	if strings.TrimSpace(id) == "" {
 		return ContainerLogs{}, fmt.Errorf("container id is required")
