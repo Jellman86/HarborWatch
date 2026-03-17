@@ -67,6 +67,18 @@ func (f fakeDockerClient) GetContainerComposeConfig(ctx context.Context, id stri
 func (f fakeDockerClient) RestartContainer(ctx context.Context, id string) error {
 	return nil
 }
+func (f fakeDockerClient) StopContainer(ctx context.Context, id string) error {
+	return nil
+}
+func (f fakeDockerClient) StartContainer(ctx context.Context, id string) error {
+	return nil
+}
+func (f fakeDockerClient) PauseContainer(ctx context.Context, id string) error {
+	return nil
+}
+func (f fakeDockerClient) UnpauseContainer(ctx context.Context, id string) error {
+	return nil
+}
 func (f fakeDockerClient) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
 	return f.images, nil
 }

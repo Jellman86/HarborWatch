@@ -45,6 +45,22 @@ func (f autoTaskDockerClient) RestartContainer(ctx context.Context, id string) e
 	return nil
 }
 
+func (f autoTaskDockerClient) StopContainer(ctx context.Context, id string) error {
+	return nil
+}
+
+func (f autoTaskDockerClient) StartContainer(ctx context.Context, id string) error {
+	return nil
+}
+
+func (f autoTaskDockerClient) PauseContainer(ctx context.Context, id string) error {
+	return nil
+}
+
+func (f autoTaskDockerClient) UnpauseContainer(ctx context.Context, id string) error {
+	return nil
+}
+
 func (f autoTaskDockerClient) ListImages(ctx context.Context) ([]gen.ImageSummary, error) {
 	return []gen.ImageSummary{}, nil
 }
