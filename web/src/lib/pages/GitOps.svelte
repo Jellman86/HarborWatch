@@ -3,8 +3,9 @@
     import { toasts } from "../stores/ToastStore";
     import { configStore } from "../stores/config.svelte";
 
-    let { onNavigate } = $props<{
+    let { onNavigate, embedded = false } = $props<{
         onNavigate: (route: string, params?: any) => void;
+        embedded?: boolean;
     }>();
 
     // Data types matching backend
@@ -490,251 +491,478 @@
     function hasActiveDeployments(): boolean {
         return Object.values(deployments).some((items) => (items || []).some((dep) => dep.deployStatus === "queued" || dep.deployStatus === "running"));
     }
+
+    function countDeployments(): number {
+        return Object.values(deployments).reduce((total, items) => total + (items?.length || 0), 0);
+    }
+
+    function countBusyDeployments(): number {
+        return Object.values(deployments).reduce((total, items) => {
+            return total + (items || []).filter((dep) => dep.deployStatus === "queued" || dep.deployStatus === "running").length;
+        }, 0);
+    }
+
+    function sourceBusy(source: GitSource): boolean {
+        return syncing[source.id] === true;
+    }
+
+    function sourceCardTone(source: GitSource): string {
+        if (sourceBusy(source)) return "ring-amber-400/40 bg-[linear-gradient(135deg,_rgba(161,98,7,0.14),_rgba(15,23,42,0.95))]";
+        if (source.lastSyncError) return "ring-rose-400/30 bg-white/92 dark:bg-slate-900/92";
+        return "ring-slate-200/80 bg-white/92 dark:bg-slate-900/90";
+    }
+
+    function sourceCardAccent(source: GitSource): string {
+        if (sourceBusy(source)) return "from-amber-400/30 via-transparent to-cyan-400/10";
+        if (source.lastSyncError) return "from-rose-400/30 via-transparent to-amber-400/10";
+        if (source.lastCommitHash) return "from-cyan-500/12 via-transparent to-slate-50/0";
+        return "from-slate-500/10 via-transparent to-slate-50/0";
+    }
+
+    function sourceStateChipClass(source: GitSource): string {
+        if (sourceBusy(source)) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+        if (source.lastSyncError) return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300";
+        return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+    }
+
+    function sourceStateLabel(source: GitSource): string {
+        if (sourceBusy(source)) return "Syncing";
+        if (source.lastSyncError) return "Sync Issue";
+        return "Ready";
+    }
+
+    function sourceStateSummary(source: GitSource): string {
+        if (sourceBusy(source)) return "Refreshing repository contents and stack definitions.";
+        if (source.lastSyncError) return source.lastSyncError;
+        return `Branch ${source.branch} | ${source.syncIntervalMins} min sync`;
+    }
+
+    function deploymentBusy(dep: GitDeployment): boolean {
+        return dep.deployStatus === "queued" || dep.deployStatus === "running" || deploying[dep.id] === true;
+    }
+
+    function deploymentCardTone(dep: GitDeployment): string {
+        if (deploymentBusy(dep)) return "ring-amber-400/40 bg-[linear-gradient(135deg,_rgba(161,98,7,0.16),_rgba(15,23,42,0.95))]";
+        if (dep.deployStatus === "failed") return "ring-rose-400/30 bg-white/92 dark:bg-slate-900/92";
+        if (dep.enabled === false) return "ring-slate-200/80 bg-white/82 dark:bg-slate-900/82";
+        return "ring-slate-200/80 bg-white/92 dark:bg-slate-900/90";
+    }
+
+    function deploymentCardAccent(dep: GitDeployment): string {
+        if (deploymentBusy(dep)) return "from-amber-400/35 via-transparent to-cyan-400/10";
+        if (dep.deployStatus === "failed") return "from-rose-400/30 via-transparent to-slate-50/0";
+        if (dep.deployStatus === "completed") return "from-emerald-400/25 via-transparent to-cyan-400/10";
+        return "from-slate-500/10 via-transparent to-slate-50/0";
+    }
+
+    function deploymentStateTone(dep: GitDeployment): string {
+        if (deploymentBusy(dep)) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
+        if (dep.deployStatus === "failed") return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300";
+        if (dep.deployStatus === "completed") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+        if (dep.enabled === false) return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+        return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
+    }
+
+    function deploymentNoiseClass(dep: GitDeployment): string {
+        return deploymentBusy(dep) ? "deployment-noise animate-deployment-pulse" : "";
+    }
 </script>
 
-<div class="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
-                <span class="p-2.5 rounded-2xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4a3 3 0 00-3 3v4a3 3 0 003 3h4a3 3 0 003-3V7a3 3 0 00-3-3H8zM2 14a2 2 0 012-2h16a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2z" />
-                    </svg>
-                </span>
-                GitOps Repositories
-            </h2>
-            <p class="text-slate-500 dark:text-slate-400 mt-2 font-medium">Manage container stacks directly from Git repositories with automatic synchronization.</p>
-        </div>
-        <button 
-            onclick={() => showAddSourceModal = true}
-            class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-500/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 self-start"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
-            </svg>
-            Add Repository
-        </button>
-    </div>
+<div class={embedded ? "space-y-6" : "relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.09),_transparent_28%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.72))] dark:bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.14),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_28%),linear-gradient(180deg,_rgba(2,6,23,1),_rgba(15,23,42,0.82))]"}>
+    {#if !embedded}
+        <div class="absolute inset-0 pointer-events-none opacity-40 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:42px_42px]"></div>
+        <div class="absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_36%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.08),_transparent_28%)] pointer-events-none"></div>
+        <div class="absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,_transparent,_rgba(15,23,42,0.03))] dark:bg-[linear-gradient(180deg,_transparent,_rgba(2,6,23,0.30))] pointer-events-none"></div>
+    {/if}
 
-    {#if loading && sources.length === 0}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {#each Array(3) as _}
-                <div class="h-64 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 animate-pulse"></div>
-            {/each}
-        </div>
-    {:else if sources.length === 0}
-        <div class="rounded-3xl border-2 border-dashed border-slate-200/60 dark:border-slate-800/60 p-16 text-center bg-white/50 dark:bg-slate-800/30">
-            <div class="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-300 dark:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 4a3 3 0 00-3 3v4a3 3 0 003 3h4a3 3 0 003-3V7a3 3 0 00-3-3H8zM2 14a2 2 0 012-2h16a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2z" />
-                </svg>
-            </div>
-            <h3 class="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">No Repositories Connected</h3>
-            <p class="text-slate-500 dark:text-slate-400 mt-2 max-w-sm mx-auto font-medium">Add a Git repository to start managing your compose stacks with native GitOps workflows.</p>
-            <button 
-                onclick={() => showAddSourceModal = true}
-                class="mt-8 px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all hover:shadow-xl hover:shadow-brand-500/20"
-            >
-                Connect Your First Repository
-            </button>
-        </div>
-    {:else}
-        <div class="grid grid-cols-1 gap-6">
-            {#each sources as source}
-                <div class="group relative bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-brand-500/5 {expandedSourceId === source.id ? 'border-brand-500/40' : 'hover:border-brand-500/30'}">
-                    <div class="p-6 md:p-8 space-y-6">
-                        <div class="flex items-start justify-between gap-4">
-                            <div class="flex items-center gap-4">
-                                <button 
-                                    onclick={() => toggleExpand(source.id)}
-                                    aria-label={expandedSourceId === source.id ? `Collapse repository ${source.name}` : `Expand repository ${source.name}`}
-                                    class="w-14 h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center border border-slate-100 dark:border-slate-700 transition-all group-hover:bg-brand-500/5 group-hover:border-brand-500/20 active:scale-90"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-slate-400 dark:text-slate-500 group-hover:text-brand-500 transition-transform duration-300 {expandedSourceId === source.id ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+    <div class={embedded ? "space-y-6" : "relative mx-auto max-w-[96rem] px-4 py-5 md:px-8 md:py-8 space-y-6"}>
+        <section class="rounded-[2rem] border border-slate-200/70 dark:border-slate-800/80 bg-white/92 dark:bg-slate-950/88 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.55)] backdrop-blur-xl overflow-hidden opacity-0 animate-reveal">
+            <div class="px-5 py-5 md:px-7 md:py-7 border-b border-slate-200/60 dark:border-slate-800/80 bg-[linear-gradient(180deg,_rgba(248,250,252,0.98),_rgba(255,255,255,0.72))] dark:bg-[linear-gradient(180deg,_rgba(15,23,42,0.98),_rgba(15,23,42,0.84))]">
+                <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div class="space-y-3">
+                        <div class="inline-flex items-center gap-2 rounded-full border border-slate-200/70 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-slate-300">
+                            Repository Orchestration
+                        </div>
+                        <div class="border-l-4 border-brand-600 pl-4">
+                            <h2 class="flex items-center gap-3 text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+                                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-brand-500/20 bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 7.5A2.5 2.5 0 019.5 5h5A2.5 2.5 0 0117 7.5v1A2.5 2.5 0 0114.5 11h-5A2.5 2.5 0 017 8.5v-1Z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 17.5A2.5 2.5 0 018.5 15h7A2.5 2.5 0 0118 17.5v1A2.5 2.5 0 0115.5 21h-7A2.5 2.5 0 016 18.5v-1Z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.5 11v4M14.5 11v4M12 11v4" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.5 12.5H6.5A2.5 2.5 0 004 15v.5M14.5 12.5h3A2.5 2.5 0 0120 15v.5" />
                                     </svg>
-                                </button>
-                                <div>
-                                    <h4 class="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-tight">{source.name}</h4>
-                                    <div class="flex items-center gap-2 mt-1.5">
-                                        <span class="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border border-slate-200/50 dark:border-slate-700/50">{source.branch}</span>
-                                        <span class="text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate max-w-[200px]">{source.url}</span>
+                                </span>
+                                GitOps Repositories
+                            </h2>
+                            <p class="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+                                Manage repository-backed stacks with identity-first cards, explicit sync state, and nested deployment controls.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <button
+                            onclick={() => showAddSourceModal = true}
+                            class="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 shadow-sm transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Repository
+                        </button>
+                        <button
+                            onclick={loadSources}
+                            class="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 shadow-sm transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Refresh Sources
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 px-4 py-3">
+                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Repositories</p>
+                        <p class="mt-1 text-lg font-black text-slate-900 dark:text-white">{sources.length}</p>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 px-4 py-3">
+                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Deployment Rules</p>
+                        <p class="mt-1 text-lg font-black text-slate-900 dark:text-white">{countDeployments()}</p>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 px-4 py-3">
+                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Active Jobs</p>
+                        <p class="mt-1 text-lg font-black text-slate-900 dark:text-white">{countBusyDeployments()}</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {#if loading && sources.length === 0}
+            <div class="rounded-[1.75rem] border border-slate-200/70 dark:border-slate-800 bg-white/85 dark:bg-slate-950/80 px-6 py-16 text-center shadow-sm">
+                <div class="mx-auto w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                <p class="mt-4 text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Discovering repositories</p>
+            </div>
+        {:else if sources.length === 0}
+            <div class="rounded-[1.75rem] border border-dashed border-slate-200/80 dark:border-slate-800 bg-white/75 dark:bg-slate-950/60 px-8 py-14 text-center">
+                <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 7.5A2.5 2.5 0 019.5 5h5A2.5 2.5 0 0117 7.5v1A2.5 2.5 0 0114.5 11h-5A2.5 2.5 0 017 8.5v-1Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 17.5A2.5 2.5 0 018.5 15h7A2.5 2.5 0 0118 17.5v1A2.5 2.5 0 0115.5 21h-7A2.5 2.5 0 016 18.5v-1Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.5 11v4M14.5 11v4M12 11v4" />
+                    </svg>
+                </div>
+                <h3 class="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">No Repositories Connected</h3>
+                <p class="mt-2 max-w-lg mx-auto text-sm text-slate-500 dark:text-slate-400">Add a Git repository to start managing compose stacks with native GitOps workflows.</p>
+                <button
+                    onclick={() => showAddSourceModal = true}
+                    class="mt-8 inline-flex items-center justify-center rounded-2xl bg-brand-600 px-8 py-3 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-700 shadow-lg shadow-brand-500/20"
+                >
+                    Connect Your First Repository
+                </button>
+            </div>
+        {:else}
+            <div class="space-y-5 opacity-0 animate-reveal stagger-1">
+                {#each sources as source, index}
+                    <article
+                        style="animation-delay: {0.08 + (index * 0.05)}s"
+                        class="opacity-0 animate-reveal group relative overflow-hidden rounded-[1.75rem] border ring-1 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.55)] transition-all hover:-translate-y-0.5 hover:shadow-[0_28px_70px_-38px_rgba(15,23,42,0.72)] {sourceCardTone(source)}"
+                    >
+                        <div class="absolute inset-0 pointer-events-none {sourceBusy(source) ? 'repo-noise animate-repo-pulse' : ''}"></div>
+                        <div class="relative h-1 bg-gradient-to-r {sourceCardAccent(source)}"></div>
+                        <div class="relative space-y-5 p-5 md:p-6">
+                            <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-start gap-4">
+                                        <button
+                                            onclick={() => toggleExpand(source.id)}
+                                            aria-label={expandedSourceId === source.id ? `Collapse repository ${source.name}` : `Expand repository ${source.name}`}
+                                            class="mt-0.5 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200/70 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 transition-all hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300 active:scale-95"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-400 transition-transform duration-300 {expandedSourceId === source.id ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        <div class="min-w-0 space-y-2">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] {sourceStateChipClass(source)}">
+                                                    {sourceStateLabel(source)}
+                                                </span>
+                                                <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300">
+                                                    Branch {source.branch}
+                                                </span>
+                                            </div>
+                                            <h3 class="truncate text-2xl font-black tracking-tight text-slate-900 dark:text-white" title={source.name}>{source.name}</h3>
+                                            <p class="truncate text-[10px] font-mono text-slate-500 dark:text-slate-400" title={source.url}>{source.url}</p>
+                                            <div class="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                                                <span class="rounded-full bg-slate-100/90 dark:bg-slate-800 px-2.5 py-1">{source.authMethod === 'none' ? 'Public' : source.authMethod === 'http_token' ? 'Token Auth' : 'SSH Auth'}</span>
+                                                <span class="rounded-full bg-slate-100/90 dark:bg-slate-800 px-2.5 py-1">{source.syncIntervalMins} min sync</span>
+                                                <span class="rounded-full bg-slate-100/90 dark:bg-slate-800 px-2.5 py-1">Target {source.targetDir || '.'}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button 
-                                    onclick={() => openAddDeploymentModal(source.id)}
-                                    class="px-4 py-2 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 text-[10px] font-black uppercase tracking-widest border border-brand-500/20 hover:bg-brand-500/20 transition-all flex items-center gap-2"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    Add Stack
-                                </button>
-                                <button 
-                                    onclick={() => syncSource(source.id)}
-                                    disabled={syncing[source.id]}
-                                    class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-400 transition-all border border-slate-100 dark:border-slate-700 disabled:opacity-50"
-                                    title="Sync Repository"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 {syncing[source.id] ? 'animate-spin' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                </button>
-                                <button 
-                                    onclick={() => deleteSource(source.id)}
-                                    class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 transition-all border border-slate-100 dark:border-slate-700"
-                                    title="Remove Repository"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
 
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div class="p-2">
-                                <p class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Last Sync</p>
-                                <p class="text-sm font-bold text-slate-700 dark:text-slate-200 mt-1">{formatRelativeTime(source.lastSyncAt)}</p>
+                                <div class="flex flex-wrap items-center gap-2 xl:justify-end">
+                                    <button
+                                        onclick={() => openAddDeploymentModal(source.id)}
+                                        class="inline-flex items-center justify-center rounded-2xl bg-brand-600 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-brand-500/20 transition-all hover:bg-brand-700"
+                                    >
+                                        Add Stack
+                                    </button>
+                                    <button
+                                        onclick={() => syncSource(source.id)}
+                                        disabled={syncing[source.id]}
+                                        class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300 disabled:opacity-50"
+                                        title="Sync Repository"
+                                    >
+                                        {syncing[source.id] ? 'Syncing...' : 'Sync'}
+                                    </button>
+                                    <button
+                                        onclick={() => toggleExpand(source.id)}
+                                        class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
+                                    >
+                                        {expandedSourceId === source.id ? 'Collapse' : 'Expand'}
+                                    </button>
+                                    <button
+                                        onclick={() => deleteSource(source.id)}
+                                        class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-rose-400 hover:text-rose-600 dark:hover:text-rose-300"
+                                        title="Remove Repository"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
                             </div>
-                            <div class="p-2">
-                                <p class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Commit</p>
-                                <p class="text-sm font-mono font-bold text-slate-700 dark:text-slate-200 mt-1">{source.lastCommitHash ? source.lastCommitHash.slice(0, 7) : "N/A"}</p>
-                            </div>
-                            <div class="p-2">
-                                <p class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Auth</p>
-                                <p class="text-sm font-bold text-slate-700 dark:text-slate-200 mt-1 uppercase tracking-tight">
-                                    {source.authMethod === 'none' ? 'Public' : source.authMethod === 'http_token' ? 'Token' : 'SSH Key'}
-                                </p>
-                            </div>
-                            <div class="p-2">
-                                <p class="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Active Stacks</p>
-                                <p class="text-sm font-bold text-slate-700 dark:text-slate-200 mt-1">{deployments[source.id]?.length || 0}</p>
-                            </div>
-                        </div>
 
-                        {#if expandedSourceId === source.id}
-                            <div class="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4 animate-in slide-in-from-top-4 duration-500">
-                                <h5 class="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Deployment Rules</h5>
-                                {#if (deployments[source.id] || []).length === 0}
-                                    <div class="p-8 text-center bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
-                                        <p class="text-sm text-slate-500 font-medium italic">No compose files selected for deployment from this repository.</p>
-                                        <button 
-                                            onclick={() => openAddDeploymentModal(source.id)}
-                                            class="mt-4 text-[10px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400 hover:underline"
-                                        >
-                                            Configure first stack
-                                        </button>
+                            <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
+                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Last Sync</p>
+                                    <p class="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">{formatRelativeTime(source.lastSyncAt)}</p>
+                                </div>
+                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
+                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Commit</p>
+                                    <p class="mt-1 text-sm font-mono font-bold text-slate-700 dark:text-slate-200">{source.lastCommitHash ? source.lastCommitHash.slice(0, 7) : "N/A"}</p>
+                                </div>
+                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
+                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Auth</p>
+                                    <p class="mt-1 text-sm font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">
+                                        {source.authMethod === 'none' ? 'Public' : source.authMethod === 'http_token' ? 'Token' : 'SSH Key'}
+                                    </p>
+                                </div>
+                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
+                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Deployment Rules</p>
+                                    <p class="mt-1 text-sm font-black text-slate-900 dark:text-white">{(deployments[source.id] || []).length}</p>
+                                </div>
+                            </div>
+
+                            <div class="grid gap-3 xl:grid-cols-[1.3fr_0.7fr]">
+                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/35 px-4 py-4">
+                                    <div class="flex items-start justify-between gap-4">
+                                        <div class="min-w-0">
+                                            <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Repository State</p>
+                                            <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-300">{sourceStateSummary(source)}</p>
+                                            <p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+                                                Sync target: <span class="font-mono">{source.targetDir || '.'}</span>
+                                            </p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Sync Interval</p>
+                                            <p class="mt-1 text-xl font-black text-slate-900 dark:text-white">{source.syncIntervalMins}m</p>
+                                        </div>
                                     </div>
-                                {:else}
-                                    <div class="grid grid-cols-1 gap-3">
-                                        {#each deployments[source.id] as dep}
-                                            <div class="flex flex-wrap md:flex-nowrap items-center justify-between py-6 border-b border-slate-200/40 dark:border-slate-700/60 last:border-0 gap-4">
-                                                <div class="flex items-center gap-4">
-                                                    <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
-                                                        </svg>
-                                                    </div>
-                                                    <div>
-                                                        <p class="text-sm font-bold text-slate-900 dark:text-white font-mono">{dep.composePath}</p>
-                                                        <p class="text-[10px] text-slate-500 mt-0.5 font-mono break-all">Mapped: {resolvedComposeMapping(source.targetDir, dep.composePath)}</p>
-                                                        <p class="text-[10px] text-slate-500 mt-0.5">Last deployed: {formatRelativeTime(dep.lastDeployedAt)} {dep.lastDeployedHash ? `(${dep.lastDeployedHash.slice(0, 7)})` : ''}</p>
-                                                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                                                            <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {deploymentStateClass(dep)}">
-                                                                {deploymentStateLabel(dep)}
-                                                            </span>
-                                                            <p class="text-[10px] text-slate-500">
-                                                                {deploymentStatusSummary(dep)}
-                                                            </p>
+                                    {#if source.lastSyncError}
+                                        <div class="mt-4 rounded-2xl border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 px-3 py-3 text-sm text-rose-700 dark:text-rose-300">
+                                            {source.lastSyncError}
+                                        </div>
+                                    {/if}
+                                </div>
+
+                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/35 px-4 py-4">
+                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Top-Level Actions</p>
+                                    <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Repository sync, stack creation, and lifecycle controls stay at the card edge.</p>
+                                </div>
+                            </div>
+
+                            {#if expandedSourceId === source.id}
+                                <div class="space-y-4 rounded-[1.5rem] border border-slate-200/70 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/45 p-4 md:p-5">
+                                    <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                                        <div>
+                                            <p class="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Deployment Rules</p>
+                                            <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">Nested cards preserve identity and job state for each stack rule.</p>
+                                        </div>
+                                        <span class="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300">
+                                            {(deployments[source.id] || []).length} Stacks
+                                        </span>
+                                    </div>
+
+                                    {#if (deployments[source.id] || []).length === 0}
+                                        <div class="rounded-[1.5rem] border border-dashed border-slate-200/80 dark:border-slate-800 bg-white/75 dark:bg-slate-950/50 px-8 py-12 text-center">
+                                            <p class="text-sm text-slate-500 font-medium italic">No compose files selected for deployment from this repository.</p>
+                                            <button
+                                                onclick={() => openAddDeploymentModal(source.id)}
+                                                class="mt-4 text-[10px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400 hover:underline"
+                                            >
+                                                Configure first stack
+                                            </button>
+                                        </div>
+                                    {:else}
+                                        <div class="grid grid-cols-1 gap-3">
+                                            {#each deployments[source.id] as dep}
+                                                <article class="group/dep relative overflow-hidden rounded-[1.5rem] border ring-1 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_60px_-32px_rgba(15,23,42,0.58)] {deploymentCardTone(dep)}">
+                                                    <div class="absolute inset-0 pointer-events-none {deploymentNoiseClass(dep)}"></div>
+                                                    <div class="relative h-1 bg-gradient-to-r {deploymentCardAccent(dep)}"></div>
+                                                    {#if deploymentBusy(dep)}
+                                                        <div class="absolute inset-x-0 top-0 h-full bg-[linear-gradient(90deg,rgba(245,158,11,0.10),transparent_24%,transparent_76%,rgba(34,211,238,0.08))] pointer-events-none"></div>
+                                                    {/if}
+                                                    <div class="relative space-y-4 p-4 md:p-5">
+                                                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                                            <div class="min-w-0 flex-1">
+                                                                <div class="flex flex-wrap items-center gap-2">
+                                                                    <p class="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Nested Stack</p>
+                                                                    <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] {deploymentStateTone(dep)}">
+                                                                        {deploymentStateLabel(dep)}
+                                                                    </span>
+                                                                    {#if dep.autoCreated && dep.enabled === false}
+                                                                        <span class="rounded-full bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em]">
+                                                                            Newly Discovered
+                                                                        </span>
+                                                                    {/if}
+                                                                    {#if dep.enabled === false}
+                                                                        <span class="rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em]">
+                                                                            Disabled
+                                                                        </span>
+                                                                    {/if}
+                                                                </div>
+                                                                <h4 class="mt-2 truncate text-lg font-black tracking-tight text-slate-900 dark:text-white font-mono" title={dep.composePath}>{dep.composePath}</h4>
+                                                                <p class="mt-1 text-[10px] font-mono text-slate-500 dark:text-slate-400 break-all">Mapped: {resolvedComposeMapping(source.targetDir, dep.composePath)}</p>
+                                                                <p class="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                                                                    Last deployed: {formatRelativeTime(dep.lastDeployedAt)} {dep.lastDeployedHash ? `(${dep.lastDeployedHash.slice(0, 7)})` : ''}
+                                                                </p>
+                                                            </div>
+                                                            <div class="flex flex-wrap items-center gap-2 lg:justify-end">
+                                                                <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] {deploymentStateTone(dep)}">
+                                                                    {deploymentStateLabel(dep)}
+                                                                </span>
+                                                                <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300">
+                                                                    {deploymentBusy(dep) ? 'Job Active' : 'Idle'}
+                                                                </span>
+                                                            </div>
                                                         </div>
-                                                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                                                            <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {activeEnvSourceClass(dep)}">
-                                                                {activeEnvSourceLabel(dep)}
-                                                            </span>
-                                                            <p class="text-[10px] text-slate-500">{activeEnvSourceSummary(dep)}</p>
+
+                                                        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                                            <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
+                                                                <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Status</p>
+                                                                <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-300">{deploymentStatusSummary(dep)}</p>
+                                                            </div>
+                                                            <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
+                                                                <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Env Source</p>
+                                                                <p class="mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] {activeEnvSourceClass(dep)}">{activeEnvSourceLabel(dep)}</p>
+                                                                <p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{activeEnvSourceSummary(dep)}</p>
+                                                            </div>
+                                                            <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
+                                                                <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Image Policy</p>
+                                                                <p class="mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] {deployImagePolicyClass(dep)}">{deployImagePolicyLabel(dep)}</p>
+                                                                <p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{deployImagePolicySummary(dep)}</p>
+                                                            </div>
+                                                            <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
+                                                                <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Activity</p>
+                                                                <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-300">{dep.deployStatusMessage || dep.lastError || (dep.lastDeployedAt ? `Last successful deploy ${formatRelativeTime(dep.lastDeployedAt)}` : 'Deployment has not run yet.')}</p>
+                                                            </div>
                                                         </div>
-                                                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                                                            <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {deployImagePolicyClass(dep)}">
-                                                                {deployImagePolicyLabel(dep)}
-                                                            </span>
-                                                            <p class="text-[10px] text-slate-500">{deployImagePolicySummary(dep)}</p>
+
+                                                        <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/70 dark:bg-slate-950/35 px-4 py-4">
+                                                            <div class="flex items-center justify-between gap-3">
+                                                                <div class="min-w-0">
+                                                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Deployment State</p>
+                                                                    <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                                                        {deploymentBusy(dep) ? 'This card stays active while the deployment remains queued or running.' : 'No active job is attached to this rule.'}
+                                                                    </p>
+                                                                </div>
+                                                                <div class="flex items-center gap-2">
+                                                                    <span class="h-2.5 w-2.5 rounded-full {deploymentBusy(dep) ? 'bg-amber-500 animate-pulse' : dep.deployStatus === 'completed' ? 'bg-emerald-500' : dep.deployStatus === 'failed' ? 'bg-rose-500' : 'bg-slate-400'}"></span>
+                                                                    <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] {deploymentBusy(dep) ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}">
+                                                                        {deploymentBusy(dep) ? 'In Progress' : dep.deployStatus === 'failed' ? 'Failed' : dep.deployStatus === 'completed' ? 'Completed' : 'Idle'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
                                                         </div>
+
                                                         {#if dep.envFilePath}
                                                             <p class="text-[10px] text-slate-500 mt-0.5 font-mono">Env file: {dep.envFilePath}</p>
                                                         {/if}
-                                                    </div>
-                                                </div>
-                                                <div class="flex items-center gap-2">
-                                                    {#if dep.enabled === false}
-                                                        <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[9px] font-black uppercase tracking-widest">
-                                                            Disabled
-                                                        </span>
-                                                    {/if}
-                                                    {#if dep.autoCreated && dep.enabled === false}
-                                                        <span class="px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 text-[9px] font-black uppercase tracking-widest">
-                                                            Newly Discovered
-                                                        </span>
-                                                    {/if}
-                                                    {#if dep.lastError}
-                                                        <span class="p-2 text-rose-500" title={dep.lastError}>
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                        </span>
-                                                    {/if}
-                                                    <button 
-                                                        onclick={() => deployNow(dep.id)}
-                                                        disabled={deploying[dep.id] || dep.enabled === false}
-                                                        class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-all disabled:opacity-50"
-                                                    >
-                                                        {deploying[dep.id] ? 'Queueing...' : dep.deployStatus === 'running' ? 'Deploying...' : dep.deployStatus === 'queued' ? 'Queued' : 'Deploy Now'}
-                                                    </button>
-                                                    <button
-                                                        onclick={() => toggleDeployment(dep.id, source.id, dep.enabled === false)}
-                                                        class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-all"
-                                                    >
-                                                        {dep.enabled === false ? 'Enable' : 'Disable'}
-                                                    </button>
-                                                    <button
-                                                        onclick={() => openEditDeploymentModal(source.id, dep)}
-                                                        class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-all"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button 
-                                                        onclick={() => deleteDeployment(dep.id, source.id)}
-                                                        aria-label={`Delete deployment ${dep.composePath}`}
-                                                        class="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </div>
-                        {/if}
 
-                        {#if source.lastSyncError}
-                            <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 flex items-start gap-3">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-rose-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <p class="text-[11px] text-rose-700 dark:text-rose-400 font-medium leading-relaxed">{source.lastSyncError}</p>
-                            </div>
-                        {/if}
-                    </div>
-                </div>
-            {/each}
-        </div>
-    {/if}
+                                                        {#if dep.lastError}
+                                                            <div class="rounded-2xl border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 px-3 py-3 text-[11px] text-rose-700 dark:text-rose-300">
+                                                                {dep.lastError}
+                                                            </div>
+                                                        {/if}
+
+                                                        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                                            <button
+                                                                onclick={() => deployNow(dep.id)}
+                                                                disabled={deploying[dep.id] || dep.enabled === false}
+                                                                class="inline-flex items-center justify-center rounded-2xl bg-brand-600 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-brand-500/20 transition-all hover:bg-brand-700 disabled:opacity-50"
+                                                            >
+                                                                {deploying[dep.id] ? 'Queueing...' : dep.deployStatus === 'running' ? 'Deploying...' : dep.deployStatus === 'queued' ? 'Queued' : 'Deploy Now'}
+                                                            </button>
+                                                            <button
+                                                                onclick={() => toggleDeployment(dep.id, source.id, dep.enabled === false)}
+                                                                class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
+                                                            >
+                                                                {dep.enabled === false ? 'Enable' : 'Disable'}
+                                                            </button>
+                                                            <button
+                                                                onclick={() => openEditDeploymentModal(source.id, dep)}
+                                                                class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                            <button
+                                                                onclick={() => deleteDeployment(dep.id, source.id)}
+                                                                aria-label={`Delete deployment ${dep.composePath}`}
+                                                                class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-rose-400 hover:text-rose-600 dark:hover:text-rose-300"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </article>
+                                            {/each}
+                                        </div>
+                                    {/if}
+                                </div>
+                            {/if}
+                        </div>
+                    </article>
+                {/each}
+            </div>
+        {/if}
+    </div>
 </div>
+<style>
+    :global(.repo-noise), :global(.deployment-noise) {
+        background-image:
+            linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+        background-size: 12px 12px;
+        opacity: 0.55;
+        mix-blend-mode: soft-light;
+    }
+
+    :global(.animate-repo-pulse), :global(.animate-deployment-pulse) {
+        animation: cardPulse 1.8s ease-in-out infinite alternate;
+    }
+
+    @keyframes cardPulse {
+        0% {
+            filter: saturate(1) brightness(1);
+        }
+        100% {
+            filter: saturate(1.08) brightness(1.03);
+        }
+    }
+</style>
 
 {#if showAddSourceModal}
     <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/40 animate-in fade-in duration-300">

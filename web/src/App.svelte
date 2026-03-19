@@ -218,6 +218,10 @@
         {#await import("./lib/pages/ContainerPage.svelte") then Mod}
           <Mod.default id={routeParams.id} params={routeParams} onNavigate={navigate} />
         {/await}
+      {:else if currentRoute === 'container-logs'}
+        {#await import("./lib/pages/ContainerLogsPage.svelte") then Mod}
+          <Mod.default id={routeParams.id} {containers} onNavigate={navigate} backRoute={routeParams?.backRoute} backParams={routeParams?.backParams} />
+        {/await}
       {:else if currentRoute === 'stacks'}
         {#await import("./lib/pages/Stacks.svelte") then Mod}
           <Mod.default onNavigate={navigate} params={routeParams} />

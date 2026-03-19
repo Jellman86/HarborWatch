@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount, onDestroy } from "svelte";
+    import { onMount } from "svelte";
     import type { ContainerSummary, Metric } from "../api-types";
     import Sparkline from "../components/Sparkline.svelte";
     import PortainerLogo from "../components/PortainerLogo.svelte";
@@ -9,7 +9,7 @@
 
     let { containers, params, onNavigate } = $props<{
         containers: ContainerSummary[];
-        params?: { search?: string };
+        params?: { search?: string; filter?: string };
         onNavigate: (route: string, params?: any) => void;
     }>();
 
@@ -71,58 +71,6 @@
         }
     }
 
-    let viewingLogsFor = $state<string | null>(null);
-    let logsContent = $state<string>("");
-    let logsLoading = $state(false);
-    let logsRefreshTimer: ReturnType<typeof setInterval> | null = null;
-    let logsContainerEl = $state<HTMLElement | null>(null);
-
-    async function fetchLogs(id: string) {
-        logsLoading = true;
-        try {
-            const res = await fetch(`/api/docker/${id}/logs?tail=200`);
-            if (res.ok) {
-                const data = await res.json();
-                logsContent = data.combined || data.stdout || data.stderr || "No logs available.";
-                
-                // Auto-scroll to bottom like Dozzle
-                setTimeout(() => {
-                    if (logsContainerEl) {
-                        logsContainerEl.scrollTop = logsContainerEl.scrollHeight;
-                    }
-                }, 50);
-            } else {
-                logsContent = "Failed to load logs.";
-            }
-        } catch {
-            logsContent = "Error loading logs.";
-        } finally {
-            logsLoading = false;
-        }
-    }
-
-    function openLogs(id: string) {
-        viewingLogsFor = id;
-        logsContent = "";
-        fetchLogs(id);
-        if (logsRefreshTimer) clearInterval(logsRefreshTimer);
-        logsRefreshTimer = setInterval(() => fetchLogs(id), 3000);
-    }
-
-    function closeLogs() {
-        viewingLogsFor = null;
-        if (logsRefreshTimer) {
-            clearInterval(logsRefreshTimer);
-            logsRefreshTimer = null;
-        }
-    }
-
-    onDestroy(() => {
-        if (logsRefreshTimer) {
-            clearInterval(logsRefreshTimer);
-        }
-    });
-
     interface ContainerIntelIssue {
         code: string;
         severity: "info" | "warning" | "error";
@@ -161,6 +109,14 @@
     }
 
     const formatId = (id: string) => (id.length > 12 ? id.slice(0, 12) : id);
+
+    function fleetRouteParams(): { search?: string; filter?: FleetFilter } {
+        const nextParams: { search?: string; filter?: FleetFilter } = {};
+        const trimmedSearch = searchQuery.trim();
+        if (trimmedSearch) nextParams.search = trimmedSearch;
+        if (activeFilter !== "all") nextParams.filter = activeFilter;
+        return nextParams;
+    }
 
     const stateColor = (state: string) => {
         switch (state.toLowerCase()) {
@@ -933,9 +889,9 @@
                             </a>
                         {/if}
                         <button
-                            onclick={() => openLogs(c.id)}
+                            onclick={() => onNavigate("container-logs", { id: c.id, backRoute: "containers", backParams: fleetRouteParams() })}
                             class="p-2 text-slate-400 hover:text-brand-600 transition-colors"
-                            title="View Logs (Dozzle)"
+                            title="Open Logs"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1032,35 +988,3 @@
         <p class="text-[11px] text-slate-500">Resolving container intelligence readiness...</p>
     {/if}
 </div>
-
-{#if viewingLogsFor}
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-8" onclick={closeLogs}>
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="bg-[#1e1e1e] w-full max-w-5xl h-full max-h-[800px] rounded-2xl flex flex-col overflow-hidden shadow-2xl border border-slate-700" onclick={(e) => e.stopPropagation()}>
-            <div class="flex items-center justify-between px-4 py-3 bg-[#2d2d2d] border-b border-slate-700">
-                <div class="flex items-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <div>
-                        <h3 class="font-bold text-white text-sm">{containers.find(c => c.id === viewingLogsFor)?.names?.[0]?.replace(/^\//, "") || formatId(viewingLogsFor)}</h3>
-                        <p class="text-xs text-slate-400 font-mono">Dozzle-style Logs</p>
-                    </div>
-                </div>
-                <button onclick={closeLogs} class="p-2 text-slate-400 hover:text-white transition-colors bg-slate-800 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="flex-1 p-4 overflow-y-auto font-mono text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap select-text custom-scrollbar logs-container" bind:this={logsContainerEl}>
-                {#if logsLoading && !logsContent}
-                    <div class="flex items-center justify-center h-full text-slate-500 animate-pulse">Loading logs...</div>
-                {:else}
-                    {logsContent}
-                {/if}
-            </div>
-        </div>
-    </div>
-{/if}
