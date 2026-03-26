@@ -19,19 +19,20 @@ import (
 )
 
 type composeProjectEditorResponse struct {
-	ProjectKey      string                      `json:"projectKey"`
-	ProjectName     string                      `json:"projectName"`
-	WorkingDir      string                      `json:"workingDir,omitempty"`
-	SourceStatus    composeSourceStatus         `json:"sourceStatus"`
-	SourceVerified  bool                        `json:"sourceVerified"`
-	SourceWritable  bool                        `json:"sourceWritable"`
-	ComposeEditable bool                        `json:"composeEditable"`
-	EnvEditable     bool                        `json:"envEditable"`
-	EnvCreatable    bool                        `json:"envCreatable"`
-	EnvPath         string                      `json:"envPath,omitempty"`
-	ComposeFiles    []composeeditor.FileState   `json:"composeFiles"`
-	EnvFile         *composeeditor.FileState    `json:"envFile,omitempty"`
-	Members         []localComposeProjectMember `json:"members,omitempty"`
+	ProjectKey         string                      `json:"projectKey"`
+	ProjectName        string                      `json:"projectName"`
+	WorkingDir         string                      `json:"workingDir,omitempty"`
+	SourceStatus       composeSourceStatus         `json:"sourceStatus"`
+	SourceVerified     bool                        `json:"sourceVerified"`
+	SourceWritable     bool                        `json:"sourceWritable"`
+	ComposeEditable    bool                        `json:"composeEditable"`
+	EnvEditable        bool                        `json:"envEditable"`
+	EnvCreatable       bool                        `json:"envCreatable"`
+	EnvPath            string                      `json:"envPath,omitempty"`
+	ComposeFiles       []composeeditor.FileState   `json:"composeFiles"`
+	EnvFile            *composeeditor.FileState    `json:"envFile,omitempty"`
+	ManagedEnvContent  string                      `json:"managedEnvContent,omitempty"`
+	Members            []localComposeProjectMember `json:"members,omitempty"`
 }
 
 type composeProjectValidateRequest struct {
@@ -79,20 +80,43 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 				writeError(w, http.StatusBadGateway, "compose_source_read_failed", err.Error())
 				return
 			}
+
+			// Resolve the HarborWatch-managed env content for GitOps-backed projects.
+			// This is the env that is actually used at deploy time and may not be present
+			// as a regular .env file on disk.
+			managedEnvContent := ""
+			if deps.settingsService != nil && deps.gitOpsLookup != nil {
+				if st, stErr := deps.settingsService.Get(r.Context()); stErr == nil {
+					content, overrideFiles, _ := resolveGitOpsOverrideEnvFiles(
+						r.Context(), project.WorkingDir, project.ConfigFiles,
+						st.GitOpsMasterDirectory, deps.gitOpsLookup,
+					)
+					if content != "" {
+						managedEnvContent = content
+					} else if len(overrideFiles) > 0 {
+						// envFilePath case: content is on disk at the resolved path
+						if raw, readErr := os.ReadFile(overrideFiles[0]); readErr == nil {
+							managedEnvContent = string(raw)
+						}
+					}
+				}
+			}
+
 			writeJSON(w, http.StatusOK, composeProjectEditorResponse{
-				ProjectKey:      project.ProjectKey,
-				ProjectName:     project.ProjectName,
-				WorkingDir:      project.WorkingDir,
-				SourceStatus:    project.SourceStatus,
-				SourceVerified:  project.SourceVerified,
-				SourceWritable:  project.SourceWritable,
-				ComposeEditable: project.ComposeEditable,
-				EnvEditable:     project.EnvEditable,
-				EnvCreatable:    project.EnvCreatable,
-				EnvPath:         project.EnvPath,
-				ComposeFiles:    composeFiles,
-				EnvFile:         envFile,
-				Members:         project.Members,
+				ProjectKey:        project.ProjectKey,
+				ProjectName:       project.ProjectName,
+				WorkingDir:        project.WorkingDir,
+				SourceStatus:      project.SourceStatus,
+				SourceVerified:    project.SourceVerified,
+				SourceWritable:    project.SourceWritable,
+				ComposeEditable:   project.ComposeEditable,
+				EnvEditable:       project.EnvEditable,
+				EnvCreatable:      project.EnvCreatable,
+				EnvPath:           project.EnvPath,
+				ComposeFiles:      composeFiles,
+				EnvFile:           envFile,
+				ManagedEnvContent: managedEnvContent,
+				Members:           project.Members,
 			})
 		})
 

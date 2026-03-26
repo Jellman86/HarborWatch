@@ -40,6 +40,7 @@
         envPath?: string;
         composeFiles: EditorFileState[];
         envFile?: EditorFileState;
+        managedEnvContent?: string;
         members?: LocalComposeProjectMember[];
     }
 
@@ -399,6 +400,20 @@
                 {:else if !project.envFile.exists}
                     <p class="text-[10px] text-sky-600 dark:text-sky-300">This project has no adjacent <span class="font-mono">.env</span> yet. Saving here will create it.</p>
                 {/if}
+            </section>
+        {/if}
+
+        {#if project.managedEnvContent}
+            <section class="bg-white dark:bg-slate-800 rounded-2xl border border-sky-200 dark:border-sky-900/50 p-4 space-y-3">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-sky-600 dark:text-sky-400">GitOps Constructed Env</p>
+                    <p class="text-xs text-slate-500">This is the environment file injected by HarborWatch at deploy time. It is read-only here — edit it via the deployment rule in the GitOps tab.</p>
+                </div>
+                <textarea
+                    class="w-full min-h-[12rem] rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-3 text-xs font-mono text-slate-800 dark:text-slate-100"
+                    readonly
+                    value={project.managedEnvContent}
+                ></textarea>
             </section>
         {/if}
 
