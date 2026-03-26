@@ -85,7 +85,7 @@ func registerComposeRoutes(r chi.Router, deps adminRouteDeps) {
 			// This is the env that is actually used at deploy time and may not be present
 			// as a regular .env file on disk.
 			managedEnvContent := ""
-			if deps.settingsService != nil && deps.gitOpsLookup != nil {
+			if deps.db != nil && deps.settingsService != nil && deps.gitOpsLookup != nil {
 				if st, stErr := deps.settingsService.Get(r.Context()); stErr == nil {
 					content, overrideFiles, _ := resolveGitOpsOverrideEnvFiles(
 						r.Context(), project.WorkingDir, project.ConfigFiles,
