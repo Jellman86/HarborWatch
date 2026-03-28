@@ -1422,7 +1422,7 @@
 <div class="settings-page w-full">
 
     <!-- Sticky top bar -->
-    <div class="settings-topbar sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md">
+    <div class="settings-topbar sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 md:px-6 py-3 md:py-4 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md">
         <div>
             <h1 class="text-xl font-black text-slate-900 dark:text-white tracking-tight">Settings</h1>
             <p class="text-[11px] text-slate-500 mt-0.5">Configure automation, AI, integrations and system behaviour</p>
@@ -1445,8 +1445,26 @@
         </div>
     </div>
 
+    <!-- Mobile pill nav — full width, above the body -->
+    <div class="md:hidden flex gap-2 overflow-x-auto px-4 py-3 border-b border-slate-100 dark:border-slate-800 settings-mobile-nav">
+        {#each [
+            { id: 'automations', label: 'Automation' },
+            { id: 'ai', label: 'AI' },
+            { id: 'integrations', label: 'Integrations' },
+            { id: 'system', label: 'System' },
+            { id: 'backups', label: 'Backups' },
+            { id: 'appearance', label: 'Appearance' }
+        ] as nav}
+            <button
+                onclick={() => activeTab = nav.id}
+                class="flex-none px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-colors
+                    {activeTab === nav.id ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}"
+            >{nav.label}</button>
+        {/each}
+    </div>
+
     <!-- Body -->
-    <div class="flex gap-0 mt-6 px-6">
+    <div class="flex flex-col md:flex-row gap-0 mt-4 md:mt-6 px-4 md:px-6">
 
         <!-- Left sidebar nav (md+) -->
         <nav class="hidden md:flex flex-col w-52 flex-none gap-0.5 pr-6 pt-1">
@@ -1493,24 +1511,6 @@
                 <p class="text-[10px] text-slate-400 px-3">HarborWatch</p>
             </div>
         </nav>
-
-        <!-- Mobile pill nav -->
-        <div class="md:hidden flex gap-2 overflow-x-auto pb-2 mb-4 w-full settings-mobile-nav">
-            {#each [
-                { id: 'automations', label: 'Automation' },
-                { id: 'ai', label: 'AI' },
-                { id: 'integrations', label: 'Integrations' },
-                { id: 'system', label: 'System' },
-                { id: 'backups', label: 'Backups' },
-                { id: 'appearance', label: 'Appearance' }
-            ] as nav}
-                <button
-                    onclick={() => activeTab = nav.id}
-                    class="flex-none px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-colors
-                        {activeTab === nav.id ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
-                >{nav.label}</button>
-            {/each}
-        </div>
 
         <!-- Main content -->
         <div class="flex-1 min-w-0 space-y-6 pb-16">
