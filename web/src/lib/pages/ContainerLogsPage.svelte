@@ -60,13 +60,24 @@
 
     // ── Log parsing ────────────────────────────────────────────────────────────
     const ANSI_RE = /\x1B\[[0-9;]*[mGKHFJPXST]/g;
+    // Docker injects ISO8601 timestamps like: 2024-01-15T10:23:45.123456789Z<space>
+    const DOCKER_TS_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) /;
 
-    function stripAnsi(s: string): string {
-        return s.replace(ANSI_RE, "");
+    interface LogLine { ts: string; content: string; }
+
+    function parseLine(raw: string): LogLine {
+        const clean = raw.replace(ANSI_RE, "");
+        const m = clean.match(DOCKER_TS_RE);
+        if (m) {
+            const d = new Date(m[1]);
+            const ts = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+            return { ts, content: clean.slice(m[0].length) };
+        }
+        return { ts: "", content: clean };
     }
 
-    function lineColor(line: string): string {
-        const u = line.toUpperCase();
+    function lineColor(content: string): string {
+        const u = content.toUpperCase();
         if (/\b(ERROR|FATAL|CRITICAL|CRIT|PANIC|EXCEPTION)\b/.test(u)) return "text-rose-400";
         if (/\b(WARN|WARNING)\b/.test(u))   return "text-amber-400";
         if (/\b(DEBUG|TRACE|VERBOSE)\b/.test(u)) return "text-slate-500";
@@ -74,19 +85,33 @@
         return "text-slate-300";
     }
 
-    const allLines = $derived<string[]>(
+    const allLines = $derived<LogLine[]>(
         logs?.combined
-            ? logs.combined.split("\n").map(stripAnsi).filter((l) => l.trim() !== "")
+            ? logs.combined.split("\n").map(parseLine).filter((l) => l.content.trim() !== "")
             : []
     );
 
-    const filteredLines = $derived<string[]>(
+    const filteredLines = $derived<LogLine[]>(
         filterText.trim()
-            ? allLines.filter((l) => l.toLowerCase().includes(filterText.toLowerCase()))
+            ? allLines.filter((l) => l.content.toLowerCase().includes(filterText.toLowerCase()))
             : allLines
     );
 
     const matchCount = $derived(filterText.trim() ? filteredLines.length : null);
+
+    // ── Export ─────────────────────────────────────────────────────────────────
+    function exportLogs() {
+        const lines = filteredLines.map((l) => l.ts ? `${l.ts}  ${l.content}` : l.content);
+        const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${containerName}-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.log`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
 
     // ── Scroll behaviour ───────────────────────────────────────────────────────
     function isNearBottom(): boolean {
@@ -119,7 +144,7 @@
         loading = logs === null;
         error = "";
         try {
-            const params = new URLSearchParams({ tail: String(tail) });
+            const params = new URLSearchParams({ tail: String(tail), timestamps: "1" });
             const res = await fetch(`/api/docker/${id}/logs?${params.toString()}`, { signal: controller.signal });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -335,6 +360,18 @@
                     onclick={() => loadLogs(true)}
                     class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10 transition-colors"
                 >Refresh</button>
+
+                <!-- Export -->
+                <button
+                    onclick={exportLogs}
+                    disabled={allLines.length === 0}
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10 disabled:opacity-30 transition-colors"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                    Export
+                </button>
             </div>
         </div>
     </header>
@@ -361,9 +398,14 @@
         {:else}
             <div class="py-2">
                 {#each filteredLines as line, i}
-                    <div class={`flex gap-3 px-4 py-[1px] hover:bg-white/[0.03] ${lineColor(line)}`}>
-                        <span class="flex-none w-10 text-right text-slate-700 select-none tabular-nums">{i + 1}</span>
-                        <span class="flex-1 whitespace-pre-wrap break-all">{line}</span>
+                    <div class={`flex gap-3 px-4 py-[1px] hover:bg-white/[0.03] ${lineColor(line.content)}`}>
+                        <span class="flex-none w-8 text-right text-slate-700 select-none tabular-nums text-[10px]">{i + 1}</span>
+                        {#if line.ts}
+                            <span class="flex-none tabular-nums text-slate-600 select-none text-[10px] pt-px">{line.ts}</span>
+                        {:else}
+                            <span class="flex-none w-[3.5rem]"></span>
+                        {/if}
+                        <span class="flex-1 whitespace-pre-wrap break-all">{line.content}</span>
                     </div>
                 {/each}
             </div>
