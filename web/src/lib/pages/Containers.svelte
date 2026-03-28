@@ -299,9 +299,6 @@
         const normalized = String(token || "").trim().toLowerCase();
         if (!normalized) return false;
 
-        const id = String(summary.id || "").trim().toLowerCase();
-        if (id && id.includes(normalized)) return true;
-
         const image = String(summary.image || "").trim().toLowerCase();
         if (image && (image === normalized || image.includes(normalized))) return true;
 
@@ -311,12 +308,6 @@
             if (normalizedName === normalized || normalizedName.includes(normalized)) return true;
         }
 
-        const labels = summary.labels || {};
-        for (const value of Object.values(labels)) {
-            const labelValue = String(value || "").trim().toLowerCase();
-            if (!labelValue) continue;
-            if (labelValue === normalized || labelValue.includes(normalized)) return true;
-        }
         return false;
     }
 
