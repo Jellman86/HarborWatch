@@ -577,8 +577,10 @@
                                 <!-- TV static noise during redeploy -->
                                 <StaticNoise active={redeploying[s.Id]} />
 
-                                <!-- Top accent bar -->
-                                <div class="relative h-1 bg-gradient-to-r {portainerCardAccent(s)}"></div>
+                                <!-- Top accent bar — hidden while static is showing -->
+                                {#if !redeploying[s.Id]}
+                                    <div class="relative h-1 bg-gradient-to-r {portainerCardAccent(s)}"></div>
+                                {/if}
 
                                 <div class="relative space-y-4 bg-white dark:bg-slate-900 p-5">
                                     <!-- Header: name + badges -->

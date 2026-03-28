@@ -666,8 +666,10 @@
                         <!-- TV static noise during sync -->
                         <StaticNoise active={syncing[source.id]} />
 
-                        <!-- Top accent bar -->
-                        <div class="relative h-0.5 bg-gradient-to-r {sourceCardAccent(source)}"></div>
+                        <!-- Top accent bar — hidden while static is showing -->
+                        {#if !syncing[source.id]}
+                            <div class="relative h-0.5 bg-gradient-to-r {sourceCardAccent(source)}"></div>
+                        {/if}
 
                         <!-- Card body -->
                         <div class="relative space-y-4 p-5">
@@ -796,8 +798,10 @@
                                         <!-- TV static noise during deploy -->
                                         <StaticNoise active={deploymentBusy(dep)} />
 
-                                        <!-- Accent bar -->
-                                        <div class="relative h-0.5 bg-gradient-to-r {deploymentCardAccent(dep)}"></div>
+                                        <!-- Accent bar — hidden while static is showing -->
+                                        {#if !deploymentBusy(dep)}
+                                            <div class="relative h-0.5 bg-gradient-to-r {deploymentCardAccent(dep)}"></div>
+                                        {/if}
 
                                         <div class="relative space-y-3 p-4">
                                             <!-- ── Identity + state row ──── -->
