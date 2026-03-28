@@ -1261,1978 +1261,1383 @@
     });
 </script>
 
-<div class="w-full space-y-6 settings-page">
-    <div class="settings-topbar flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Settings</h2>
-            <p class="text-sm text-slate-500 mt-1">Global configuration and automation policy control plane.</p>
+<!-- ============================================================
+     SETTINGS PAGE TEMPLATE
+     HarborWatch · Svelte 5 · Tailwind dark mode
+     ============================================================ -->
+
+<!-- ── Shared snippets ───────────────────────────────────────── -->
+
+{#snippet toggleSwitch(value: boolean, onChange: () => void, locked: boolean)}
+    <button
+        role="switch"
+        aria-checked={value}
+        onclick={onChange}
+        disabled={locked}
+        class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 {value ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'}"
+    >
+        <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {value ? 'translate-x-4' : 'translate-x-0'}"></span>
+    </button>
+{/snippet}
+
+{#snippet settingRow(label: string, description: string, value: boolean, onChange: () => void, lockedKey: string)}
+    <div class="flex items-center justify-between gap-4 py-3 border-b border-slate-50 dark:border-slate-800/50 last:border-0">
+        <div class="min-w-0">
+            <p class="text-sm font-medium text-slate-800 dark:text-slate-200">{label}</p>
+            {#if description}
+                <p class="text-[11px] text-slate-400 mt-0.5">{description}</p>
+            {/if}
+            {#if isLocked(lockedKey)}
+                <p class="text-[10px] text-amber-500 mt-0.5">Managed by environment variable</p>
+            {/if}
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <span
-                class="inline-flex items-center justify-center p-2 rounded-xl border {indicatorToneClass(settingsIndicatorState())}"
-                title={settingsIndicatorState() === "saving" ? "Saving..." : settingsIndicatorState() === "error" ? "Save Error" : settingsIndicatorState() === "pending" ? "Unsaved Changes" : "All Changes Saved"}
+        <div class="flex-none">
+            {@render toggleSwitch(value, onChange, isLocked(lockedKey))}
+        </div>
+    </div>
+{/snippet}
+
+{#snippet sectionCard(title: string, description: string)}
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">{title}</h3>
+            {#if description}
+                <p class="text-[11px] text-slate-500 mt-0.5">{description}</p>
+            {/if}
+        </div>
+    </div>
+{/snippet}
+
+{#snippet taskCard(task: { id: string; cronSpec: string; enabled: boolean; lastRun?: number })}
+    {@const draft = draftForTask(task)}
+    {@const isUpdateCheck = isUpdateCheckIntervalTask(task.id)}
+    {@const dirty = scheduleDirty(task)}
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+        <!-- Task header -->
+        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-block w-2 h-2 rounded-full flex-none {task.enabled ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-slate-600'}"></span>
+                        <p class="text-sm font-bold text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-1 ml-4">{taskDescription(task.id)}</p>
+                    <p class="text-[10px] text-slate-400 mt-1 ml-4">
+                        Schedule: <span class="font-medium text-slate-600 dark:text-slate-300">{taskCronLabel(task)}</span>
+                        &nbsp;·&nbsp;Last run: <span class="font-medium text-slate-600 dark:text-slate-300">{formatTime(task.lastRun)}</span>
+                    </p>
+                </div>
+                <div class="flex-none">
+                    {@render toggleSwitch(task.enabled, () => toggleTask(task.id, task.enabled), false)}
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule editor body -->
+        <div class="px-5 py-4 space-y-4 bg-slate-50/50 dark:bg-slate-800/20">
+            {#if isUpdateCheck}
+                <div class="space-y-1.5">
+                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Check Interval</label>
+                    <select
+                        value={updateCheckIntervalDraftForTask(task)}
+                        onchange={(e) => handleUpdateCheckIntervalChange(task, (e.target as HTMLSelectElement).value as any)}
+                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 dark:focus:border-brand-500 transition-colors"
+                    >
+                        {#each updateCheckIntervalOptions as opt}
+                            <option value={opt.value}>{opt.label}</option>
+                        {/each}
+                    </select>
+                </div>
+            {:else}
+                <div class="space-y-1.5">
+                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Cadence</label>
+                    <select
+                        value={draft.cadence}
+                        onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.target as HTMLSelectElement).value as any })}
+                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors"
+                    >
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <div class="space-y-1.5">
+                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Time (24h)</label>
+                    <input
+                        type="time"
+                        value={draft.time}
+                        oninput={(e) => patchScheduleDraft(task.id, { time: (e.target as HTMLInputElement).value })}
+                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors"
+                    />
+                </div>
+                {#if draft.cadence === "weekly"}
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Days of Week</label>
+                        <div class="flex flex-wrap gap-1.5">
+                            {#each weekdayOptions as day}
+                                <button
+                                    onclick={() => toggleWeeklyDay(task.id, day.value)}
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors {draft.weeklyDays.includes(day.value) ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                                >{day.label}</button>
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
+                {#if draft.cadence === "monthly"}
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Days of Month</label>
+                        <div class="flex flex-wrap gap-1">
+                            {#each monthDayOptions as day}
+                                <button
+                                    onclick={() => toggleMonthDay(task.id, day)}
+                                    class="w-7 h-7 rounded-lg text-[11px] font-bold transition-colors {draft.monthDays.includes(day) ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                                >{day}</button>
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
+            {/if}
+        </div>
+
+        <!-- Footer actions -->
+        <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
+            <button
+                onclick={() => saveTaskSchedule(task.id)}
+                disabled={!dirty || savingScheduleId === task.id}
+                class="px-4 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white text-[11px] font-black uppercase tracking-widest transition-colors"
             >
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/30 text-[10px] font-black">
-                    {indicatorSymbol(settingsIndicatorState())}
-                </span>
+                {savingScheduleId === task.id ? "Saving…" : "Save Schedule"}
+            </button>
+            <button
+                onclick={() => runTask(task.id)}
+                class="px-4 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-widest transition-colors"
+            >
+                Run Now
+            </button>
+        </div>
+    </div>
+{/snippet}
+
+<!-- ── Main page wrapper ──────────────────────────────────────── -->
+<div class="settings-page w-full">
+
+    <!-- Sticky top bar -->
+    <div class="settings-topbar sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md">
+        <div>
+            <h1 class="text-xl font-black text-slate-900 dark:text-white tracking-tight">Settings</h1>
+            <p class="text-[11px] text-slate-500 mt-0.5">Configure automation, AI, integrations and system behaviour</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-bold {indicatorToneClass(settingsIndicatorState())}"
+                title={settingsIndicatorState() === 'saving' ? 'Saving…' : settingsIndicatorState() === 'error' ? 'Save failed' : settingsIndicatorState() === 'pending' ? 'Unsaved changes' : 'All changes saved'}
+            >
+                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/40 text-[10px] font-black">{indicatorSymbol(settingsIndicatorState())}</span>
+                {settingsIndicatorState() === 'saving' ? 'Saving…' : settingsIndicatorState() === 'error' ? 'Error' : settingsIndicatorState() === 'pending' ? 'Unsaved' : 'Saved'}
             </span>
             <button
                 onclick={saveSettings}
                 disabled={saving || loading || !settingsDirty}
-                class="px-6 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-500/20"
+                class="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-colors"
             >
-                {saving ? "Saving..." : settingsDirty ? "Save Settings" : "Saved"}
+                {saving ? 'Saving…' : settingsDirty ? 'Save Settings' : 'Saved'}
             </button>
         </div>
     </div>
 
-    <div class="settings-tab-strip flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-6">
-        {#each [
-            { id: "automations", label: "Automations" },
-            { id: "ai", label: "AI", status: configStore.initialized && !configStore.aiActive ? "Inactive" : "" },
-            { id: "integrations", label: "Integrations", status: configStore.initialized && !configStore.portainerActive && settings.portainerEnabled ? "Portainer Error" : "" },
-            { id: "system", label: "System" },
-            { id: "backups", label: "Backups" },
-            { id: "appearance", label: "Appearance" }
-        ] as tab}
-            <button
-                onclick={() => activeTab = tab.id}
-                class="py-2.5 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeTab === tab.id ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
-            >
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-md bg-white/60 dark:bg-slate-800/70">
-                    {#if tab.id === "automations"}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6h10M4 6h2m4 12h10M4 18h2m10-6h4M4 12h8m-2-8v4m0 8v4m4-10v4" /></svg>
-                    {:else if tab.id === "ai"}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2m-9 4h12M7 21h10a2 2 0 002-2V9H5v10a2 2 0 002 2z" /></svg>
-                    {:else if tab.id === "integrations"}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h8m-4-4v8M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z" /></svg>
-                    {:else if tab.id === "system"}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3a2.25 2.25 0 00-2.122 1.5l-.223.665a2.25 2.25 0 01-1.423 1.423l-.665.223a2.25 2.25 0 000 4.278l.665.223a2.25 2.25 0 011.423 1.423l.223.665a2.25 2.25 0 004.278 0l.223-.665a2.25 2.25 0 011.423-1.423l.665-.223a2.25 2.25 0 000-4.278l-.665-.223a2.25 2.25 0 01-1.423-1.423l-.223-.665A2.25 2.25 0 009.75 3z" /></svg>
-                    {:else if tab.id === "backups"}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7zm0 0l2-3h12l2 3M12 11v6m0 0l-3-3m3 3l3-3" /></svg>
-                    {:else}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M6 3h12l1 4H5l1-4zm-1 4h14v14H5V7z" /></svg>
-                    {/if}
-                </span>
-                {tab.label}
-                {#if tab.status}
-                    <span class="px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 text-[8px] font-black">{tab.status}</span>
-                {/if}
-            </button>
-        {/each}
-    </div>
+    <!-- Body -->
+    <div class="flex gap-0 mt-6 px-6">
 
-    <div class="settings-shell w-full bg-white dark:bg-slate-800/95 rounded-[2rem] border border-slate-200/60 dark:border-slate-700/60 shadow-xl min-h-[620px] overflow-hidden">
-        {#if loading}
-            <div class="p-10 text-sm text-slate-500">Loading settings...</div>
-        {:else if activeTab === "automations"}
-            <div class="p-6 md:p-8 space-y-6 settings-pane">
-                <div class="settings-pane-hero rounded-2xl bg-gradient-to-r border border-slate-200/60 dark:border-slate-800/60 p-6 mb-8 {settingsTabChrome.automations.accentClass} p-5">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div class="max-w-3xl">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.automations.badge}</span>
-                                <span class="text-[10px] font-black uppercase tracking-widest text-brand-700 dark:text-brand-300">{automationConfig[activeAutomationTab].title}</span>
-                            </div>
-                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.automations.title}</h3>
-                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.automations.subtitle}</p>
-                        </div>
-                        <div class="rounded-xl border border-white/70 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-right min-w-[180px]">
-                            <p class="text-[9px] font-black uppercase tracking-widest text-slate-500">Active Domain</p>
-                            <p class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1">{automationConfig[activeAutomationTab].title}</p>
-                            <p class="text-[10px] text-slate-500 mt-1">{activeAutomationTab === "general" ? "Global automation defaults" : (domainEnabled(activeAutomationTab) ? "Domain enabled" : "Domain disabled")}</p>
-                        </div>
-                    </div>
+        <!-- Left sidebar nav (md+) -->
+        <nav class="hidden md:flex flex-col w-52 flex-none gap-0.5 pr-6 pt-1">
+            {#each [
+                { id: 'automations', label: 'Automation', icon: 'cog' },
+                { id: 'ai', label: 'AI & Providers', icon: 'sparkles' },
+                { id: 'integrations', label: 'Integrations', icon: 'link' },
+                { id: 'system', label: 'System', icon: 'server' },
+                { id: 'backups', label: 'Backups', icon: 'archive' },
+                { id: 'appearance', label: 'Appearance', icon: 'brush' }
+            ] as nav}
+                <button
+                    onclick={() => activeTab = nav.id}
+                    class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all text-[12px] font-semibold w-full
+                        {activeTab === nav.id
+                            ? 'bg-brand-50 dark:bg-slate-800 border-l-2 border-brand-500 text-brand-700 dark:text-brand-300 pl-[10px]'
+                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-l-2 border-transparent'}"
+                >
+                    <span class="flex-none w-4 h-4 text-current opacity-70">
+                        {#if nav.icon === 'cog'}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        {:else if nav.icon === 'sparkles'}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+                        {:else if nav.icon === 'link'}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                        {:else if nav.icon === 'server'}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
+                        {:else if nav.icon === 'archive'}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                        {:else}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
+                        {/if}
+                    </span>
+                    <span class="flex-1 truncate">{nav.label}</span>
+                    {#if nav.id === 'automations'}
+                        {@const anyEnabled = (['upgrades','maintenance','security','remediation'] as AutomationDomain[]).some(d => domainEnabled(d))}
+                        <span class="w-1.5 h-1.5 rounded-full flex-none {anyEnabled ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-slate-600'}"></span>
+                    {/if}
+                </button>
+            {/each}
+
+            <!-- Divider + version info -->
+            <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <p class="text-[10px] text-slate-400 px-3">HarborWatch</p>
+            </div>
+        </nav>
+
+        <!-- Mobile pill nav -->
+        <div class="md:hidden flex gap-2 overflow-x-auto pb-2 mb-4 w-full settings-mobile-nav">
+            {#each [
+                { id: 'automations', label: 'Automation' },
+                { id: 'ai', label: 'AI' },
+                { id: 'integrations', label: 'Integrations' },
+                { id: 'system', label: 'System' },
+                { id: 'backups', label: 'Backups' },
+                { id: 'appearance', label: 'Appearance' }
+            ] as nav}
+                <button
+                    onclick={() => activeTab = nav.id}
+                    class="flex-none px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-colors
+                        {activeTab === nav.id ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                >{nav.label}</button>
+            {/each}
+        </div>
+
+        <!-- Main content -->
+        <div class="flex-1 min-w-0 space-y-6 pb-16">
+
+            {#if loading}
+                <!-- Loading skeleton -->
+                <div class="space-y-4">
+                    {#each [1,2,3] as _}
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 h-32 animate-pulse"></div>
+                    {/each}
                 </div>
 
-                <div class="settings-subtab-strip flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-8 mt-2">
-                    {#each [
-                        { id: "general", label: "General" },
-                        { id: "upgrades", label: "Upgrades" },
-                        { id: "maintenance", label: "Maintenance" },
-                        { id: "security", label: "Security" },
-                        { id: "remediation", label: "Remediation" }
-                    ] as tab}
+            {:else if activeTab === 'automations'}
+                <!-- ================================================
+                     AUTOMATIONS TAB
+                     ================================================ -->
+
+                <!-- Domain sub-nav pills -->
+                <div class="flex flex-wrap gap-2">
+                    {#each (['general','upgrades','maintenance','security','remediation'] as AutomationDomain[]) as domain}
                         <button
-                            onclick={() => activeAutomationTab = tab.id as AutomationDomain}
-                            class="py-2 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-b-2 {activeAutomationTab === tab.id ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
+                            onclick={() => activeAutomationTab = domain}
+                            class="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest transition-colors
+                                {activeAutomationTab === domain ? 'bg-brand-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
                         >
-                            {tab.label}
+                            {#if domain !== 'general'}
+                                <span class="w-1.5 h-1.5 rounded-full flex-none {domainEnabled(domain) ? 'bg-emerald-400' : 'bg-slate-400 dark:bg-slate-500'}
+                                    {activeAutomationTab === domain ? 'opacity-100' : ''}"></span>
+                            {/if}
+                            {automationConfig[domain].title.split(' ')[0]}
                         </button>
                     {/each}
                 </div>
 
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-                    <div>
-                        {#if activeAutomationTab !== "general"}
-                            <h3 class="text-base font-black tracking-tight text-slate-900 dark:text-white">{automationConfig[activeAutomationTab].title}</h3>
-                            <p class="text-[11px] text-slate-500 mt-1">
-                                Domain status: <span class="font-bold">{domainEnabled(activeAutomationTab) ? "Enabled" : "Disabled"}</span>
-                            </p>
-                        {:else}
-                            <h3 class="text-base font-black tracking-tight text-slate-900 dark:text-white">Global Configuration</h3>
-                            <p class="text-[11px] text-slate-500 mt-1">System-wide automation parameters</p>
-                        {/if}
-                    </div>
-                    {#if activeAutomationTab !== "general"}
-                        <div class="flex items-center gap-2">
-                            <button
-                                onclick={() => setDomainEnabled(activeAutomationTab, true)}
-                                disabled={domainToggleBusy === activeAutomationTab}
-                                class="px-3 py-2 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-900/40 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
-                            >
-                                {domainToggleBusy === activeAutomationTab ? "Applying..." : "Enable Domain"}
-                            </button>
-                            <button
-                                onclick={() => setDomainEnabled(activeAutomationTab, false)}
-                                disabled={domainToggleBusy === activeAutomationTab}
-                                class="px-3 py-2 rounded-xl border border-rose-200 text-rose-700 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-900/40 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
-                            >
-                                {domainToggleBusy === activeAutomationTab ? "Applying..." : "Disable Domain"}
-                            </button>
+                <!-- Domain header card -->
+                {#if activeAutomationTab !== 'general'}
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+                        <div class="px-5 py-4 flex items-center justify-between gap-4">
+                            <div class="min-w-0">
+                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">{automationConfig[activeAutomationTab].title}</h3>
+                                <p class="text-[11px] text-slate-500 mt-0.5">{automationConfig[activeAutomationTab].subtitle}</p>
+                            </div>
+                            <div class="flex items-center gap-3 flex-none">
+                                <span class="text-[11px] text-slate-500">{domainEnabled(activeAutomationTab) ? 'Enabled' : 'Disabled'}</span>
+                                {@render toggleSwitch(domainEnabled(activeAutomationTab), () => setDomainEnabled(activeAutomationTab, !domainEnabled(activeAutomationTab)), domainToggleBusy !== '')}
+                            </div>
                         </div>
-                    {/if}
-                </div>
+                    </div>
+                {/if}
 
-                <div class="grid grid-cols-1 {activeAutomationTab === 'general' ? '' : 'xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]'} gap-6">
-                    {#if activeAutomationTab !== "general"}
-                        <div class="space-y-4">
-                            <div class="p-8 rounded-3xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-800/40 animate-in fade-in zoom-in duration-300 mb-2 mt-2">
-                                <AutomationFlowChart
-                                    title={automationConfig[activeAutomationTab].title}
-                                    subtitle={automationConfig[activeAutomationTab].subtitle}
-                                    accent={automationConfig[activeAutomationTab].accent}
-                                    steps={flowSteps(activeAutomationTab)}
+                <!-- Flow chart -->
+                <AutomationFlowChart
+                    title={automationConfig[activeAutomationTab].title}
+                    subtitle={automationConfig[activeAutomationTab].subtitle}
+                    steps={flowSteps(activeAutomationTab)}
+                    accent={automationConfig[activeAutomationTab].accent}
+                />
+
+                <!-- ── GENERAL DOMAIN ── -->
+                {#if activeAutomationTab === 'general'}
+                    <!-- Capacity -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Capacity</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Limit parallel upgrade operations to protect host stability.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Max Concurrent Upgrades</label>
+                                <input
+                                    bind:value={settings.autoUpgradeMaxConcurrency}
+                                    type="number" min="1" max="20"
+                                    disabled={isLocked('autoUpgradeMaxConcurrency')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 dark:focus:border-brand-500 transition-colors disabled:opacity-50"
                                 />
-                                <p class="mt-2 text-xs text-slate-500">
-                                    Diagram shows the ordered execution path for this domain.
-                                </p>
+                                {#if isLocked('autoUpgradeMaxConcurrency')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
                             </div>
-                            
                         </div>
-                    {/if}
+                    </div>
 
-                    <div class="space-y-4">
-                        {#if activeAutomationTab !== "general"}
-                            <div class="px-2 py-1">
-                                <p class="text-xs font-black uppercase tracking-wider text-brand-500 dark:text-brand-400">
-                                    Automation Task Controls
-                                </p>
-                                <p class="text-[11px] text-slate-500 mt-1">
-                                    Use toggles to enable schedules, set cadence/time, and run on-demand checks for validation.
-                                </p>
-                            </div>
-                        {/if}
-
-                        {#if activeAutomationTab === "general"}
-                            <div class="flex flex-col gap-4">
-                                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0">
-                                    <div class="mb-4">
-                                        <p class="text-sm font-black text-slate-800 dark:text-slate-100">Global Task Concurrency</p>
-                                        <p class="text-[11px] text-slate-500 mt-1">Control how many heavy background operations (updates, scans, redeployments) can run simultaneously.</p>
-                                    </div>
-                                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                        <div class="space-y-2">
-                                            <label for="global-max-concurrency" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Concurrent Tasks</label>
-                                            <input
-                                                id="global-max-concurrency"
-                                                type="number"
-                                                min="1"
-                                                max="10"
-                                                bind:value={settings.autoUpgradeMaxConcurrency}
-                                                disabled={isLocked("autoUpgradeMaxConcurrency")}
-                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                            />
-                                            <p class="text-[11px] text-slate-500">Global limit for all heavy background jobs across the appliance.</p>
-                                        </div>
+                    <!-- Automation Safety Exclusions -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Automation Safety Exclusions</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">These containers are excluded from all automated upgrade, maintenance, and security pipelines.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            {#if discoveredContainers.length > 0}
+                                <div class="space-y-1">
+                                    <p class="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Discovered Containers</p>
+                                    <div class="max-h-64 overflow-y-auto space-y-1 pr-1">
+                                        {#each discoveredContainers as container}
+                                            {@const hw = isHarborWatchContainer(container)}
+                                            {@const ignored = isContainerIgnored(container)}
+                                            <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl {ignored ? 'bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30' : 'bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50'}">
+                                                <div class="min-w-0 flex-1">
+                                                    <p class="text-[12px] font-semibold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
+                                                    <p class="text-[10px] text-slate-400 truncate">{container.image || ''}</p>
+                                                </div>
+                                                <div class="flex items-center gap-2 flex-none">
+                                                    {#if hw}
+                                                        <span class="text-[10px] text-amber-500 font-bold">Protected</span>
+                                                    {/if}
+                                                    {@render toggleSwitch(ignored, () => setContainerIgnored(container, !ignored), hw)}
+                                                </div>
+                                            </div>
+                                        {/each}
                                     </div>
                                 </div>
-                            </div>
+                            {/if}
 
-                            <div class="space-y-4">
-                                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0">
-                                    <div class="mb-4">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <span class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Safety Policy</span>
-                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Automation Safety Exclusions</p>
-                                        </div>
-                                        <p class="text-[11px] text-slate-500 mt-2">Ignored containers are excluded from all container-scoped automations. HarborWatch is always protected and cannot be removed.</p>
-                                    </div>
-                                    <div class="grid grid-cols-1 gap-4">
-                                    <div class="space-y-2">
-                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Ignored Containers</p>
-                                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 max-h-[260px] overflow-y-auto custom-scrollbar">
-                                            {#if discoveredContainers.length === 0}
-                                                <p class="px-3 py-3 text-[11px] text-slate-500 italic">No containers discovered. Start Docker to use auto-toggle exclusions.</p>
-                                            {:else}
-                                                {#each discoveredContainers as container, i (i)}
-                                                    {@const ignored = isContainerIgnored(container)}
-                                                    {@const protectedContainer = isHarborWatchContainer(container)}
-                                                    <div class="px-3 py-2 border-b border-slate-200/40 dark:border-slate-800/60 last:border-b-0 flex items-center justify-between gap-3">
-                                                        <div class="min-w-0">
-                                                            <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{containerDisplayName(container)}</p>
-                                                            <p class="text-[10px] text-slate-500 truncate">{container.image}</p>
-                                                        </div>
-                                                        <button
-                                                            onclick={() => setContainerIgnored(container, !ignored)}
-                                                            disabled={isLocked("automationIgnoredContainers") || protectedContainer}
-                                                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-60 {ignored ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                            aria-label="Toggle ignored container"
-                                                            title={protectedContainer ? "HarborWatch is always excluded for self-protection" : (ignored ? "Excluded" : "Included")}
-                                                        >
-                                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {ignored ? 'right-1' : 'left-1'}"></div>
-                                                        </button>
-                                                    </div>
-                                                {/each}
-                                            {/if}
-                                        </div>
-                                        <details class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-2">
-                                            <summary class="cursor-pointer text-[11px] font-bold text-slate-600 dark:text-slate-300">Advanced token editor</summary>
-                                            <textarea
-                                                id="automation-ignore-containers"
-                                                rows="3"
-                                                bind:value={settings.automationIgnoredContainers}
-                                                disabled={isLocked("automationIgnoredContainers")}
-                                                placeholder="harborwatch, plex, qbittorrent"
-                                                class="mt-2 w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                            ></textarea>
-                                            <p class="mt-1 text-[11px] text-slate-500">Supports container name, image text, or ID prefix tokens (comma/newline separated).</p>
-                                        </details>
-                                    </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Raw Exclusion Tokens</label>
+                                <textarea
+                                    bind:value={settings.automationIgnoredContainers}
+                                    rows="3"
+                                    placeholder="harborwatch, my-db, nginx"
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors resize-none font-mono"
+                                ></textarea>
+                                <p class="text-[10px] text-slate-400">Comma, semicolon, or newline separated. Matches container name, image, or ID substring.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Default Upgrade Policy -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Default Upgrade Policy</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Applied when creating new container rules without explicit overrides.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Validation Mode</label>
+                                <select
+                                    bind:value={settings.defaultValidateMode}
+                                    disabled={isLocked('defaultValidateMode')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                >
+                                    <option value="docker">Docker Health Check</option>
+                                    <option value="http">HTTP Probe</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Timeout (sec)</label>
+                                    <input
+                                        bind:value={settings.defaultValidateTimeoutSec}
+                                        type="number" min="5" max="300"
+                                        disabled={isLocked('defaultValidateTimeoutSec')}
+                                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                    />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Poll Interval (sec)</label>
+                                    <input
+                                        bind:value={settings.defaultValidateIntervalSec}
+                                        type="number" min="1" max="30"
+                                        disabled={isLocked('defaultValidateIntervalSec')}
+                                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                    />
+                                </div>
+                            </div>
+                            {@render settingRow('AI Log Validation', 'Use AI to analyse container logs after upgrades.', settings.defaultAiValidateLogs ?? false, () => settings.defaultAiValidateLogs = !settings.defaultAiValidateLogs, 'defaultAiValidateLogs')}
+                            {@render settingRow('Auto Rollback', 'Automatically rollback on health check failure.', settings.defaultAutoRollback ?? true, () => settings.defaultAutoRollback = !settings.defaultAutoRollback, 'defaultAutoRollback')}
+                            {@render settingRow('Restart on Unhealthy', 'Restart container when health check fails post-upgrade.', settings.defaultRestartOnUnhealthy ?? false, () => settings.defaultRestartOnUnhealthy = !settings.defaultRestartOnUnhealthy, 'defaultRestartOnUnhealthy')}
+
+                            <div class="pt-2 border-t border-slate-100 dark:border-slate-800/50">
+                                <button
+                                    onclick={bulkSetAutoApply}
+                                    disabled={bulkUpdating || !discoveredContainers.length}
+                                    class="w-full px-4 py-2.5 rounded-xl border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/40 text-brand-700 dark:text-brand-300 text-[11px] font-black uppercase tracking-widest transition-colors disabled:opacity-50"
+                                >
+                                    {bulkUpdating ? 'Applying…' : `Apply Defaults to All Containers (${discoveredContainers.length})`}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                <!-- ── UPGRADES DOMAIN ── -->
+                {:else if activeAutomationTab === 'upgrades'}
+                    {#each schedulesForDomain('upgrades') as task}
+                        {@render taskCard(task)}
+                    {/each}
+
+                    <!-- Upgrade Runtime -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Upgrade Runtime</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Retry, AI gating, and health check policy for the upgrade pipeline.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Min Retry Cooldown (minutes)</label>
+                                <input
+                                    bind:value={settings.autoUpgradeMinRetryMinutes}
+                                    type="number" min="1" max="1440"
+                                    disabled={isLocked('autoUpgradeMinRetryMinutes')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                />
+                                {#if isLocked('autoUpgradeMinRetryMinutes')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                            {@render settingRow('Bypass AI Risk Gate', 'Skip AI risk assessment and always proceed with upgrades.', settings.globalBypassAi ?? false, () => settings.globalBypassAi = !settings.globalBypassAi, 'globalBypassAi')}
+                            {@render settingRow('Skip Health Check', 'Proceed with upgrades without post-deploy health verification.', settings.globalSkipHealthCheck ?? false, () => settings.globalSkipHealthCheck = !settings.globalSkipHealthCheck, 'globalSkipHealthCheck')}
+                        </div>
+                    </div>
+
+                <!-- ── MAINTENANCE DOMAIN ── -->
+                {:else if activeAutomationTab === 'maintenance'}
+                    <!-- Data Retention -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Data Retention Window</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">How long historical records are kept before automated pruning. Applies to logs, metrics, scans, update runs, and AI usage.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="flex flex-wrap gap-2">
+                                {#each (['7d','30d','90d','365d'] as RetentionWindowPreset[]) as preset}
+                                    <button
+                                        onclick={() => applyRetentionWindowPreset(preset)}
+                                        class="px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors
+                                            {retentionWindowPreset === preset ? 'bg-brand-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                                    >{preset}</button>
+                                {/each}
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 text-[11px]">
+                                <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                    <p class="text-slate-500 font-medium">Logs</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{settings.retentionLogsDays}d</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                    <p class="text-slate-500 font-medium">Metrics</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{settings.retentionMetricsDays}d</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                    <p class="text-slate-500 font-medium">Scan Results</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{settings.retentionScanResultsDays}d</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                    <p class="text-slate-500 font-medium">AI Usage</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{settings.retentionAIUsageDays}d</p>
                                 </div>
                             </div>
                         </div>
-                    {:else}
-                            <div class="space-y-4">
-                                {#if activeAutomationTab === "upgrades"}
-                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                                        <div>
-                                            <div class="flex items-center gap-2">
-                                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border border-sky-200/70 dark:border-sky-900/40">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                                </span>
-                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">Upgrade Runtime Controls</p>
-                                            </div>
-                                            <p class="text-[11px] text-slate-500 mt-1">Tune how aggressively auto-apply runs and how long failed containers wait before retry.</p>
-                                        </div>
-                                        <div class="grid grid-cols-1 gap-4">
-                                            <div class="space-y-4">
-                                                <div class="space-y-2">
-                                                    <label for="auto-upgrade-min-retry" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retry Cooldown (minutes)</label>
-                                                    <input
-                                                        id="auto-upgrade-min-retry"
-                                                        type="number"
-                                                        min="1"
-                                                        max="1440"
-                                                        bind:value={settings.autoUpgradeMinRetryMinutes}
-                                                        disabled={isLocked("autoUpgradeMinRetryMinutes")}
-                                                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                                    />
-                                                    <p class="text-[11px] text-slate-500">Minimum wait before a previously failed upgrade can be retried automatically.</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                    </div>
 
-                                {/if}
-
-                                {#if activeAutomationTab === "security"}
-                                    {@const trivyTask = scheduleById("security_sweep_trivy")}
-                                    {@const trivyDraft = trivyTask ? draftForTask(trivyTask) : null}
-                                    {@const malwareTask = scheduleById("malware_sweep_clamav")}
-                                    {@const malwareDraft = malwareTask ? draftForTask(malwareTask) : null}
-                                    {@const clamSigTask = scheduleById("clamav_signature_update")}
-                                    {@const clamSigDraft = clamSigTask ? draftForTask(clamSigTask) : null}
-                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
+                    <!-- Docker Prune task -->
+                    {#each schedules.filter(s => s.id === 'docker_system_prune') as task}
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                            <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0 flex-1">
                                         <div class="flex items-center gap-2">
-                                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200/70 dark:border-orange-900/40">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L6 20.75 2.25 17M6 20.75V3m8.25 4h7.5m-7.5 5h5.25m-5.25 5h3" /></svg>
-                                            </span>
-                                            <div>
-                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">Trivy</p>
-                                                <p class="text-[11px] text-slate-500 mt-1">Trivy sweep targeting and runtime preferences for vulnerability automation.</p>
-                                            </div>
+                                            <span class="inline-block w-2 h-2 rounded-full flex-none {task.enabled ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-slate-600'}"></span>
+                                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
                                         </div>
-                                        <label for="trivy-sweep-mode" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Scan Target Selection</label>
-                                        <select
-                                            id="trivy-sweep-mode"
-                                            bind:value={settings.trivySweepMode}
-                                            disabled={isLocked("trivySweepMode")}
-                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                        >
-                                            <option value="running-only">Running containers only (default)</option>
-                                            <option value="all-images">All local images</option>
-                                        </select>
-                                        <p class="text-[11px] text-slate-500">`running-only` avoids queue inflation by scanning only images currently in use.</p>
-                                        {#if trivyTask && trivyDraft}
-                                            <div class="mt-2 rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
-                                                <div class="flex flex-wrap items-center justify-between gap-3">
-                                                    <div>
-                                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Scheduler Task</p>
-                                                        <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1">{taskCronLabel(trivyTask)} | Last run: {formatTime(trivyTask.lastRun)}</p>
-                                                    </div>
-                                                    <div class="flex items-center gap-2">
-                                                        <button
-                                                            onclick={() => runTask(trivyTask.id)}
-                                                            class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
-                                                        >Run Now</button>
-                                                        <button
-                                                            onclick={() => toggleTask(trivyTask.id, trivyTask.enabled)}
-                                                            class="w-10 h-5 rounded-full relative transition-colors {trivyTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                            aria-label="Toggle Trivy task"
-                                                        >
-                                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {trivyTask.enabled ? 'right-1' : 'left-1'}"></div>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                                                    <div class="space-y-1">
-                                                        <label for="cadence-security-sweep-trivy" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
-                                                        <select
-                                                            id="cadence-security-sweep-trivy"
-                                                            value={trivyDraft.cadence}
-                                                            onchange={(e) => patchScheduleDraft(trivyTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                        >
-                                                            <option value="daily">Daily</option>
-                                                            <option value="weekly">Weekly</option>
-                                                            <option value="monthly">Monthly</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="space-y-1">
-                                                        <label for="time-security-sweep-trivy" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
-                                                        <input
-                                                            id="time-security-sweep-trivy"
-                                                            type="time"
-                                                            value={trivyDraft.time}
-                                                            onchange={(e) => patchScheduleDraft(trivyTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        onclick={() => saveTaskSchedule(trivyTask.id)}
-                                                        disabled={!scheduleDirty(trivyTask) || savingScheduleId === trivyTask.id}
-                                                        class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
-                                                    >
-                                                        {savingScheduleId === trivyTask.id ? "Saving..." : "Save Schedule"}
-                                                    </button>
-                                                </div>
-                                                {#if trivyDraft.cadence === "weekly"}
-                                                    <div class="space-y-1">
-                                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
-                                                        <div class="flex flex-wrap gap-2">
-                                                            {#each weekdayOptions as day}
-                                                                <button
-                                                                    onclick={() => toggleWeeklyDay(trivyTask.id, day.value)}
-                                                                    class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {trivyDraft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                                >
-                                                                    {day.label}
-                                                                </button>
-                                                            {/each}
-                                                        </div>
-                                                    </div>
-                                                {:else if trivyDraft.cadence === "monthly"}
-                                                    <div class="space-y-1">
-                                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
-                                                        <div class="flex flex-wrap gap-1.5">
-                                                            {#each monthDayOptions as day}
-                                                                <button
-                                                                    onclick={() => toggleMonthDay(trivyTask.id, day)}
-                                                                    class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {trivyDraft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                                >
-                                                                    {day}
-                                                                </button>
-                                                            {/each}
-                                                        </div>
-                                                    </div>
-                                                {/if}
-                                            </div>
-                                        {/if}
+                                        <p class="text-[11px] text-slate-400 mt-1 ml-4">{taskDescription(task.id)}</p>
                                     </div>
-
-                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                                        <div class="flex items-center gap-2">
-                                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-900/40">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                            </span>
-                                            <div>
-                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">ClamAV</p>
-                                                <p class="text-[11px] text-slate-500 mt-1">Malware sweep exclusions, signature freshness, and snapshot caps for security automation.</p>
-                                            </div>
-                                        </div>
-
-
-                                        <div class="grid grid-cols-1 xl:grid-cols-4 gap-3">
-                                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Engine</p>
-                                                <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1 break-all">{clamavStatus?.engineVersion || "Unavailable"}</p>
-                                            </div>
-                                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Signature Version</p>
-                                                <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databaseVersion || "Unknown"}</p>
-                                            </div>
-                                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Published</p>
-                                                <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databasePublished ? new Date(clamavStatus.databasePublished * 1000).toLocaleString() : (clamavStatus?.databaseTimestamp || "Unknown")}</p>
-                                            </div>
-                                            <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Local DB Updated</p>
-                                                <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.lastLocalUpdate ? new Date(clamavStatus.lastLocalUpdate * 1000).toLocaleString() : "Unknown"}</p>
-                                            </div>
-                                        </div>
-
-
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <button
-                                                onclick={loadClamAVStatus}
-                                                disabled={clamavStatusLoading}
-                                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
-                                            >
-                                                {clamavStatusLoading ? "Refreshing..." : "Refresh Status"}
-                                            </button>
-                                            <button
-                                                onclick={updateClamAVSignaturesNow}
-                                                disabled={clamavUpdating}
-                                                class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
-                                            >
-                                                {clamavUpdating ? "Updating..." : "Update Signatures"}
-                                            </button>
-                                        </div>
-
-                                        <div class="space-y-2">
-                                            <label for="clamav-snapshot-max-bytes-security" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Container Snapshot Max Bytes</label>
-                                            <input
-                                                id="clamav-snapshot-max-bytes-security"
-                                                type="number"
-                                                min="1"
-                                                bind:value={settings.clamavSnapshotMaxBytes}
-                                                disabled={isLocked("clamavSnapshotMaxBytes")}
-                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                            />
-                                            <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>.</p>
-                                        </div>
-
-                                        <div class="grid grid-cols-1 gap-4">
-                                            {#if malwareTask && malwareDraft}
-                                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
-                                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                                        <div>
-                                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">ClamAV Malware Sweep</p>
-                                                            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1">{taskCronLabel(malwareTask)} | Last run: {formatTime(malwareTask.lastRun)}</p>
-                                                        </div>
-                                                        <div class="flex items-center gap-2">
-                                                            <button onclick={() => runTask(malwareTask.id)} class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800">Run Now</button>
-                                                            <button
-                                                                onclick={() => toggleTask(malwareTask.id, malwareTask.enabled)}
-                                                                class="w-10 h-5 rounded-full relative transition-colors {malwareTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                                aria-label="Toggle ClamAV malware sweep task"
-                                                            >
-                                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {malwareTask.enabled ? 'right-1' : 'left-1'}"></div>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                                                        <div class="space-y-1">
-                                                            <label for="cadence-malware-sweep-clamav" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
-                                                            <select
-                                                                id="cadence-malware-sweep-clamav"
-                                                                value={malwareDraft.cadence}
-                                                                onchange={(e) => patchScheduleDraft(malwareTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                            >
-                                                                <option value="daily">Daily</option>
-                                                                <option value="weekly">Weekly</option>
-                                                                <option value="monthly">Monthly</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="space-y-1">
-                                                            <label for="time-malware-sweep-clamav" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
-                                                            <input
-                                                                id="time-malware-sweep-clamav"
-                                                                type="time"
-                                                                value={malwareDraft.time}
-                                                                onchange={(e) => patchScheduleDraft(malwareTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                            />
-                                                        </div>
-                                                        <button
-                                                            onclick={() => saveTaskSchedule(malwareTask.id)}
-                                                            disabled={!scheduleDirty(malwareTask) || savingScheduleId === malwareTask.id}
-                                                            class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
-                                                        >
-                                                            {savingScheduleId === malwareTask.id ? "Saving..." : "Save Schedule"}
-                                                        </button>
-                                                    </div>
-                                                    {#if malwareDraft.cadence === "weekly"}
-                                                        <div class="flex flex-wrap gap-2">
-                                                            {#each weekdayOptions as day}
-                                                                <button
-                                                                    onclick={() => toggleWeeklyDay(malwareTask.id, day.value)}
-                                                                    class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {malwareDraft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                                >{day.label}</button>
-                                                            {/each}
-                                                        </div>
-                                                    {:else if malwareDraft.cadence === "monthly"}
-                                                        <div class="flex flex-wrap gap-1.5">
-                                                            {#each monthDayOptions as day}
-                                                                <button
-                                                                    onclick={() => toggleMonthDay(malwareTask.id, day)}
-                                                                    class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {malwareDraft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                                >{day}</button>
-                                                            {/each}
-                                                        </div>
-                                                    {/if}
-                                                </div>
-                                            {/if}
-
-                                            {#if clamSigTask && clamSigDraft}
-                                                <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
-                                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                                        <div>
-                                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">ClamAV Signature Update</p>
-                                                            <p class="text-[11px] text-slate-600 dark:text-slate-300 mt-1">{taskCronLabel(clamSigTask)} | Last run: {formatTime(clamSigTask.lastRun)}</p>
-                                                        </div>
-                                                        <div class="flex items-center gap-2">
-                                                            <button onclick={() => runTask(clamSigTask.id)} class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800">Run Now</button>
-                                                            <button
-                                                                onclick={() => toggleTask(clamSigTask.id, clamSigTask.enabled)}
-                                                                class="w-10 h-5 rounded-full relative transition-colors {clamSigTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                                aria-label="Toggle ClamAV signature update task"
-                                                            >
-                                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {clamSigTask.enabled ? 'right-1' : 'left-1'}"></div>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                                                        <div class="space-y-1">
-                                                            <label for="cadence-clamav-signature-update" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
-                                                            <select
-                                                                id="cadence-clamav-signature-update"
-                                                                value={clamSigDraft.cadence}
-                                                                onchange={(e) => patchScheduleDraft(clamSigTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                            >
-                                                                <option value="daily">Daily</option>
-                                                                <option value="weekly">Weekly</option>
-                                                                <option value="monthly">Monthly</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="space-y-1">
-                                                            <label for="time-clamav-signature-update" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
-                                                            <input
-                                                                id="time-clamav-signature-update"
-                                                                type="time"
-                                                                value={clamSigDraft.time}
-                                                                onchange={(e) => patchScheduleDraft(clamSigTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                            />
-                                                        </div>
-                                                        <button
-                                                            onclick={() => saveTaskSchedule(clamSigTask.id)}
-                                                            disabled={!scheduleDirty(clamSigTask) || savingScheduleId === clamSigTask.id}
-                                                            class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
-                                                        >
-                                                            {savingScheduleId === clamSigTask.id ? "Saving..." : "Save Schedule"}
-                                                        </button>
-                                                    </div>
-                                                    {#if clamSigDraft.cadence === "weekly"}
-                                                        <div class="flex flex-wrap gap-2">
-                                                            {#each weekdayOptions as day}
-                                                                <button
-                                                                    onclick={() => toggleWeeklyDay(clamSigTask.id, day.value)}
-                                                                    class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {clamSigDraft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                                >{day.label}</button>
-                                                            {/each}
-                                                        </div>
-                                                    {:else if clamSigDraft.cadence === "monthly"}
-                                                        <div class="flex flex-wrap gap-1.5">
-                                                            {#each monthDayOptions as day}
-                                                                <button
-                                                                    onclick={() => toggleMonthDay(clamSigTask.id, day)}
-                                                                    class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {clamSigDraft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                                >{day}</button>
-                                                            {/each}
-                                                        </div>
-                                                    {/if}
-                                                </div>
-                                            {/if}
-                                        </div>
-
-                                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
-                                            <div>
-                                                <label for="malware-ignore-mounts-security" class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Ignored Malware Mount Paths</label>
-                                                <p class="text-[11px] text-slate-500 mt-0.5">Skipped during scheduled ClamAV sweeps to avoid scanning very large media mounts.</p>
-                                            </div>
-                                            <textarea
-                                                id="malware-ignore-mounts-security"
-                                                rows="2"
-                                                bind:value={settings.malwareIgnoredMounts}
-                                                disabled={isLocked("malwareIgnoredMounts")}
-                                                placeholder="/mnt/media, /srv/plex-library"
-                                                class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                            ></textarea>
-                                        </div>
-                                    </div>
-                                {/if}
-
-                                {#if activeAutomationTab === "remediation"}
-                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                                        <div>
-                                            <div class="flex items-center gap-2">
-                                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300 border border-pink-200/70 dark:border-pink-900/40">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-                                                </span>
-                                                <p class="text-sm font-black text-slate-800 dark:text-slate-100">Unhealthy Auto-Remediation</p>
-                                            </div>
-                                            <p class="text-[11px] text-slate-500 mt-1">Listen for Docker health events and automatically restart unhealthy containers (opt-in per container).</p>
-                                        </div>
-                                        <div class="flex items-center justify-between gap-4">
-                                            <div class="flex-1">
-                                                <p class="text-[11px] text-slate-500 italic">Enable global monitoring of container health status.</p>
-                                            </div>
-                                            <button
-                                                onclick={() => settings.unhealthyAutoRemediationEnabled = !settings.unhealthyAutoRemediationEnabled}
-                                                disabled={isLocked("unhealthyAutoRemediationEnabled")}
-                                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.unhealthyAutoRemediationEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                aria-label="Toggle unhealthy auto-remediation"
-                                            >
-                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.unhealthyAutoRemediationEnabled ? 'right-1' : 'left-1'}"></div>
-                                            </button>
-                                        </div>
-
-                                        {#if settings.unhealthyAutoRemediationEnabled}
-                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                                <div class="space-y-2">
-                                                    <label for="remediation-cooldown-default" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Default Restart Cooldown (seconds)</label>
-                                                    <input
-                                                        id="remediation-cooldown-default"
-                                                        type="number"
-                                                        min="0"
-                                                        bind:value={settings.unhealthyRestartCooldownSecDefault}
-                                                        disabled={isLocked("unhealthyRestartCooldownSecDefault")}
-                                                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                                    />
-                                                </div>
-                                                <div class="space-y-2">
-                                                    <label for="max-restarts-per-window" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Max Restarts (per hour window)</label>
-                                                    <input
-                                                        id="max-restarts-per-window"
-                                                        type="number"
-                                                        min="0"
-                                                        bind:value={settings.maxRestartsPerWindow}
-                                                        disabled={isLocked("maxRestartsPerWindow")}
-                                                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                                    />
-                                                </div>
-                                            </div>
-                                        {/if}
-                                    </div>
-                                {/if}
-
-                                {#if activeAutomationTab === "maintenance"}
-                                    {@const retentionTask = scheduleById("history_retention_prune")}
-                                    {@const retentionDraft = retentionTask ? draftForTask(retentionTask) : null}
-                                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                                        <div>
-                                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Historical Data Retention</p>
-                                            <p class="text-[11px] text-slate-500 mt-1">Uses a rolling retention window. Rows older than the selected window are pruned during scheduled cleanup.</p>
-                                        </div>
-                                        <div class="flex flex-wrap items-center justify-between gap-3">
-                                            <div>
-                                                {#if retentionTask}
-                                                    <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{cronLabel(retentionTask.cronSpec)} | Last run: {formatTime(retentionTask.lastRun)}</p>
-                                                {/if}
-                                            </div>
-                                            {#if retentionTask}
-                                                <div class="flex items-center gap-2">
-                                                    <button
-                                                        onclick={() => runTask(retentionTask.id)}
-                                                        class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
-                                                    >Run Now</button>
-                                                    <button
-                                                        onclick={() => toggleTask(retentionTask.id, retentionTask.enabled)}
-                                                        class="w-10 h-5 rounded-full relative transition-colors {retentionTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                        aria-label="Toggle task"
-                                                    >
-                                                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {retentionTask.enabled ? 'right-1' : 'left-1'}"></div>
-                                                    </button>
-                                                </div>
-                                            {/if}
-                                        </div>
-
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                            <div class="space-y-2">
-                                                <label for="retention-window-preset" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Retention Window</label>
-                                                <select
-                                                    id="retention-window-preset"
-                                                    bind:value={retentionWindowPreset}
-                                                    onchange={(e) => applyRetentionWindowPreset((e.currentTarget as HTMLSelectElement).value as RetentionWindowPreset)}
-                                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                >
-                                                    <option value="7d">1 week</option>
-                                                    <option value="30d">1 month</option>
-                                                    <option value="90d">3 months</option>
-                                                    <option value="365d">1 year</option>
-                                                </select>
-                                            </div>
-
-                                            {#if retentionTask && retentionDraft}
-                                                <div class="space-y-2">
-                                                    <label for="retention-time" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Daily Cleanup Time</label>
-                                                    <div class="flex items-center gap-2">
-                                                        <input
-                                                            id="retention-time"
-                                                            type="time"
-                                                            value={retentionDraft.time}
-                                                            onchange={(e) => patchScheduleDraft(retentionTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                            class="flex-1 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                        />
-                                                        <button
-                                                            onclick={() => saveTaskSchedule(retentionTask.id)}
-                                                            disabled={!scheduleDirty(retentionTask) || savingScheduleId === retentionTask.id}
-                                                            class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest whitespace-nowrap"
-                                                        >
-                                                            {savingScheduleId === retentionTask.id ? "..." : "Save"}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            {/if}
-                                        </div>
-
-                                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                                            <p class="text-[11px] text-slate-600 dark:text-slate-300">
-                                                Unified rolling window applied across metrics, logs, scan history, update lifecycle history, compose audit history, and AI usage history:
-                                                <span class="font-bold">{retentionPresetToDays[retentionWindowPreset]} days</span>.
-                                            </p>
-                                        </div>
-                                        <p class="text-[11px] text-slate-500">The policy is a rolling window, not a fixed wipe date. Cleanup runs via <span class="font-mono">metrics_prune</span>, <span class="font-mono">diag_log_prune</span>, and <span class="font-mono">history_retention_prune</span>.</p>
-                                    </div>
-                                {/if}
-
-                                {#if activeAutomationTab !== "remediation" && activeAutomationTab !== "security"}
-                                    {#each schedulesForDomain(activeAutomationTab) as task, i (task.id + i)}
-                                        {@const draft = draftForTask(task)}
-                                        <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                                            <div class="flex flex-wrap items-center justify-between gap-3">
-                                                <div>
-                                                    <p class="text-sm font-black text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
-                                                    <p class="text-[11px] text-slate-500 mt-1">{taskDescription(task.id)}</p>
-                                                    <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{taskCronLabel(task)} | Last run: {formatTime(task.lastRun)}</p>
-                                                </div>
-                                                <div class="flex items-center gap-2">
-                                                    <button
-                                                        onclick={() => runTask(task.id)}
-                                                        class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
-                                                    >Run Now</button>
-                                                    <button
-                                                        onclick={() => toggleTask(task.id, task.enabled)}
-                                                        class="w-10 h-5 rounded-full relative transition-colors {task.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                                        aria-label="Toggle task"
-                                                    >
-                                                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {task.enabled ? 'right-1' : 'left-1'}"></div>
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {#if task.id === "container_update_check"}
-                                                {@const intervalDraft = updateCheckIntervalDraftForTask(task)}
-                                                <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
-                                                    <div class="space-y-1">
-                                                        <label for={"update-check-interval-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Check Interval</label>
-                                                        <select
-                                                            id={"update-check-interval-" + task.id}
-                                                            value={intervalDraft}
-                                                            onchange={(e) => handleUpdateCheckIntervalChange(task, (e.currentTarget as HTMLSelectElement).value as UpdateCheckIntervalOption)}
-                                                            disabled={savingScheduleId === task.id}
-                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                        >
-                                                            {#each updateCheckIntervalOptions as option}
-                                                                <option value={option.value}>{option.label}</option>
-                                                            {/each}
-                                                        </select>
-                                                        <p class="text-[11px] text-slate-500">
-                                                            Controls how often HarborWatch checks registries for newer container images. Changes save automatically.
-                                                        </p>
-                                                    </div>
-
-                                                    <div class="flex items-center justify-end">
-                                                        <span
-                                                            class="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest {savingScheduleId === task.id ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-900/40 dark:bg-brand-900/20 dark:text-brand-300' : scheduleDirty(task) ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300'}"
-                                                            aria-live="polite"
-                                                        >
-                                                            <span class="w-1.5 h-1.5 rounded-full {savingScheduleId === task.id ? 'bg-brand-500 animate-pulse' : scheduleDirty(task) ? 'bg-amber-500' : 'bg-emerald-500'}"></span>
-                                                            {savingScheduleId === task.id ? "Saving..." : scheduleDirty(task) ? "Pending" : "Saved"}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            {:else}
-                                                <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                                                    <div class="space-y-1">
-                                                        <label for={"cadence-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
-                                                        <select
-                                                            id={"cadence-" + task.id}
-                                                            value={draft.cadence}
-                                                            onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                        >
-                                                            <option value="daily">Daily</option>
-                                                            <option value="weekly">Weekly</option>
-                                                            <option value="monthly">Monthly</option>
-                                                        </select>
-                                                        <p class="text-[11px] text-slate-500">Defines how often this task is eligible to run.</p>
-                                                    </div>
-
-                                                    <div class="space-y-1">
-                                                        <label for={"time-" + task.id} class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
-                                                        <input
-                                                            id={"time-" + task.id}
-                                                            type="time"
-                                                            value={draft.time}
-                                                            onchange={(e) => patchScheduleDraft(task.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                                        />
-                                                        <p class="text-[11px] text-slate-500">Local time used by the scheduler for this task.</p>
-                                                    </div>
-
-                                                    <button
-                                                        onclick={() => saveTaskSchedule(task.id)}
-                                                        disabled={!scheduleDirty(task) || savingScheduleId === task.id}
-                                                        class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
-                                                    >
-                                                        {savingScheduleId === task.id ? "Saving..." : "Save Schedule"}
-                                                    </button>
-                                                </div>
-                                            {/if}
-
-                                            {#if task.id !== "container_update_check" && draft.cadence === "weekly"}
-                                                <div class="space-y-1">
-                                                    <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Days</p>
-                                                    <div class="flex flex-wrap gap-2">
-                                                        {#each weekdayOptions as day}
-                                                            <button
-                                                                onclick={() => toggleWeeklyDay(task.id, day.value)}
-                                                                class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {draft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                            >
-                                                                {day.label}
-                                                            </button>
-                                                        {/each}
-                                                    </div>
-                                                    <p class="text-[11px] text-slate-500">Select one or more weekdays for weekly execution.</p>
-                                                </div>
-                                            {:else if task.id !== "container_update_check" && draft.cadence === "monthly"}
-                                                <div class="space-y-1">
-                                                    <p class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run On Dates</p>
-                                                    <div class="flex flex-wrap gap-1.5">
-                                                        {#each monthDayOptions as day}
-                                                            <button
-                                                                onclick={() => toggleMonthDay(task.id, day)}
-                                                                class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {draft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                                            >
-                                                                {day}
-                                                            </button>
-                                                        {/each}
-                                                    </div>
-                                                    <p class="text-[11px] text-slate-500">Select one or more month days. Tasks run on matching calendar dates.</p>
-                                                </div>
-                                            {/if}
-
-                                            {#if task.id === "docker_system_prune"}
-                                                <div class="pt-3 border-t border-slate-200/60 dark:border-slate-700/60 mt-2">
-                                                    <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-3 py-2">
-                                                        <div class="flex-1">
-                                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Include Unused Tagged Images</p>
-                                                            <p class="text-[11px] text-slate-500 mt-1">When enabled, scheduled cleanup also deletes unused tagged images (for example orphaned images like old Watchtower deployments).</p>
-                                                        </div>
-                                                        <button
-                                                            onclick={() => { settings.dockerPruneIncludeUnusedTaggedImages = !settings.dockerPruneIncludeUnusedTaggedImages; }}
-                                                            disabled={isLocked("dockerPruneIncludeUnusedTaggedImages")}
-                                                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.dockerPruneIncludeUnusedTaggedImages ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                            aria-label="Toggle scheduled prune of unused tagged images"
-                                                        >
-                                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.dockerPruneIncludeUnusedTaggedImages ? 'right-1' : 'left-1'}"></div>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            {/if}
-                                        </div>
-                                    {:else}
-                                        <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-6 text-sm text-slate-500 italic">
-                                            No scheduler tasks found for this automation domain.
-                                        </div>
-                                    {/each}
-                                {/if}
-
-                                {#if activeAutomationTab === "maintenance"}
-                                    <div class="rounded-2xl border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 p-4 space-y-3">
-                                        <div>
-                                            <p class="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Manual Data Wipe</p>
-                                            <p class="text-[11px] text-rose-700/70 dark:text-rose-300/60 mt-1">Immediately purge all historical records from the database. Settings and rules are preserved.</p>
-                                        </div>
-                                        <button
-                                            onclick={clearHistory}
-                                            class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-rose-500/20"
-                                        >
-                                            Clear All History
-                                        </button>
+                                    {@render toggleSwitch(task.enabled, () => toggleTask(task.id, task.enabled), false)}
+                                </div>
+                            </div>
+                            <div class="px-5 py-4 space-y-4 bg-slate-50/50 dark:bg-slate-800/20">
+                                {@render settingRow('Include Unused Tagged Images', 'Also prune tagged images that are not referenced by any container.', settings.dockerPruneIncludeUnusedTaggedImages ?? false, () => settings.dockerPruneIncludeUnusedTaggedImages = !settings.dockerPruneIncludeUnusedTaggedImages, 'dockerPruneIncludeUnusedTaggedImages')}
+                                <!-- Schedule editor inline -->
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Cadence</label>
+                                    <select
+                                        value={draftForTask(task).cadence}
+                                        onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.target as HTMLSelectElement).value as any })}
+                                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors"
+                                    >
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Time (24h)</label>
+                                    <input
+                                        type="time"
+                                        value={draftForTask(task).time}
+                                        oninput={(e) => patchScheduleDraft(task.id, { time: (e.target as HTMLInputElement).value })}
+                                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors"
+                                    />
+                                </div>
+                                {#if draftForTask(task).cadence === 'weekly'}
+                                    <div class="flex flex-wrap gap-1.5">
+                                        {#each weekdayOptions as day}
+                                            <button onclick={() => toggleWeeklyDay(task.id, day.value)} class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors {draftForTask(task).weeklyDays.includes(day.value) ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}">{day.label}</button>
+                                        {/each}
                                     </div>
                                 {/if}
                             </div>
-                        {/if}
-                    </div>
-                </div>
-                {#if activeAutomationTab === 'upgrades'}
-                                    <div class="order-last p-4 rounded-2xl border-2 border-amber-200 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/80 via-white to-white dark:from-amber-900/10 dark:via-slate-900/30 dark:to-slate-900/30 space-y-4">
-                                                    <div class="flex flex-wrap items-center justify-between gap-3">
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200/70 dark:border-amber-900/40">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" /></svg>
-                                                            </span>
-                                                            <div>
-                                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Default Policy</p>
-                                                                <p class="text-[11px] text-slate-500 mt-0.5">Applied to new containers and containers configured to follow global automation.</p>
-                                                            </div>
-                                                        </div>
-                                                        <span class="px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Defaults</span>
-                                                    </div>
-                                                    {#if configStore.aiActive}
-                                                        <div class="flex items-center justify-between">
-                                                            <div>
-                                                                <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Global AI Bypass</p>
-                                                                <p class="text-[11px] text-slate-500 mt-0.5 italic">Skip AI assessment for all update runs.</p>
-                                                            </div>
-                                                            <button
-                                                                onclick={() => settings.globalBypassAi = !settings.globalBypassAi}
-                                                                disabled={isLocked("globalBypassAi")}
-                                                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.globalBypassAi ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                                aria-label="Toggle Global AI Bypass"
-                                                            >
-                                                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.globalBypassAi ? 'right-1' : 'left-1'}"></div>
-                                                            </button>
-                                                        </div>
-                                                    {/if}
-
-                                                    <div class="flex items-center justify-between pt-3 border-t border-slate-200/50 dark:border-slate-700/50">
-                                                        <div>
-                                                            <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Watchtower Mode (Skip Health)</p>
-                                                                <p class="text-[11px] text-slate-500 mt-0.5 italic">Disable health checks globally and suppress plain-Docker automatic rollback behavior.</p>
-                                                        </div>
-                                                        <button
-                                                            onclick={() => settings.globalSkipHealthCheck = !settings.globalSkipHealthCheck}
-                                                            disabled={isLocked("globalSkipHealthCheck")}
-                                                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.globalSkipHealthCheck ? 'bg-amber-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                            aria-label="Toggle Global Health Check Skip"
-                                                        >
-                                                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.globalSkipHealthCheck ? 'right-1' : 'left-1'}"></div>
-                                                        </button>
-                                                    </div>
-
-                                                    <div class="pt-3 border-t border-slate-200/50 dark:border-slate-700/50 space-y-3">
-                                                        <div>
-                                                            <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Default Upgrade Validation Profile</p>
-                                                            <p class="text-[11px] text-slate-500 mt-0.5 italic">
-                                                                Applied to containers that do not yet have explicit lifecycle settings. Validation URL still follows container labels / pattern-based derivation.
-                                                            </p>
-                                                        </div>
-
-                                                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                            <div class="space-y-2">
-                                                                <label for="default-validate-mode" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Validation Mode</label>
-                                                                <select
-                                                                    id="default-validate-mode"
-                                                                    bind:value={settings.defaultValidateMode}
-                                                                    disabled={isLocked("defaultValidateMode")}
-                                                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                                                >
-                                                                    <option value="docker">Docker health only</option>
-                                                                    <option value="both">Docker + HTTP</option>
-                                                                    <option value="http">HTTP only</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="space-y-2">
-                                                                <label for="default-validate-timeout" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Timeout (seconds)</label>
-                                                                <input
-                                                                    id="default-validate-timeout"
-                                                                    type="number"
-                                                                    min="1"
-                                                                    max="3600"
-                                                                    bind:value={settings.defaultValidateTimeoutSec}
-                                                                    disabled={isLocked("defaultValidateTimeoutSec")}
-                                                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                                                />
-                                                            </div>
-                                                            <div class="space-y-2">
-                                                                <label for="default-validate-interval" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Probe Interval (seconds)</label>
-                                                                <input
-                                                                    id="default-validate-interval"
-                                                                    type="number"
-                                                                    min="1"
-                                                                    max="300"
-                                                                    bind:value={settings.defaultValidateIntervalSec}
-                                                                    disabled={isLocked("defaultValidateIntervalSec")}
-                                                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                                                                />
-                                                            </div>
-                                                        </div>
-
-                                                        <div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
-                                                            <div class="flex items-center justify-between rounded-xl bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2">
-                                                                <div class="pr-3">
-                                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Auto Rollback</p>
-                                                                    <p class="text-[10px] text-slate-500">Default for new containers (plain Docker rollback pipeline)</p>
-                                                                </div>
-                                                                <button
-                                                                    onclick={() => settings.defaultAutoRollback = !settings.defaultAutoRollback}
-                                                                    disabled={isLocked("defaultAutoRollback")}
-                                                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.defaultAutoRollback ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                                    aria-label="Toggle Default Auto Rollback"
-                                                                >
-                                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.defaultAutoRollback ? 'right-1' : 'left-1'}"></div>
-                                                                </button>
-                                                            </div>
-
-                                                            <div class="flex items-center justify-between rounded-xl bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2">
-                                                                <div class="pr-3">
-                                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">AI Log Validation</p>
-                                                                    <p class="text-[10px] text-slate-500">Default for new containers</p>
-                                                                </div>
-                                                                <button
-                                                                    onclick={() => settings.defaultAiValidateLogs = !settings.defaultAiValidateLogs}
-                                                                    disabled={isLocked("defaultAiValidateLogs")}
-                                                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.defaultAiValidateLogs ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                                    aria-label="Toggle Default AI Log Validation"
-                                                                >
-                                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.defaultAiValidateLogs ? 'right-1' : 'left-1'}"></div>
-                                                                </button>
-                                                            </div>
-
-                                                            <div class="flex items-center justify-between rounded-xl bg-slate-50/50 dark:bg-slate-800/20 px-3 py-2">
-                                                                <div class="pr-3">
-                                                                    <p class="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Restart on Unhealthy</p>
-                                                                    <p class="text-[10px] text-slate-500">Per-container opt-in default</p>
-                                                                </div>
-                                                                <button
-                                                                    onclick={() => settings.defaultRestartOnUnhealthy = !settings.defaultRestartOnUnhealthy}
-                                                                    disabled={isLocked("defaultRestartOnUnhealthy")}
-                                                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.defaultRestartOnUnhealthy ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}"
-                                                                    aria-label="Toggle Default Restart on Unhealthy"
-                                                                >
-                                                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.defaultRestartOnUnhealthy ? 'right-1' : 'left-1'}"></div>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="pt-3 border-t border-slate-200/60 dark:border-slate-700/60 space-y-2">
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-white dark:bg-slate-900/40 border border-amber-200/70 dark:border-amber-900/40 text-amber-700 dark:text-amber-300">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16M4 17h16" /></svg>
-                                                            </span>
-                                                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">Apply Default Policy</p>
-                                                        </div>
-                                                        <button
-                                                            onclick={bulkSetAutoApply}
-                                                            disabled={bulkUpdating || !discoveredContainers.length}
-                                                            class="w-full px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/20"
-                                                        >
-                                                            {bulkUpdating ? "Applying..." : "Set All Containers To Automatic"}
-                                                        </button>
-                                                        <p class="text-[10px] text-slate-500 italic">Set containers to follow the global automation policy. Scheduler tasks still determine if/when update jobs run.</p>
-                                                    </div>
-                                    </div>
-                {/if}
-            </div>
-        {:else if activeTab === "ai"}
-            <div class="p-6 md:p-8 space-y-8 settings-pane">
-                <div class="settings-pane-hero rounded-2xl bg-gradient-to-r border border-slate-200/60 dark:border-slate-800/60 p-6 mb-8 {settingsTabChrome.ai.accentClass} p-5">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div class="max-w-3xl">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.ai.badge}</span>
-                                {#if configStore.aiActive}
-                                    <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 text-[8px] font-black uppercase">Verified</span>
-                                {/if}
+                            <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-3">
+                                <button onclick={() => saveTaskSchedule(task.id)} disabled={!scheduleDirty(task) || savingScheduleId === task.id} class="px-4 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white text-[11px] font-black uppercase tracking-widest transition-colors">{savingScheduleId === task.id ? 'Saving…' : 'Save Schedule'}</button>
+                                <button onclick={() => runTask(task.id)} class="px-4 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-widest transition-colors">Run Now</button>
                             </div>
-                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.ai.title}</h3>
-                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.ai.subtitle}</p>
                         </div>
-                    </div>
-                </div>
-                <div class="inline-flex flex-nowrap overflow-x-auto hide-scrollbar gap-6 w-full border-b border-slate-200/50 dark:border-slate-800/50 pb-2 mb-6">
-                    <button
-                        onclick={() => activeAITab = "settings"}
-                        class="py-2 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeAITab === 'settings' ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h10M4 17h16" /></svg>
-                        Settings
-                    </button>
-                    <button
-                        onclick={() => activeAITab = "costs"}
-                        class="py-2 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap border-b-2 {activeAITab === 'costs' ? 'text-brand-600 border-brand-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 1.12-3 2.5S10.343 13 12 13s3 1.12 3 2.5S13.657 18 12 18m0-10V6m0 12v-2M5 12a7 7 0 1014 0 7 7 0 10-14 0z" /></svg>
-                        Costs
-                    </button>
-                </div>
-                {#if activeAITab === "settings"}
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                    <div class="md:col-span-2">
-                        <h3 class="text-base font-black tracking-tight text-slate-900 dark:text-white">AI Features</h3>
-                        <p class="text-[11px] text-slate-500 mt-1">Disable this to fully turn off AI analysis and provider usage.</p>
-                    </div>
-                    <div class="flex md:justify-end items-center gap-3">
-                        {#if settings.aiEnabled && !settings.aiTestingPassed}
-                            <span class="px-2 py-1 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-[9px] font-black uppercase">Configuration Not Verified</span>
-                        {/if}
-                        {#if configStore.aiActive}
-                            <span class="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-[9px] font-black uppercase">Active & Verified</span>
-                        {/if}
-                        <button
-                            onclick={() => settings.aiEnabled = !settings.aiEnabled}
-                            disabled={isLocked("aiEnabled")}
-                            class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.aiEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                            aria-label="Toggle AI features"
-                        >
-                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.aiEnabled ? 'right-1' : 'left-1'}"></div>
-                        </button>
-                    </div>
-                </div>
+                    {/each}
 
-                <div class="flex flex-wrap items-end gap-4">
-                    <div class="space-y-2 min-w-[260px]">
-                        <label for="ai-provider" class="text-[10px] font-black uppercase text-slate-400 ml-1">Preferred Provider</label>
-                        <select id="ai-provider" bind:value={settings.aiProvider} disabled={isLocked("aiProvider") || !settings.aiEnabled} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
-                            <option value="">Auto (first configured)</option>
-                            <option value="openai">OpenAI</option>
-                            <option value="anthropic">Anthropic</option>
-                            <option value="gemini">Gemini</option>
-                        </select>
-                        <p class="text-[11px] text-slate-500">Auto mode uses the first provider that has a configured key. Set a provider explicitly to pin all AI calls to one backend.</p>
-                    </div>
-                </div>
+                    <!-- History retention task -->
+                    {#each schedules.filter(s => s.id === 'history_retention_prune') as task}
+                        {@render taskCard(task)}
+                    {/each}
 
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-2">
-                    <label for="ai-block-risk-threshold" class="text-[10px] font-black uppercase text-slate-400 ml-1">AI Update Block Risk Threshold</label>
-                    <input
-                        id="ai-block-risk-threshold"
-                        type="number"
-                        min="0"
-                        max="100"
-                        bind:value={settings.aiBlockRiskThreshold}
-                        disabled={isLocked("aiBlockRiskThreshold") || !settings.aiEnabled}
-                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                    />
-                    <p class="text-[11px] text-slate-500">Updates are blocked when AI release analysis risk score is greater than or equal to this value.</p>
-                </div>
-                {/if}
-
-                {#if activeAITab === "costs"}
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                    <div class="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <h3 class="text-base font-black tracking-tight text-slate-900 dark:text-white">AI Usage</h3>
-                            <p class="text-[11px] text-slate-500 mt-1">Token usage is captured per request. Estimated cost appears only when pricing is configured.</p>
+                    <!-- Danger zone -->
+                    <div class="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-rose-100 dark:border-rose-900/30">
+                            <h3 class="text-sm font-bold text-rose-700 dark:text-rose-400">Danger Zone</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Permanently delete all historical data. This cannot be undone.</p>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <select
-                                bind:value={aiUsageSpan}
-                                onchange={() => loadAIUsage()}
-                                class="bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                            >
-                                <option value="24h">Last 24h</option>
-                                <option value="7d">Last 7d</option>
-                                <option value="30d">Last 30d</option>
-                                <option value="90d">Last 90d</option>
-                            </select>
+                        <div class="px-5 py-4">
                             <button
-                                onclick={loadAIUsage}
-                                disabled={aiUsageLoading}
-                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
+                                onclick={clearHistory}
+                                class="px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-black uppercase tracking-widest transition-colors"
                             >
-                                {aiUsageLoading ? "Refreshing..." : "Refresh"}
+                                Clear All Historical Data
                             </button>
                         </div>
+                    </div>
+
+                <!-- ── SECURITY DOMAIN ── -->
+                {:else if activeAutomationTab === 'security'}
+                    <!-- Trivy -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Trivy Configuration</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Vulnerability scanning scope for Trivy sweeps.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Sweep Mode</label>
+                                <select
+                                    bind:value={settings.trivySweepMode}
+                                    disabled={isLocked('trivySweepMode')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                >
+                                    <option value="running-only">Running containers only</option>
+                                    <option value="all">All containers</option>
+                                    <option value="images-only">Images only</option>
+                                </select>
+                                {#if isLocked('trivySweepMode')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+
+                    {#each schedules.filter(s => s.id === 'security_sweep_trivy') as task}
+                        {@render taskCard(task)}
+                    {/each}
+
+                    <!-- ClamAV -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">ClamAV Configuration</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Malware scan scope and snapshot limits.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Max Snapshot Size (bytes)</label>
+                                <input
+                                    bind:value={settings.clamavSnapshotMaxBytes}
+                                    type="number" min="1"
+                                    disabled={isLocked('clamavSnapshotMaxBytes')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 font-mono"
+                                />
+                                <p class="text-[10px] text-slate-400">Currently: {formatBytesCompact(settings.clamavSnapshotMaxBytes)}</p>
+                                {#if isLocked('clamavSnapshotMaxBytes')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Ignored Mounts</label>
+                                <textarea
+                                    bind:value={settings.malwareIgnoredMounts}
+                                    rows="3"
+                                    placeholder="/proc, /sys, /dev"
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors resize-none font-mono"
+                                ></textarea>
+                                <p class="text-[10px] text-slate-400">Mount paths to exclude from ClamAV scanning.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {#each schedules.filter(s => s.id === 'malware_sweep_clamav' || s.id === 'clamav_signature_update') as task}
+                        {@render taskCard(task)}
+                    {/each}
+
+                    <!-- ClamAV Signature Status -->
+                    {#if clamavStatus}
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                            <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
+                                <div>
+                                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">ClamAV Signature Status</h3>
+                                    <p class="text-[11px] text-slate-500 mt-0.5">Current signature database information.</p>
+                                </div>
+                                <button
+                                    onclick={updateClamAVSignaturesNow}
+                                    disabled={clamavUpdating}
+                                    class="px-4 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-widest transition-colors"
+                                >
+                                    {clamavUpdating ? 'Updating…' : 'Update Now'}
+                                </button>
+                            </div>
+                            <div class="px-5 py-4 grid grid-cols-2 gap-3 text-[11px]">
+                                <div>
+                                    <p class="text-slate-500">Engine Version</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5 font-mono">{clamavStatus.engineVersion || '—'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500">DB Version</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5 font-mono">{clamavStatus.databaseVersion || '—'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500">DB Published</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{formatTime(clamavStatus.databasePublished)}</p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500">Last Local Update</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{formatTime(clamavStatus.lastLocalUpdate)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    {:else if clamavStatusLoading}
+                        <div class="h-20 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-center text-[11px] text-slate-400">Loading ClamAV status…</div>
+                    {/if}
+
+                <!-- ── REMEDIATION DOMAIN ── -->
+                {:else if activeAutomationTab === 'remediation'}
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Self-Healing Policy</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Controls for automatic container restart on health failure events.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Restart Cooldown (sec)</label>
+                                    <input
+                                        bind:value={settings.unhealthyRestartCooldownSecDefault}
+                                        type="number" min="0"
+                                        disabled={isLocked('unhealthyRestartCooldownSecDefault')}
+                                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                    />
+                                    {#if isLocked('unhealthyRestartCooldownSecDefault')}
+                                        <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                    {/if}
+                                </div>
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Max Restarts per Window</label>
+                                    <input
+                                        bind:value={settings.maxRestartsPerWindow}
+                                        type="number" min="1" max="20"
+                                        disabled={isLocked('maxRestartsPerWindow')}
+                                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                    />
+                                    {#if isLocked('maxRestartsPerWindow')}
+                                        <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                    {/if}
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-slate-400">Toggle self-healing on/off using the domain header switch above. Changes are applied on Save Settings.</p>
+                        </div>
+                    </div>
+                {/if}
+
+            <!-- ================================================
+                 AI TAB
+                 ================================================ -->
+            {:else if activeTab === 'ai'}
+                <!-- AI sub-tabs -->
+                <div class="flex gap-2">
+                    {#each ([{id:'settings',label:'Settings'},{id:'costs',label:'Usage & Costs'}] as const) as sub}
+                        <button
+                            onclick={() => activeAITab = sub.id}
+                            class="px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest transition-colors
+                                {activeAITab === sub.id ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                        >{sub.label}</button>
+                    {/each}
+                </div>
+
+                {#if activeAITab === 'settings'}
+                    <!-- AI Runtime -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">AI Runtime</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Master switch and routing policy for all AI-assisted features.</p>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            {@render settingRow('AI Enabled', 'Enable AI-assisted risk analysis, log interpretation, and audit features.', settings.aiEnabled ?? true, () => settings.aiEnabled = !settings.aiEnabled, 'aiEnabled')}
+
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Active Provider</label>
+                                <select
+                                    bind:value={settings.aiProvider}
+                                    disabled={isLocked('aiProvider')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                >
+                                    <option value="">Auto (first configured)</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="anthropic">Anthropic</option>
+                                    <option value="gemini">Google Gemini</option>
+                                </select>
+                                {#if isLocked('aiProvider')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Block Risk Threshold (%)</label>
+                                <input
+                                    bind:value={settings.aiBlockRiskThreshold}
+                                    type="number" min="0" max="100"
+                                    disabled={isLocked('aiBlockRiskThreshold')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                />
+                                <p class="text-[10px] text-slate-400">Upgrades with AI risk score above this value are blocked. 0 = never block, 100 = always allow.</p>
+                                {#if isLocked('aiBlockRiskThreshold')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+
+                            <div class="pt-2">
+                                <button
+                                    onclick={() => onNavigate('ai-history')}
+                                    class="flex items-center gap-1.5 text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                                    View AI Conversation History
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- OpenAI -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">OpenAI</h3>
+                                <p class="text-[11px] text-slate-500 mt-0.5">Configure GPT model access.</p>
+                            </div>
+                            <button
+                                onclick={() => testProvider('openai', settings.openaiModel || '')}
+                                disabled={testingProvider === 'openai' || !settings.openaiKey}
+                                class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest transition-colors disabled:opacity-50"
+                            >
+                                {testingProvider === 'openai' ? 'Testing…' : 'Test'}
+                            </button>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">API Key</label>
+                                <input
+                                    bind:value={settings.openaiKey}
+                                    type="password" autocomplete="off"
+                                    disabled={isLocked('openaiKey')}
+                                    placeholder="sk-…"
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 font-mono"
+                                />
+                                {#if isLocked('openaiKey')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Model</label>
+                                <select
+                                    bind:value={settings.openaiModel}
+                                    disabled={isLocked('openaiModel')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                >
+                                    {#each providerModels('openai') as opt}
+                                        <option value={opt.value}>{opt.label}</option>
+                                    {/each}
+                                </select>
+                                {#if isLocked('openaiModel')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Anthropic -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Anthropic</h3>
+                                <p class="text-[11px] text-slate-500 mt-0.5">Configure Claude model access.</p>
+                            </div>
+                            <button
+                                onclick={() => testProvider('anthropic', settings.anthropicModel || '')}
+                                disabled={testingProvider === 'anthropic' || !settings.anthropicKey}
+                                class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest transition-colors disabled:opacity-50"
+                            >
+                                {testingProvider === 'anthropic' ? 'Testing…' : 'Test'}
+                            </button>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">API Key</label>
+                                <input
+                                    bind:value={settings.anthropicKey}
+                                    type="password" autocomplete="off"
+                                    disabled={isLocked('anthropicKey')}
+                                    placeholder="sk-ant-…"
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 font-mono"
+                                />
+                                {#if isLocked('anthropicKey')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Model</label>
+                                <select
+                                    bind:value={settings.anthropicModel}
+                                    disabled={isLocked('anthropicModel')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                >
+                                    {#each providerModels('anthropic') as opt}
+                                        <option value={opt.value}>{opt.label}</option>
+                                    {/each}
+                                </select>
+                                {#if isLocked('anthropicModel')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gemini -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Google Gemini</h3>
+                                <p class="text-[11px] text-slate-500 mt-0.5">Configure Gemini model access.</p>
+                            </div>
+                            <button
+                                onclick={() => testProvider('gemini', settings.geminiModel || '')}
+                                disabled={testingProvider === 'gemini' || !settings.geminiKey}
+                                class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest transition-colors disabled:opacity-50"
+                            >
+                                {testingProvider === 'gemini' ? 'Testing…' : 'Test'}
+                            </button>
+                        </div>
+                        <div class="px-5 py-4 space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">API Key</label>
+                                <input
+                                    bind:value={settings.geminiKey}
+                                    type="password" autocomplete="off"
+                                    disabled={isLocked('geminiKey')}
+                                    placeholder="AIza…"
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 font-mono"
+                                />
+                                {#if isLocked('geminiKey')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Model</label>
+                                <select
+                                    bind:value={settings.geminiModel}
+                                    disabled={isLocked('geminiModel')}
+                                    class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                                >
+                                    {#each providerModels('gemini') as opt}
+                                        <option value={opt.value}>{opt.label}</option>
+                                    {/each}
+                                </select>
+                                {#if isLocked('geminiModel')}
+                                    <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pricing JSON -->
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Pricing Configuration</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">JSON map of model pricing used to estimate AI usage costs.</p>
+                        </div>
+                        <div class="px-5 py-4">
+                            <textarea
+                                bind:value={settings.aiPricingJson}
+                                rows="6"
+                                placeholder={`{"openai/gpt-4o": {"input": 0.005, "output": 0.015}}`}
+                                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors resize-y font-mono"
+                            ></textarea>
+                        </div>
+                    </div>
+
+                {:else}
+                    <!-- Costs sub-tab -->
+                    <!-- Span selector -->
+                    <div class="flex flex-wrap gap-2">
+                        {#each (['24h','7d','30d','90d'] as AIUsageSpan[]) as span}
+                            <button
+                                onclick={() => { aiUsageSpan = span; loadAIUsage(); }}
+                                class="px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest transition-colors
+                                    {aiUsageSpan === span ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                            >{span}</button>
+                        {/each}
+                        <button
+                            onclick={loadAIUsage}
+                            disabled={aiUsageLoading}
+                            class="px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 disabled:opacity-50 transition-colors"
+                        >
+                            {aiUsageLoading ? 'Loading…' : 'Refresh'}
+                        </button>
                     </div>
 
                     {#if aiUsageError}
-                        <p class="text-xs text-rose-600 dark:text-rose-300">{aiUsageError}</p>
-                    {/if}
+                        <div class="px-4 py-3 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-300 text-sm">
+                            {aiUsageError}
+                        </div>
+                    {:else if aiUsage}
+                        <!-- Summary stats -->
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {#each [
+                                { label: 'Calls', value: formatInteger(aiUsage.calls) },
+                                { label: 'Input Tokens', value: formatInteger(aiUsage.inputTokens) },
+                                { label: 'Output Tokens', value: formatInteger(aiUsage.outputTokens) },
+                                { label: 'Est. Cost', value: aiUsage.pricingConfigured ? formatUSDCompact(aiUsage.estimatedCostUsd) : 'N/A' }
+                            ] as stat}
+                                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 shadow-sm">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">{stat.label}</p>
+                                    <p class="text-lg font-black text-slate-800 dark:text-slate-100 mt-1">{stat.value}</p>
+                                </div>
+                            {/each}
+                        </div>
 
-                    <div class="grid grid-cols-2 xl:grid-cols-5 gap-3">
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Calls</p>
-                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.calls)}</p>
-                        </div>
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Input Tokens</p>
-                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.inputTokens)}</p>
-                        </div>
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Output Tokens</p>
-                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.outputTokens)}</p>
-                        </div>
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Tokens</p>
-                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{formatInteger(aiUsage?.totalTokens)}</p>
-                        </div>
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Estimated Cost</p>
-                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">
-                                {#if aiUsage?.pricingConfigured}
-                                    {formatUSD(aiUsage?.estimatedCostUsd)}
-                                {:else}
-                                    Not configured
-                                {/if}
-                            </p>
-                        </div>
-                    </div>
+                        {#if !aiUsage.pricingConfigured}
+                            <div class="px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300 text-[11px]">
+                                Cost estimates require pricing configuration. Add model pricing JSON in the Settings tab.
+                                {#if aiUsage.pricingError}<span class="block mt-1 opacity-70">{aiUsage.pricingError}</span>{/if}
+                            </div>
+                        {/if}
 
-                    {#if aiSpendRows.length > 0}
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Spend History</p>
-                                <p class="text-[10px] text-slate-500">
-                                    {formatDayLabel(aiSpendRows[0]?.day)} to {formatDayLabel(aiSpendRows[aiSpendRows.length - 1]?.day)}
-                                </p>
+                        <!-- Daily spend bar chart -->
+                        {#if aiSpendRows.length > 0 && aiUsage.pricingConfigured}
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                                <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Daily Spend</h3>
+                                </div>
+                                <div class="px-5 py-4">
+                                    <svg viewBox="0 0 100 48" class="w-full h-28" preserveAspectRatio="none">
+                                        {#each dailyBars(aiSpendRows) as bar}
+                                            <rect
+                                                x={bar.x} y={bar.y}
+                                                width={bar.width} height={bar.height}
+                                                rx="1.5"
+                                                class="fill-brand-400 dark:fill-brand-500 opacity-80"
+                                            />
+                                        {/each}
+                                    </svg>
+                                    <div class="flex justify-between text-[9px] text-slate-400 mt-1">
+                                        <span>{formatDayLabel(aiSpendRows[0]?.day)}</span>
+                                        <span>{formatDayLabel(aiSpendRows[aiSpendRows.length - 1]?.day)}</span>
+                                    </div>
+                                </div>
                             </div>
 
-                            {#if aiUsage?.pricingConfigured}
-                                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                    <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Daily Spend (USD)</p>
-                                        <svg viewBox="0 0 100 44" class="w-full h-24">
-                                            <line x1="2" y1="42" x2="98" y2="42" stroke="currentColor" class="text-slate-300 dark:text-slate-700" stroke-width="0.5"></line>
-                                            {#each dailyBars(aiSpendRows) as bar}
-                                                <rect
-                                                    x={bar.x}
-                                                    y={bar.y}
-                                                    width={bar.width}
-                                                    height={bar.height}
-                                                    rx="0.6"
-                                                    class="fill-brand-500/80"
-                                                >
-                                                    <title>{formatDayLabel(bar.day)}: {formatUSDCompact(bar.value)}</title>
-                                                </rect>
-                                            {/each}
-                                        </svg>
-                                        <div class="mt-2 flex items-center justify-between text-[10px] text-slate-500">
-                                            <span>{formatDayLabel(aiSpendRows[0]?.day)}</span>
-                                            <span>Max {formatUSDCompact(maxDailySpend(aiSpendRows))}</span>
-                                            <span>{formatDayLabel(aiSpendRows[aiSpendRows.length - 1]?.day)}</span>
-                                        </div>
-                                    </div>
-
-                                    <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                                        <p class="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">Cumulative Spend (USD)</p>
-                                        <svg viewBox="0 0 100 42" class="w-full h-24">
+                            <!-- Cumulative line chart -->
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                                <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Cumulative Spend</h3>
+                                </div>
+                                <div class="px-5 py-4">
+                                    <svg viewBox="0 0 100 48" class="w-full h-24" preserveAspectRatio="none">
+                                        {#if cumulativeLinePoints(aiSpendRows)}
                                             <polyline
                                                 points={cumulativeLinePoints(aiSpendRows)}
                                                 fill="none"
                                                 stroke="currentColor"
-                                                class="text-brand-600 dark:text-brand-300"
-                                                stroke-width="1.4"
+                                                stroke-width="1.5"
                                                 stroke-linecap="round"
                                                 stroke-linejoin="round"
-                                            ></polyline>
-                                        </svg>
-                                        <div class="mt-2 flex items-center justify-between text-[10px] text-slate-500">
-                                            <span>Start {formatUSDCompact(aiSpendRows[0]?.cumulativeCostUsd)}</span>
-                                            <span class="font-bold">Total {formatUSDCompact(aiSpendRows[aiSpendRows.length - 1]?.cumulativeCostUsd)}</span>
-                                        </div>
-                                    </div>
+                                                class="text-brand-500"
+                                            />
+                                        {/if}
+                                    </svg>
+                                    <p class="text-right text-[10px] text-slate-500 mt-1">Total: {formatUSDCompact(aiUsage.estimatedCostUsd)}</p>
                                 </div>
-                            {:else}
-                                <p class="text-[11px] text-slate-500">Configure <span class="font-semibold">AI Pricing JSON</span> to render daily and cumulative spend history. Token history is already being tracked.</p>
+                            </div>
+                        {/if}
+
+                        <!-- Breakdown table -->
+                        {#if aiUsage.breakdown?.length > 0}
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                                <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Usage Breakdown</h3>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-[11px]">
+                                        <thead>
+                                            <tr class="border-b border-slate-100 dark:border-slate-800">
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Feature</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Provider / Model</th>
+                                                <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Calls</th>
+                                                <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Tokens</th>
+                                                {#if aiUsage.pricingConfigured}
+                                                    <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Est. Cost</th>
+                                                {/if}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {#each aiUsage.breakdown as row}
+                                                <tr class="border-b border-slate-50 dark:border-slate-800/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                                                    <td class="px-4 py-2.5 font-medium text-slate-700 dark:text-slate-200">{aiFeatureLabel(row.feature)}</td>
+                                                    <td class="px-4 py-2.5 text-slate-500">
+                                                        <span class="font-medium">{row.provider}</span>
+                                                        <span class="text-slate-400"> / {row.model}</span>
+                                                    </td>
+                                                    <td class="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">{formatInteger(row.calls)}</td>
+                                                    <td class="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">{formatInteger(row.totalTokens)}</td>
+                                                    {#if aiUsage.pricingConfigured}
+                                                        <td class="px-4 py-2.5 text-right font-mono text-slate-700 dark:text-slate-200">{formatUSD(row.estimatedCostUsd)}</td>
+                                                    {/if}
+                                                </tr>
+                                            {/each}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        {/if}
+                    {:else if !aiUsageLoading}
+                        <div class="h-32 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center text-[11px] text-slate-400">No AI usage data for this period.</div>
+                    {/if}
+                {/if}
+
+            <!-- ================================================
+                 INTEGRATIONS TAB
+                 ================================================ -->
+            {:else if activeTab === 'integrations'}
+                <!-- Discord -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Discord</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Send upgrade and alert notifications to a Discord channel via webhook.</p>
+                    </div>
+                    <div class="px-5 py-4 space-y-4">
+                        {@render settingRow('Discord Notifications', 'Enable Discord webhook notifications for automation events.', settings.discordEnabled ?? true, () => settings.discordEnabled = !settings.discordEnabled, 'discordEnabled')}
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Webhook URL</label>
+                            <input
+                                bind:value={settings.discordWebhookUrl}
+                                type="url"
+                                disabled={isLocked('discordWebhookUrl')}
+                                placeholder="https://discord.com/api/webhooks/…"
+                                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                            />
+                            {#if isLocked('discordWebhookUrl')}
+                                <p class="text-[10px] text-amber-500">Managed by environment variable</p>
                             {/if}
                         </div>
-                    {/if}
+                    </div>
+                </div>
 
-                    {#if aiUsage?.pricingError}
-                        <p class="text-[11px] text-amber-600 dark:text-amber-300">Pricing config ignored: {aiUsage.pricingError}</p>
-                    {/if}
-
-                    {#if aiUsage && aiUsage.breakdown.length > 0}
-                        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-                            <table class="min-w-full text-xs">
-                                <thead class="bg-slate-50 dark:bg-slate-900/60">
-                                    <tr class="text-left text-slate-500 uppercase tracking-wider">
-                                        <th class="px-3 py-2 font-black">Provider</th>
-                                        <th class="px-3 py-2 font-black">Model</th>
-                                        <th class="px-3 py-2 font-black">Feature</th>
-                                        <th class="px-3 py-2 font-black text-right">Calls</th>
-                                        <th class="px-3 py-2 font-black text-right">Tokens</th>
-                                        <th class="px-3 py-2 font-black text-right">Cost</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {#each aiUsage.breakdown as row}
-                                        <tr class="border-t border-slate-200 dark:border-slate-700">
-                                            <td class="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200">{row.provider}</td>
-                                            <td class="px-3 py-2 text-slate-600 dark:text-slate-300">{row.model}</td>
-                                            <td class="px-3 py-2 text-slate-600 dark:text-slate-300">{aiFeatureLabel(row.feature)}</td>
-                                            <td class="px-3 py-2 text-right text-slate-600 dark:text-slate-300">{formatInteger(row.calls)}</td>
-                                            <td class="px-3 py-2 text-right text-slate-600 dark:text-slate-300">{formatInteger(row.totalTokens)}</td>
-                                            <td class="px-3 py-2 text-right text-slate-600 dark:text-slate-300">
-                                                {#if aiUsage.pricingConfigured}
-                                                    {formatUSD(row.estimatedCostUsd)}
-                                                {:else}
-                                                    -
-                                                {/if}
-                                            </td>
-                                        </tr>
-                                    {/each}
-                                </tbody>
-                            </table>
+                <!-- Portainer -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Portainer</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Provide Portainer context for stack-aware operations and environment discovery.</p>
+                    </div>
+                    <div class="px-5 py-4 space-y-4">
+                        {@render settingRow('Portainer Integration', 'Enable Portainer API integration.', settings.portainerEnabled ?? true, () => settings.portainerEnabled = !settings.portainerEnabled, 'portainerEnabled')}
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Portainer URL</label>
+                            <input
+                                bind:value={settings.portainerUrl}
+                                type="url"
+                                disabled={isLocked('portainerUrl')}
+                                placeholder="https://portainer.example.com"
+                                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                            />
+                            {#if isLocked('portainerUrl')}
+                                <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                            {/if}
                         </div>
-                    {:else}
-                        <p class="text-[11px] text-slate-500 italic">No AI usage recorded for this span yet.</p>
-                    {/if}
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">API Key</label>
+                            <input
+                                bind:value={settings.portainerApiKey}
+                                type="password" autocomplete="off"
+                                disabled={isLocked('portainerApiKey')}
+                                placeholder="ptr_…"
+                                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 font-mono"
+                            />
+                            {#if isLocked('portainerApiKey')}
+                                <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                            {/if}
+                        </div>
+                    </div>
                 </div>
 
-                <div class="space-y-2">
-                    <label for="ai-pricing-json" class="text-[10px] font-black uppercase text-slate-400 ml-1">AI Pricing JSON (optional)</label>
-                    <textarea
-                        id="ai-pricing-json"
-                        rows="5"
-                        bind:value={settings.aiPricingJson}
-                        disabled={isLocked("aiPricingJson")}
-                        placeholder={`[\n  { "provider": "openai", "model": "gpt-5.2", "inputPer1M": 1.25, "outputPer1M": 10 },\n  { "provider": "anthropic", "model": "claude-sonnet-4-5", "inputPer1M": 3, "outputPer1M": 15 }\n]`}
-                        class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                    ></textarea>
-                    <p class="text-[11px] text-slate-500">If empty, HarborWatch displays token usage only. No external pricing lookup is performed.</p>
-                </div>
-                {/if}
-
-                {#if activeAITab === "settings"}
-                <div class="space-y-4">
-                    <div class="flex items-center justify-between py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0">
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                                </svg>
-                            </div>
+            <!-- ================================================
+                 SYSTEM TAB
+                 ================================================ -->
+            {:else if activeTab === 'system'}
+                <!-- Metrics Collection -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Metrics Collection</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Background task that samples container and host metrics on a fixed schedule.</p>
+                    </div>
+                    <div class="px-5 py-4">
+                        <div class="flex items-center justify-between gap-4">
                             <div>
-                                <h3 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">AI Conversation History</h3>
-                                <p class="text-[11px] text-slate-500 mt-0.5">Access the full audit trail of all prompts and automated AI decisions.</p>
+                                <p class="text-sm font-medium text-slate-800 dark:text-slate-200">Metrics Collector</p>
+                                <p class="text-[11px] text-slate-400 mt-0.5">
+                                    {scheduleById('metrics_collector') ? `Schedule: ${taskCronLabel(scheduleById('metrics_collector')!)} · Last run: ${formatTime(scheduleById('metrics_collector')!.lastRun)}` : 'Schedule not available'}
+                                </p>
                             </div>
+                            {#if scheduleById('metrics_collector')}
+                                {@render toggleSwitch(scheduleById('metrics_collector')!.enabled, () => toggleMetricsCollector(), false)}
+                            {/if}
                         </div>
-                        <button
-                            onclick={() => onNavigate('ai-history')}
-                            class="px-5 py-2.5 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-brand-500/20"
-                        >
-                            View Full History
-                        </button>
+
+                        {@render settingRow('Normalized Metrics', 'Store metrics as percentage-normalized values (0–100) rather than raw counts.', settings.metricsNormalized ?? true, () => settings.metricsNormalized = !settings.metricsNormalized, 'metricsNormalized')}
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
-                        <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">OpenAI</h3>
-                        <label for="openai-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
-                        <input id="openai-key" type="password" bind:value={settings.openaiKey} disabled={isLocked("openaiKey") || !settings.aiEnabled} placeholder="sk-..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <label for="openai-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
-                        <select id="openai-model" bind:value={settings.openaiModel} disabled={isLocked("openaiModel") || !settings.aiEnabled} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
-                            {#each providerModels("openai") as model}
-                                <option value={model.value}>{model.label}</option>
-                            {/each}
-                        </select>
-                        <p class="text-[11px] text-slate-500">Used for release analysis, compose review, and other AI-assisted decision points.</p>
-                        <button onclick={() => testProvider("openai", settings.openaiModel || "")} disabled={testingProvider === "openai" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "openai" ? "Testing..." : "Test OpenAI"}</button>
-                    </div>
-
-                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
-                        <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Anthropic</h3>
-                        <label for="anthropic-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
-                        <input id="anthropic-key" type="password" bind:value={settings.anthropicKey} disabled={isLocked("anthropicKey") || !settings.aiEnabled} placeholder="sk-ant-..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <label for="anthropic-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
-                        <select id="anthropic-model" bind:value={settings.anthropicModel} disabled={isLocked("anthropicModel") || !settings.aiEnabled} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
-                            {#each providerModels("anthropic") as model}
-                                <option value={model.value}>{model.label}</option>
-                            {/each}
-                        </select>
-                        <p class="text-[11px] text-slate-500">Use this when Anthropic should be considered for AI decisions and analysis workflows.</p>
-                        <button onclick={() => testProvider("anthropic", settings.anthropicModel || "")} disabled={testingProvider === "anthropic" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "anthropic" ? "Testing..." : "Test Anthropic"}</button>
-                    </div>
-
-                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
-                        <h3 class="text-sm font-black uppercase tracking-wider text-slate-500">Gemini</h3>
-                        <label for="gemini-key" class="text-[10px] font-black uppercase tracking-wider text-slate-400">API Key</label>
-                        <input id="gemini-key" type="password" bind:value={settings.geminiKey} disabled={isLocked("geminiKey") || !settings.aiEnabled} placeholder="AIza..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <label for="gemini-model" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Model</label>
-                        <select id="gemini-model" bind:value={settings.geminiModel} disabled={isLocked("geminiModel") || !settings.aiEnabled} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60">
-                            {#each providerModels("gemini") as model}
-                                <option value={model.value}>{model.label}</option>
-                            {/each}
-                        </select>
-                        <p class="text-[11px] text-slate-500">Configure to allow Google Gemini model usage inside HarborWatch AI integrations.</p>
-                        <button onclick={() => testProvider("gemini", settings.geminiModel || "")} disabled={testingProvider === "gemini" || !settings.aiEnabled} class="w-full px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest">{testingProvider === "gemini" ? "Testing..." : "Test Gemini"}</button>
-                    </div>
-                </div>
-                {/if}
-            </div>
-
-        {:else if activeTab === "integrations"}
-            <div class="p-6 md:p-8 space-y-8 settings-pane">
-                <div class="settings-pane-hero rounded-2xl bg-gradient-to-r border border-slate-200/60 dark:border-slate-800/60 p-6 mb-8 {settingsTabChrome.integrations.accentClass} p-5">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div class="max-w-3xl">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.integrations.badge}</span>
-                                {#if settings.portainerEnabled && !settings.portainerTestingPassed}
-                                    <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 text-[8px] font-black uppercase">Portainer Attention</span>
-                                {/if}
-                            </div>
-                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.integrations.title}</h3>
-                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.integrations.subtitle}</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <h3 class="text-base font-black tracking-tight text-slate-900 dark:text-white">Discord Notifications</h3>
-                                <p class="text-[11px] text-slate-500 mt-1">Enable outbound Discord alerts without deleting stored credentials.</p>
-                            </div>
-                            <button
-                                onclick={() => settings.discordEnabled = !settings.discordEnabled}
-                                disabled={isLocked("discordEnabled")}
-                                class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.discordEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                aria-label="Toggle Discord notifications"
-                            >
-                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.discordEnabled ? 'right-1' : 'left-1'}"></div>
-                            </button>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="discord-webhook" class="text-[10px] font-black uppercase text-slate-400 ml-1">Discord Webhook</label>
-                            <input id="discord-webhook" type="password" bind:value={settings.discordWebhookUrl} disabled={isLocked("discordWebhookUrl") || !settings.discordEnabled} placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            <p class="text-[11px] text-slate-500">Incoming webhook for detections, automation events, and failures.</p>
-                        </div>
-                    </div>
-
-                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <h3 class="text-base font-black tracking-tight text-slate-900 dark:text-white">Portainer Integration</h3>
-                                <p class="text-[11px] text-slate-500 mt-1">Control whether HarborWatch should query Portainer APIs.</p>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                {#if settings.portainerEnabled && !settings.portainerTestingPassed}
-                                    <span class="px-2 py-1 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-[9px] font-black uppercase">Connectivity Error</span>
-                                {/if}
-                                <button
-                                    onclick={() => settings.portainerEnabled = !settings.portainerEnabled}
-                                    disabled={isLocked("portainerEnabled")}
-                                    class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.portainerEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                    aria-label="Toggle Portainer integration"
-                                >
-                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.portainerEnabled ? 'right-1' : 'left-1'}"></div>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="portainer-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer URL</label>
-                            <input id="portainer-url" bind:value={settings.portainerUrl} disabled={isLocked("portainerUrl") || !settings.portainerEnabled} placeholder="https://portainer.example.com" class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            <p class="text-[11px] text-slate-500">Base URL for Portainer API access and stack metadata enrichment.</p>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="portainer-api-key" class="text-[10px] font-black uppercase text-slate-400 ml-1">Portainer API Key</label>
-                            <input id="portainer-api-key" type="password" bind:value={settings.portainerApiKey} disabled={isLocked("portainerApiKey") || !settings.portainerEnabled} placeholder="ptr_..." class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                            <p class="text-[11px] text-slate-500">Token used for authenticated Portainer calls. Keep scope limited.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        {:else if activeTab === "system"}
-            <div class="p-6 md:p-8 space-y-6 settings-pane">
-                <div class="settings-pane-hero rounded-2xl bg-gradient-to-r border border-slate-200/60 dark:border-slate-800/60 p-6 mb-8 {settingsTabChrome.system.accentClass} p-5">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div class="max-w-3xl">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.system.badge}</span>
-                            </div>
-                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.system.title}</h3>
-                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.system.subtitle}</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                    <div class="md:col-span-2">
-                        <h3 class="text-base font-black tracking-tight text-slate-900 dark:text-white">Metrics Collection</h3>
-                        <p class="text-[11px] text-slate-500 mt-1">Control background `metrics_collector` scheduler activity.</p>
-                    </div>
-                    <div class="flex md:justify-end items-center gap-3">
-                        <button
-                        onclick={toggleMetricsCollector}
-                        disabled={!scheduleById("metrics_collector")}
-                        class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {(scheduleById('metrics_collector')?.enabled ?? false) ? 'bg-brand-600' : 'bg-slate-300'}"
-                        aria-label="Toggle metrics collector"
-                    >
-                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {(scheduleById('metrics_collector')?.enabled ?? false) ? 'right-1' : 'left-1'}"></div>
-                    </button>
-                    </div>
-                </div>
-
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-3">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
+                <!-- ClamAV Signatures -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
                         <div>
-                            <h3 class="text-base font-black tracking-tight text-slate-900 dark:text-white">ClamAV Signatures</h3>
-                            <p class="text-[11px] text-slate-500 mt-1">Manage malware signature definition freshness and update cadence.</p>
+                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">ClamAV Signatures</h3>
+                            <p class="text-[11px] text-slate-500 mt-0.5">Malware signature database status and update controls.</p>
                         </div>
                         <div class="flex items-center gap-2">
                             <button
                                 onclick={loadClamAVStatus}
                                 disabled={clamavStatusLoading}
-                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
-                            >
-                                {clamavStatusLoading ? "Refreshing..." : "Refresh Status"}
-                            </button>
+                                class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase tracking-widest disabled:opacity-50 transition-colors"
+                            >{clamavStatusLoading ? 'Loading…' : 'Refresh'}</button>
                             <button
                                 onclick={updateClamAVSignaturesNow}
                                 disabled={clamavUpdating}
-                                class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
-                            >
-                                {clamavUpdating ? "Updating..." : "Update Now"}
-                            </button>
-                            {#if scheduleById("clamav_signature_update")}
-                                <button
-                                    onclick={() => toggleTask("clamav_signature_update", scheduleById("clamav_signature_update")?.enabled ?? false)}
-                                    class="w-10 h-5 rounded-full relative transition-colors {(scheduleById('clamav_signature_update')?.enabled ?? false) ? 'bg-brand-600' : 'bg-slate-300'}"
-                                    aria-label="Toggle automated signature update"
-                                >
-                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {(scheduleById('clamav_signature_update')?.enabled ?? false) ? 'right-1' : 'left-1'}"></div>
-                                </button>
+                                class="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest transition-colors"
+                            >{clamavUpdating ? 'Updating…' : 'Update Now'}</button>
+                        </div>
+                    </div>
+                    <div class="px-5 py-4">
+                        {#if clamavStatus}
+                            <div class="grid grid-cols-2 gap-3 text-[11px] mb-4">
+                                <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                    <p class="text-slate-500">Engine Version</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5 font-mono">{clamavStatus.engineVersion || '—'}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                    <p class="text-slate-500">DB Version</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5 font-mono">{clamavStatus.databaseVersion || '—'}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                    <p class="text-slate-500">Published</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{formatTime(clamavStatus.databasePublished)}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                    <p class="text-slate-500">Last Updated</p>
+                                    <p class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{formatTime(clamavStatus.lastLocalUpdate)}</p>
+                                </div>
+                            </div>
+                        {:else if clamavStatusLoading}
+                            <div class="h-16 flex items-center justify-center text-[11px] text-slate-400">Loading signature status…</div>
+                        {:else}
+                            <p class="text-[11px] text-slate-400">Signature status unavailable. ClamAV may not be installed.</p>
+                        {/if}
+
+                        <!-- Auto-update schedule toggle -->
+                        {#each schedules.filter(s => s.id === 'clamav_signature_update') as task}
+                            <div class="flex items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-slate-800/50 mt-3">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-800 dark:text-slate-200">Auto-Update Signatures</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5">Schedule: {taskCronLabel(task)} · Last: {formatTime(task.lastRun)}</p>
+                                </div>
+                                {@render toggleSwitch(task.enabled, () => toggleTask(task.id, task.enabled), false)}
+                            </div>
+                        {/each}
+                    </div>
+                </div>
+
+                <!-- Instance -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Instance Identity</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Public URL and validation probe pattern for this HarborWatch instance.</p>
+                    </div>
+                    <div class="px-5 py-4 space-y-4">
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Instance URL</label>
+                            <input
+                                bind:value={settings.instanceUrl}
+                                type="url"
+                                disabled={isLocked('instanceUrl')}
+                                placeholder="https://harborwatch.example.com"
+                                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50"
+                            />
+                            {#if isLocked('instanceUrl')}
+                                <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                            {/if}
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Validate URL Pattern</label>
+                            <input
+                                bind:value={settings.validateUrlPattern}
+                                type="text"
+                                disabled={isLocked('validateUrlPattern')}
+                                placeholder="https://HOSTNAME/health"
+                                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 font-mono"
+                            />
+                            {#if isLocked('validateUrlPattern')}
+                                <p class="text-[10px] text-amber-500">Managed by environment variable</p>
                             {/if}
                         </div>
                     </div>
-
-                    <div class="grid grid-cols-1 xl:grid-cols-4 gap-3">
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Engine</p>
-                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1 break-all">{clamavStatus?.engineVersion || "Unavailable"}</p>
-                        </div>
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Signature Version</p>
-                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databaseVersion || "Unknown"}</p>
-                        </div>
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Published</p>
-                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.databasePublished ? new Date(clamavStatus.databasePublished * 1000).toLocaleString() : (clamavStatus?.databaseTimestamp || "Unknown")}</p>
-                        </div>
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4">
-                            <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Local DB Updated</p>
-                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 mt-1">{clamavStatus?.lastLocalUpdate ? new Date(clamavStatus.lastLocalUpdate * 1000).toLocaleString() : "Unknown"}</p>
-                        </div>
-                    </div>
-
-                    <p class="text-[11px] text-slate-500">
-                        {#if scheduleById("clamav_signature_update")}
-                            Automation schedule: <span class="font-bold">{cronLabel(scheduleById("clamav_signature_update")?.cronSpec || "")}</span>.
-                        {:else}
-                            Signature update scheduler task is not registered.
-                        {/if}
-                    </p>
-
-                    <div class="space-y-2">
-                        <label for="clamav-snapshot-max-bytes" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Container Snapshot Max Bytes</label>
-                        <input
-                            id="clamav-snapshot-max-bytes"
-                            type="number"
-                            min="1"
-                            bind:value={settings.clamavSnapshotMaxBytes}
-                            disabled={isLocked("clamavSnapshotMaxBytes")}
-                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                        />
-                        <p class="text-[11px] text-slate-500">Current cap: <span class="font-bold">{formatBytesCompact(settings.clamavSnapshotMaxBytes || 0)}</span>. Increase if large container mount snapshots are skipped.</p>
-                    </div>
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <div class="space-y-2">
-                        <label for="instance-url" class="text-[10px] font-black uppercase text-slate-400 ml-1">Instance URL</label>
-                        <input id="instance-url" bind:value={settings.instanceUrl} disabled={isLocked("instanceUrl")} placeholder="https://harborwatch.example.com" class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <p class="text-[11px] text-slate-500">Used for webhook callbacks and external links.</p>
+            <!-- ================================================
+                 BACKUPS TAB
+                 ================================================ -->
+            {:else if activeTab === 'backups'}
+                <!-- Storage Paths -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Storage Paths</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Host filesystem locations for compose snapshots and GitOps working directory.</p>
                     </div>
-                    <div class="space-y-2">
-                        <label for="validate-pattern" class="text-[10px] font-black uppercase text-slate-400 ml-1">Validation URL Pattern</label>
-                        <input id="validate-pattern" bind:value={settings.validateUrlPattern} disabled={isLocked("validateUrlPattern")} placeholder={"http://localhost:{{PORT}}/health"} class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60" />
-                        <p class="text-[11px] text-slate-500">Template for deriving per-container validation URLs.</p>
-                    </div>
-                </div>
-            </div>
-
-        {:else if activeTab === "backups"}
-            {@const composeAutoApplyTask = scheduleById("container_update_apply")}
-            {@const composeBackupSweepTask = scheduleById("compose_snapshot_on_change")}
-            {@const composeBackupSweepDraft = composeBackupSweepTask ? draftForTask(composeBackupSweepTask) : null}
-            <div class="p-6 md:p-8 space-y-6 settings-pane">
-                <div class="settings-pane-hero rounded-2xl bg-gradient-to-r border border-slate-200/60 dark:border-slate-800/60 p-6 mb-8 {settingsTabChrome.backups.accentClass} p-5">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div class="max-w-3xl">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.backups.badge}</span>
-                            </div>
-                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.backups.title}</h3>
-                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">
-                                {settingsTabChrome.backups.subtitle}
-                                Compose snapshots can run automatically before compose-managed upgrades/redeploys, and optionally as a scheduled on-change sweep.
-                            </p>
+                    <div class="px-5 py-4 space-y-4">
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Compose Snapshot Root</label>
+                            <input
+                                bind:value={settings.composeSnapshotRootPath}
+                                type="text"
+                                disabled={isLocked('composeSnapshotRootPath')}
+                                placeholder="/data/snapshots"
+                                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 font-mono"
+                            />
+                            {#if isLocked('composeSnapshotRootPath')}
+                                <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                            {/if}
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">GitOps Master Directory</label>
+                            <input
+                                bind:value={settings.gitOpsMasterDirectory}
+                                type="text"
+                                disabled={isLocked('gitOpsMasterDirectory')}
+                                placeholder="/data/gitops"
+                                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 font-mono"
+                            />
+                            {#if isLocked('gitOpsMasterDirectory')}
+                                <p class="text-[10px] text-amber-500">Managed by environment variable</p>
+                            {/if}
                         </div>
                     </div>
                 </div>
 
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                    <div class="flex items-center gap-2">
-                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v8m-4-4h8M4 7h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" /></svg>
-                        </span>
-                        <div>
-                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">When Compose Backups Run</p>
-                            <p class="text-[11px] text-slate-500 mt-1">Two independent triggers can create compose snapshots. Use both if you want baseline backups and pre-upgrade protection.</p>
-                        </div>
+                <!-- Compose Snapshot Sweep -->
+                {#each schedules.filter(s => s.id === 'compose_snapshot_on_change') as task}
+                    {@render taskCard(task)}
+                {/each}
+
+            <!-- ================================================
+                 APPEARANCE TAB
+                 ================================================ -->
+            {:else if activeTab === 'appearance'}
+                <!-- Motion & Animations -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Motion & Animations</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Control transition and animation behaviour across all views.</p>
                     </div>
-
-                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-2">
-                            <div class="flex items-center justify-between gap-2">
-                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Before Compose Auto-Apply</p>
-                                <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {(composeAutoApplyTask?.enabled ?? false) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">
-                                    {(composeAutoApplyTask?.enabled ?? false) ? "Enabled" : "Disabled"}
-                                </span>
-                            </div>
-                            <p class="text-[11px] text-slate-600 dark:text-slate-300">Snapshots are created immediately before compose-managed upgrade/redeploy actions run through the upgrade automation pipeline.</p>
-                            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                                {#if composeAutoApplyTask}
-                                    Upgrade schedule: {cronLabel(composeAutoApplyTask.cronSpec)} | Last run: {formatTime(composeAutoApplyTask.lastRun)}
-                                {:else}
-                                    Upgrade auto-apply scheduler task is not registered.
-                                {/if}
-                            </p>
-                            <button
-                                onclick={() => { activeTab = "automations"; activeAutomationTab = "upgrades"; }}
-                                class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
-                            >Open Upgrades Schedule</button>
-                        </div>
-
-                        <div class="rounded-xl bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-2">
-                            <div class="flex items-center justify-between gap-2">
-                                <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Scheduled Compose Backup Sweep</p>
-                                <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest {(composeBackupSweepTask?.enabled ?? false) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}">
-                                    {(composeBackupSweepTask?.enabled ?? false) ? "Enabled" : "Disabled"}
-                                </span>
-                            </div>
-                            <p class="text-[11px] text-slate-600 dark:text-slate-300">Runs on a cron schedule and creates snapshots only when local Compose project files changed (includes project <span class="font-mono">.env</span> when present).</p>
-                            <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                                {#if composeBackupSweepTask}
-                                    {cronLabel(composeBackupSweepTask.cronSpec)} | Last run: {formatTime(composeBackupSweepTask.lastRun)}
-                                {:else}
-                                    Compose backup scheduler task is not registered.
-                                {/if}
-                            </p>
-                        </div>
+                    <div class="px-5 py-4">
+                        {@render settingRow('UI Animations', 'Enable CSS transitions and motion effects throughout the interface.', settings.uiAnimationsEnabled ?? true, () => settings.uiAnimationsEnabled = !settings.uiAnimationsEnabled, 'uiAnimationsEnabled')}
                     </div>
                 </div>
 
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                    <div class="flex items-center gap-2">
-                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-900/40">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7zm0 0l2-3h12l2 3" /></svg>
-                        </span>
-                        <div>
-                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">Compose Backups</p>
-                            <p class="text-[11px] text-slate-500 mt-1">Configure where HarborWatch stores zipped snapshots of Compose files and project <span class="font-mono">.env</span> before compose upgrades.</p>
-                        </div>
+                <!-- Metrics Display -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Metrics Display</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">How metrics values are presented in charts and tables.</p>
                     </div>
-
-                    <div class="space-y-2">
-                        <label for="compose-snapshot-root" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Snapshot Archive Path</label>
-                        <input
-                            id="compose-snapshot-root"
-                            type="text"
-                            bind:value={settings.composeSnapshotRootPath}
-                            disabled={isLocked("composeSnapshotRootPath")}
-                            placeholder="/data/compose-snapshots"
-                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                        />
-                        <p class="text-[11px] text-slate-500">Leave blank to use the appliance default snapshot location.</p>
+                    <div class="px-5 py-4">
+                        {@render settingRow('Normalized Metrics', 'Display metrics as 0–100% normalized values rather than raw counts.', settings.metricsNormalized ?? true, () => settings.metricsNormalized = !settings.metricsNormalized, 'metricsNormalized')}
                     </div>
                 </div>
 
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                    <div class="flex items-center gap-2">
-                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-900/40">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4a3 3 0 00-3 3v4a3 3 0 003 3h4a3 3 0 003-3V7a3 3 0 00-3-3H8zM2 14a2 2 0 012-2h16a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2z" /></svg>
-                        </span>
-                        <div>
-                            <p class="text-sm font-black text-slate-800 dark:text-slate-100">GitOps Storage</p>
-                            <p class="text-[11px] text-slate-500 mt-1">Configure where HarborWatch stores synchronized Git repositories.</p>
-                        </div>
+                <!-- Theme -->
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Theme</h3>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Interface colour mode and brand palette selection.</p>
                     </div>
-
-                    <div class="space-y-2">
-                        <label for="gitops-master-dir" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Master GitOps Directory</label>
-                        <input
-                            id="gitops-master-dir"
-                            type="text"
-                            bind:value={settings.gitOpsMasterDirectory}
-                            disabled={isLocked("gitOpsMasterDirectory")}
-                            placeholder="/data/gitops"
-                            class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"
-                        />
-                        <p class="text-[11px] text-slate-500">Local path where repositories will be cloned. Default is <span class="font-mono">/data/gitops</span>.</p>
+                    <div class="px-5 py-4">
+                        <ThemeSwitcher />
                     </div>
                 </div>
+            {/if}
 
-                {#if composeBackupSweepTask && composeBackupSweepDraft}
-                    <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 space-y-4">
-                        <div class="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <div class="flex items-center gap-2">
-                                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    </span>
-                                    <p class="text-sm font-black text-slate-800 dark:text-slate-100">Scheduled Compose Backup Sweep</p>
-                                </div>
-                                <p class="text-[11px] text-slate-500 mt-1">Mode is <span class="font-bold">on change</span>: unchanged projects are skipped. This task only applies to local Compose projects with readable compose files.</p>
-                                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-1">{taskCronLabel(composeBackupSweepTask)} | Last run: {formatTime(composeBackupSweepTask.lastRun)}</p>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button
-                                    onclick={() => runTask(composeBackupSweepTask.id)}
-                                    class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800"
-                                >Run Now</button>
-                                <button
-                                    onclick={() => toggleTask(composeBackupSweepTask.id, composeBackupSweepTask.enabled)}
-                                    class="w-10 h-5 rounded-full relative transition-colors {composeBackupSweepTask.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                                    aria-label="Toggle scheduled compose backup sweep"
-                                >
-                                    <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {composeBackupSweepTask.enabled ? 'right-1' : 'left-1'}"></div>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                            <div class="space-y-1">
-                                <label for="cadence-compose-backup-sweep" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Cadence</label>
-                                <select
-                                    id="cadence-compose-backup-sweep"
-                                    value={composeBackupSweepDraft.cadence}
-                                    onchange={(e) => patchScheduleDraft(composeBackupSweepTask.id, { cadence: (e.currentTarget as HTMLSelectElement).value as ScheduleCadence })}
-                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                >
-                                    <option value="daily">Daily</option>
-                                    <option value="weekly">Weekly</option>
-                                    <option value="monthly">Monthly</option>
-                                </select>
-                            </div>
-                            <div class="space-y-1">
-                                <label for="time-compose-backup-sweep" class="text-[10px] font-black uppercase tracking-wider text-slate-400">Run Time</label>
-                                <input
-                                    id="time-compose-backup-sweep"
-                                    type="time"
-                                    value={composeBackupSweepDraft.time}
-                                    onchange={(e) => patchScheduleDraft(composeBackupSweepTask.id, { time: (e.currentTarget as HTMLInputElement).value || "00:00" })}
-                                    class="w-full bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 focus:border-brand-500 focus:ring-1 rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-brand-500"
-                                />
-                            </div>
-                            <button
-                                onclick={() => saveTaskSchedule(composeBackupSweepTask.id)}
-                                disabled={!scheduleDirty(composeBackupSweepTask) || savingScheduleId === composeBackupSweepTask.id}
-                                class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest"
-                            >
-                                {savingScheduleId === composeBackupSweepTask.id ? "Saving..." : "Save Schedule"}
-                            </button>
-                        </div>
-
-                        {#if composeBackupSweepDraft.cadence === "weekly"}
-                            <div class="flex flex-wrap gap-2">
-                                {#each weekdayOptions as day}
-                                    <button
-                                        onclick={() => toggleWeeklyDay(composeBackupSweepTask.id, day.value)}
-                                        class="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-colors {composeBackupSweepDraft.weeklyDays.includes(day.value) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                    >{day.label}</button>
-                                {/each}
-                            </div>
-                        {:else if composeBackupSweepDraft.cadence === "monthly"}
-                            <div class="flex flex-wrap gap-1.5">
-                                {#each monthDayOptions as day}
-                                    <button
-                                        onclick={() => toggleMonthDay(composeBackupSweepTask.id, day)}
-                                        class="min-w-8 px-2 py-1 rounded-lg text-[10px] font-black border transition-colors {composeBackupSweepDraft.monthDays.includes(day) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'}"
-                                    >{day}</button>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-                {/if}
-            </div>
-
-        {:else if activeTab === "appearance"}
-            <div class="p-6 md:p-8 space-y-6 settings-pane">
-                <div class="settings-pane-hero rounded-2xl bg-gradient-to-r border border-slate-200/60 dark:border-slate-800/60 p-6 mb-8 {settingsTabChrome.appearance.accentClass} p-5">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div class="max-w-3xl">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="px-2 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/60 text-[9px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 border border-white/70 dark:border-slate-700">{settingsTabChrome.appearance.badge}</span>
-                            </div>
-                            <h3 class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{settingsTabChrome.appearance.title}</h3>
-                            <p class="text-[12px] text-slate-600 dark:text-slate-300 mt-1">{settingsTabChrome.appearance.subtitle}</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                    <div class="md:col-span-2">
-                        <p class="text-[13px] font-bold text-slate-800 dark:text-slate-200">UI Animations</p>
-                        <p class="text-[11px] text-slate-500 mt-1">Turn off transitions and motion effects for reduced visual movement.</p>
-                    </div>
-                    <div class="flex justify-end">
-                    <button
-                        onclick={() => settings.uiAnimationsEnabled = !settings.uiAnimationsEnabled}
-                        disabled={isLocked("uiAnimationsEnabled")}
-                        class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.uiAnimationsEnabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                        aria-label="Toggle UI animations"
-                    >
-                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.uiAnimationsEnabled ? 'right-1' : 'left-1'}"></div>
-                    </button>
-                    </div>
-                </div>
-
-                <div class="py-6 border-b border-slate-200/40 dark:border-slate-800/60 last:border-0 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-                    <div class="md:col-span-2">
-                        <p class="text-[13px] font-bold text-slate-800 dark:text-slate-200">Normalized CPU Metrics</p>
-                        <p class="text-[11px] text-slate-500 mt-1">Scale CPU usage to 100% of total system capacity. Disable to see raw per-core values (e.g. 400% for 4 cores).</p>
-                    </div>
-                    <div class="flex justify-end">
-                    <button
-                        onclick={() => settings.metricsNormalized = !settings.metricsNormalized}
-                        disabled={isLocked("metricsNormalized")}
-                        class="w-10 h-5 rounded-full relative transition-colors disabled:opacity-50 {settings.metricsNormalized ? 'bg-brand-600' : 'bg-slate-300'}"
-                        aria-label="Toggle CPU normalization"
-                    >
-                        <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {settings.metricsNormalized ? 'right-1' : 'left-1'}"></div>
-                    </button>
-                    </div>
-                </div>
-
-                <p class="text-[11px] text-slate-500">Theme changes are applied globally across dashboards, tables, and settings views.</p>
-                <ThemeSwitcher />
-            </div>
-        {/if}
-
-        <div class="px-6 md:px-8 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-[11px] text-slate-500">
-            Some fields may be read-only when defined via environment variables.
-        </div>
-    </div>
-</div>
+        </div><!-- /main content -->
+    </div><!-- /body flex -->
+</div><!-- /settings-page -->
 
 <style>
     .settings-page {
-        position: relative;
+        min-height: 100vh;
     }
 
-    .settings-topbar {
-        position: static;
-        z-index: 30;
-        padding: 0.9rem 1rem;
-        border-radius: 1rem;
-        border: 1px solid rgb(226 232 240 / 0.9);
-        background:
-            radial-gradient(circle at top right, rgb(14 165 233 / 0.08), transparent 45%),
-            radial-gradient(circle at top left, rgb(99 102 241 / 0.08), transparent 50%),
-            rgb(255 255 255 / 0.9);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 12px 30px -24px rgb(15 23 42 / 0.35);
+    .settings-mobile-nav {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
     }
 
-    .settings-tab-strip {
-        position: static;
-        z-index: 25;
-        box-shadow: 0 8px 24px -22px rgb(15 23 42 / 0.4);
+    .settings-mobile-nav::-webkit-scrollbar {
+        display: none;
     }
 
-    .settings-subtab-strip {
-        position: static;
-        z-index: 15;
-        box-shadow: 0 8px 24px -24px rgb(15 23 42 / 0.35);
-    }
-
-    
-
-    .settings-pane {
-        position: relative;
-    }
-
-    .settings-pane::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background-image:
-            linear-gradient(rgb(148 163 184 / 0.06) 1px, transparent 1px),
-            linear-gradient(90deg, rgb(148 163 184 / 0.06) 1px, transparent 1px);
-        background-size: 18px 18px;
-        mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.14), transparent 22%);
-    }
-
-    .settings-pane > * {
-        position: relative;
-        z-index: 1;
-    }
-
-    .settings-pane-hero {
-        box-shadow:
-            inset 0 1px 0 rgb(255 255 255 / 0.7),
-            0 10px 30px -24px rgb(15 23 42 / 0.25);
-    }
-
-    :global(.dark) .settings-topbar {
-        border-color: rgb(51 65 85 / 0.9);
-        background:
-            radial-gradient(circle at top right, rgb(14 165 233 / 0.12), transparent 45%),
-            radial-gradient(circle at top left, rgb(99 102 241 / 0.12), transparent 50%),
-            rgb(15 23 42 / 0.9);
-        box-shadow: 0 14px 40px -30px rgb(0 0 0 / 0.6);
-    }
-
-    :global(.dark) 
-
-    :global(.dark) .settings-pane::before {
-        background-image:
-            linear-gradient(rgb(148 163 184 / 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgb(148 163 184 / 0.05) 1px, transparent 1px);
-    }
-
-    @media (min-width: 768px) {
-        .settings-topbar {
-            position: sticky;
-            top: 0.5rem;
-        }
-
-        .settings-tab-strip {
-            position: sticky;
-            top: 7.1rem;
-        }
-
-        .settings-subtab-strip {
-            position: sticky;
-            top: 10.7rem;
-        }
-    }
-
-    .custom-scrollbar::-webkit-scrollbar {
-        width: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-        @apply bg-transparent;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        @apply bg-slate-200 dark:bg-slate-700 rounded-full;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        @apply bg-slate-300 dark:bg-slate-600;
+    :global(.no-motion) .settings-page *,
+    :global(.no-motion) .settings-page *::before,
+    :global(.no-motion) .settings-page *::after {
+        transition: none !important;
+        animation: none !important;
     }
 </style>
