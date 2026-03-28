@@ -17,7 +17,6 @@
     let loading = $state(true);
     let error = $state("");
     let live = $state(true);
-    let timestamps = $state(false);
     let tail = $state(200);
     let filterText = $state("");
     let following = $state(true); // auto-scroll to bottom
@@ -121,7 +120,6 @@
         error = "";
         try {
             const params = new URLSearchParams({ tail: String(tail) });
-            if (timestamps) params.set("timestamps", "1");
             const res = await fetch(`/api/docker/${id}/logs?${params.toString()}`, { signal: controller.signal });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -183,7 +181,7 @@
 
     // ── Effects ────────────────────────────────────────────────────────────────
     $effect(() => {
-        const nextKey = `${id}|${tail}|${timestamps}`;
+        const nextKey = `${id}|${tail}`;
         if (requestKey === nextKey) return;
         requestKey = nextKey;
         logs = null;
@@ -319,12 +317,6 @@
                     </select>
                 </label>
 
-                <!-- Timestamps toggle -->
-                <label class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 cursor-pointer">
-                    <input bind:checked={timestamps} type="checkbox" class="h-3 w-3 rounded border-white/20 bg-slate-900 accent-cyan-400" />
-                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Timestamps</span>
-                </label>
-
                 <!-- Pause / Resume -->
                 {#if live}
                     <button
@@ -412,13 +404,18 @@
 
 <style>
     .log-shell {
-        /* Fill the full viewport height minus the sidebar-adjusted top offset */
-        height: calc(100dvh - 9.5rem); /* mobile: header ~4.5rem + py-4 padding */
+        /*
+         * Mobile: subtract the sticky mobile header (~4rem).
+         * -my-4 already cancels the content-shell's py-4 padding so we
+         * only need to account for the header above the page content.
+         */
+        height: calc(100dvh - 4rem);
     }
 
     @media (min-width: 768px) {
         .log-shell {
-            height: calc(100dvh - 4rem); /* desktop: py-8 top + bottom padding */
+            /* Desktop: no mobile header, -my-8 cancels py-8. Fill full viewport. */
+            height: 100dvh;
         }
     }
 </style>
