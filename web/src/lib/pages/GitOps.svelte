@@ -2,6 +2,7 @@
     import { onDestroy, onMount } from "svelte";
     import { toasts } from "../stores/ToastStore";
     import { configStore } from "../stores/config.svelte";
+    import StaticNoise from "../components/StaticNoise.svelte";
 
     let { onNavigate, embedded = false } = $props<{
         onNavigate: (route: string, params?: any) => void;
@@ -662,10 +663,8 @@
                              source.lastSyncError ? 'border-rose-300 dark:border-rose-800/60' :
                              'hover:border-brand-400 dark:hover:border-brand-500'}"
                     >
-                        <!-- Syncing noise overlay -->
-                        {#if syncing[source.id]}
-                            <div class="absolute inset-0 repo-noise animate-repo-pulse pointer-events-none"></div>
-                        {/if}
+                        <!-- TV static noise during sync -->
+                        <StaticNoise active={syncing[source.id]} />
 
                         <!-- Top accent bar -->
                         <div class="relative h-0.5 bg-gradient-to-r {sourceCardAccent(source)}"></div>
@@ -794,10 +793,8 @@
                                              'border-slate-200 dark:border-slate-700 hover:border-brand-400/60 dark:hover:border-brand-500/40'}
                                             bg-white dark:bg-slate-900 shadow-sm"
                                     >
-                                        <!-- Busy overlay -->
-                                        {#if deploymentBusy(dep)}
-                                            <div class="absolute inset-0 deployment-noise animate-deployment-pulse pointer-events-none"></div>
-                                        {/if}
+                                        <!-- TV static noise during deploy -->
+                                        <StaticNoise active={deploymentBusy(dep)} />
 
                                         <!-- Accent bar -->
                                         <div class="relative h-0.5 bg-gradient-to-r {deploymentCardAccent(dep)}"></div>
@@ -916,25 +913,6 @@
     </div>
 </div>
 
-<style>
-    :global(.repo-noise), :global(.deployment-noise) {
-        background-image:
-            linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-        background-size: 12px 12px;
-        opacity: 0.55;
-        mix-blend-mode: soft-light;
-    }
-
-    :global(.animate-repo-pulse), :global(.animate-deployment-pulse) {
-        animation: cardPulse 1.8s ease-in-out infinite alternate;
-    }
-
-    @keyframes cardPulse {
-        0% { filter: saturate(1) brightness(1); }
-        100% { filter: saturate(1.08) brightness(1.03); }
-    }
-</style>
 
 <!-- ── Add Repository Modal ──────────────────────────────────────── -->
 {#if showAddSourceModal}

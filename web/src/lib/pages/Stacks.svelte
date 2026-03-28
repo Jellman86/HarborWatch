@@ -3,6 +3,7 @@
     import PaginationBar from "../components/PaginationBar.svelte";
     import PortainerLogo from "../components/PortainerLogo.svelte";
     import GitOps from "./GitOps.svelte";
+    import StaticNoise from "../components/StaticNoise.svelte";
     import { toasts } from "../stores/ToastStore";
     import { configStore } from "../stores/config.svelte";
 
@@ -573,10 +574,8 @@
                                         ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/30 dark:ring-amber-500/25'
                                         : 'border-slate-200 dark:border-slate-700 hover:border-brand-400 dark:hover:border-brand-500'}"
                             >
-                                <!-- Noise overlay during redeploy -->
-                                {#if redeploying[s.Id]}
-                                    <div class="absolute inset-0 stack-noise animate-stack-glow pointer-events-none"></div>
-                                {/if}
+                                <!-- TV static noise during redeploy -->
+                                <StaticNoise active={redeploying[s.Id]} />
 
                                 <!-- Top accent bar -->
                                 <div class="relative h-1 bg-gradient-to-r {portainerCardAccent(s)}"></div>
@@ -665,21 +664,4 @@
 </div>
 
 <style>
-    :global(.stack-noise) {
-        background-image:
-            linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-        background-size: 12px 12px;
-        opacity: 0.55;
-        mix-blend-mode: soft-light;
-    }
-
-    :global(.animate-stack-glow) {
-        animation: stackGlow 1.8s ease-in-out infinite alternate;
-    }
-
-    @keyframes stackGlow {
-        0%   { filter: saturate(1) brightness(1); }
-        100% { filter: saturate(1.15) brightness(1.05); }
-    }
 </style>
