@@ -192,7 +192,7 @@
     class="app-main min-h-screen transition-[padding-left] duration-300"
     style={`--sidebar-offset:${layoutStore.sidebarCollapsed ? '5rem' : '16rem'}`}
   >
-    <div class="sticky top-0 z-30">
+    <div class="progress-bar-fixed">
       <GlobalProgress jobs={activeJobs} />
     </div>
 
@@ -297,6 +297,25 @@
     .app-main {
       padding-left: var(--sidebar-offset, 16rem);
       width: auto;
+    }
+  }
+
+  /* Progress bar: fixed so it survives the overflow-x:hidden scroll-context on .app-main */
+  .progress-bar-fixed {
+    position: fixed;
+    /* mobile: sit beneath the sticky mobile header (~72px) */
+    top: 4.5rem;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    transition: left 0.3s ease;
+  }
+
+  @media (min-width: 768px) {
+    .progress-bar-fixed {
+      top: 0;
+      /* inherit sidebar width via CSS custom property set on <main> */
+      left: var(--sidebar-offset, 16rem);
     }
   }
 </style>
