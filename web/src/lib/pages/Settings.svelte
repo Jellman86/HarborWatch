@@ -1283,7 +1283,7 @@
 {#snippet settingRow(label: string, description: string, value: boolean, onChange: () => void, lockedKey: string)}
     <div class="flex items-center justify-between gap-4 py-3 border-b border-slate-50 dark:border-slate-800/50 last:border-0">
         <div class="min-w-0">
-            <p class="text-sm font-medium text-slate-800 dark:text-slate-200">{label}</p>
+            <p class="text-sm font-semibold text-slate-900 dark:text-white">{label}</p>
             {#if description}
                 <p class="text-[11px] text-slate-400 mt-0.5">{description}</p>
             {/if}
@@ -1298,9 +1298,9 @@
 {/snippet}
 
 {#snippet sectionCard(title: string, description: string)}
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">{title}</h3>
+            <h3 class="text-sm font-black text-slate-900 dark:text-white">{title}</h3>
             {#if description}
                 <p class="text-[11px] text-slate-500 mt-0.5">{description}</p>
             {/if}
@@ -1312,14 +1312,14 @@
     {@const draft = draftForTask(task)}
     {@const isUpdateCheck = isUpdateCheckIntervalTask(task.id)}
     {@const dirty = scheduleDirty(task)}
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
         <!-- Task header -->
         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
             <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
                         <span class="inline-block w-2 h-2 rounded-full flex-none {task.enabled ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-slate-600'}"></span>
-                        <p class="text-sm font-bold text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
+                        <p class="text-sm font-black text-slate-900 dark:text-white">{taskLabel(task.id)}</p>
                     </div>
                     <p class="text-[11px] text-slate-400 mt-1 ml-4">{taskDescription(task.id)}</p>
                     <p class="text-[10px] text-slate-400 mt-1 ml-4">
@@ -1337,7 +1337,7 @@
         <div class="px-5 py-4 space-y-4 bg-slate-50/50 dark:bg-slate-800/20">
             {#if isUpdateCheck}
                 <div class="space-y-1.5">
-                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Check Interval</label>
+                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Check Interval</label>
                     <select
                         value={updateCheckIntervalDraftForTask(task)}
                         onchange={(e) => handleUpdateCheckIntervalChange(task, (e.target as HTMLSelectElement).value as any)}
@@ -1350,7 +1350,7 @@
                 </div>
             {:else}
                 <div class="space-y-1.5">
-                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Cadence</label>
+                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Cadence</label>
                     <select
                         value={draft.cadence}
                         onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.target as HTMLSelectElement).value as any })}
@@ -1362,7 +1362,7 @@
                     </select>
                 </div>
                 <div class="space-y-1.5">
-                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Time (24h)</label>
+                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Time (24h)</label>
                     <input
                         type="time"
                         value={draft.time}
@@ -1372,7 +1372,7 @@
                 </div>
                 {#if draft.cadence === "weekly"}
                     <div class="space-y-2">
-                        <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Days of Week</label>
+                        <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Days of Week</label>
                         <div class="flex flex-wrap gap-1.5">
                             {#each weekdayOptions as day}
                                 <button
@@ -1385,7 +1385,7 @@
                 {/if}
                 {#if draft.cadence === "monthly"}
                     <div class="space-y-2">
-                        <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Days of Month</label>
+                        <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Days of Month</label>
                         <div class="flex flex-wrap gap-1">
                             {#each monthDayOptions as day}
                                 <button
@@ -1422,26 +1422,43 @@
 <div class="settings-page w-full">
 
     <!-- Sticky top bar -->
-    <div class="settings-topbar sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 md:px-6 py-3 md:py-4 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md">
-        <div>
-            <h1 class="text-xl font-black text-slate-900 dark:text-white tracking-tight">Settings</h1>
-            <p class="text-[11px] text-slate-500 mt-0.5">Configure automation, AI, integrations and system behaviour</p>
-        </div>
-        <div class="flex items-center gap-3">
-            <span
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-bold {indicatorToneClass(settingsIndicatorState())}"
-                title={settingsIndicatorState() === 'saving' ? 'Saving…' : settingsIndicatorState() === 'error' ? 'Save failed' : settingsIndicatorState() === 'pending' ? 'Unsaved changes' : 'All changes saved'}
-            >
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/20 bg-white/60 dark:bg-slate-900/40 text-[10px] font-black">{indicatorSymbol(settingsIndicatorState())}</span>
-                {settingsIndicatorState() === 'saving' ? 'Saving…' : settingsIndicatorState() === 'error' ? 'Error' : settingsIndicatorState() === 'pending' ? 'Unsaved' : 'Saved'}
-            </span>
-            <button
-                onclick={saveSettings}
-                disabled={saving || loading || !settingsDirty}
-                class="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-colors"
-            >
-                {saving ? 'Saving…' : settingsDirty ? 'Save Settings' : 'Saved'}
-            </button>
+    <div class="settings-topbar sticky top-0 z-20 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md">
+        <!-- Dirty indicator stripe — amber bar at top when unsaved changes exist -->
+        {#if settingsDirty}
+            <div class="h-0.5 w-full bg-gradient-to-r from-amber-400 via-amber-300 to-transparent"></div>
+        {/if}
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 md:px-6 py-3 md:py-4">
+            <div>
+                <h1 class="text-xl font-black text-slate-900 dark:text-white tracking-tight">Settings</h1>
+                <p class="text-[11px] text-slate-500 mt-0.5">Configure automation, AI, integrations and system behaviour</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <!-- Status badge -->
+                <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] border transition-colors
+                    {settingsIndicatorState() === 'pending' ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-300' :
+                     settingsIndicatorState() === 'error'   ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-700/50 dark:bg-rose-900/20 dark:text-rose-300' :
+                     settingsIndicatorState() === 'saving'  ? 'border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-700/50 dark:bg-brand-900/20 dark:text-brand-300' :
+                                                              'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/20 dark:text-emerald-300'}"
+                >
+                    <span class="h-1.5 w-1.5 rounded-full
+                        {settingsIndicatorState() === 'pending' ? 'bg-amber-400 animate-pulse' :
+                         settingsIndicatorState() === 'error'   ? 'bg-rose-400' :
+                         settingsIndicatorState() === 'saving'  ? 'bg-brand-400 animate-pulse' :
+                                                                  'bg-emerald-400'}"></span>
+                    {settingsIndicatorState() === 'saving' ? 'Saving…' : settingsIndicatorState() === 'error' ? 'Save failed' : settingsIndicatorState() === 'pending' ? 'Unsaved changes' : 'All saved'}
+                </span>
+                <button
+                    onclick={saveSettings}
+                    disabled={saving || loading || !settingsDirty}
+                    class="px-5 py-2 rounded-full font-black uppercase tracking-[0.18em] text-[10px] shadow-sm transition-all
+                        {settingsDirty
+                            ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-200 dark:shadow-amber-900/30 ring-2 ring-amber-400/30'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'}
+                        disabled:opacity-60"
+                >
+                    {saving ? 'Saving…' : settingsDirty ? 'Save Settings' : 'Saved'}
+                </button>
+            </div>
         </div>
     </div>
 
@@ -1478,7 +1495,7 @@
             ] as nav}
                 <button
                     onclick={() => activeTab = nav.id}
-                    class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all text-[12px] font-semibold w-full
+                    class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all text-[11px] font-black uppercase tracking-[0.18em] w-full
                         {activeTab === nav.id
                             ? 'bg-brand-50 dark:bg-slate-800 border-l-2 border-brand-500 text-brand-700 dark:text-brand-300 pl-[10px]'
                             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-l-2 border-transparent'}"
@@ -1547,10 +1564,10 @@
 
                 <!-- Domain header card -->
                 {#if activeAutomationTab !== 'general'}
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
                         <div class="px-5 py-4 flex items-center justify-between gap-4">
                             <div class="min-w-0">
-                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">{automationConfig[activeAutomationTab].title}</h3>
+                                <h3 class="text-sm font-black text-slate-900 dark:text-white">{automationConfig[activeAutomationTab].title}</h3>
                                 <p class="text-[11px] text-slate-500 mt-0.5">{automationConfig[activeAutomationTab].subtitle}</p>
                             </div>
                             <div class="flex items-center gap-3 flex-none">
@@ -1572,14 +1589,14 @@
                 <!-- ── GENERAL DOMAIN ── -->
                 {#if activeAutomationTab === 'general'}
                     <!-- Capacity -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Capacity</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">Capacity</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">Limit parallel upgrade operations to protect host stability.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Max Concurrent Upgrades</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Max Concurrent Upgrades</label>
                                 <input
                                     bind:value={settings.autoUpgradeMaxConcurrency}
                                     type="number" min="1" max="20"
@@ -1594,15 +1611,15 @@
                     </div>
 
                     <!-- Automation Safety Exclusions -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Automation Safety Exclusions</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">Automation Safety Exclusions</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">These containers are excluded from all automated upgrade, maintenance, and security pipelines.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             {#if discoveredContainers.length > 0}
                                 <div class="space-y-1">
-                                    <p class="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Discovered Containers</p>
+                                    <p class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400 mb-2">Discovered Containers</p>
                                     <div class="max-h-64 overflow-y-auto space-y-1 pr-1">
                                         {#each discoveredContainers as container}
                                             {@const hw = isHarborWatchContainer(container)}
@@ -1625,7 +1642,7 @@
                             {/if}
 
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Raw Exclusion Tokens</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Raw Exclusion Tokens</label>
                                 <textarea
                                     bind:value={settings.automationIgnoredContainers}
                                     rows="3"
@@ -1638,14 +1655,14 @@
                     </div>
 
                     <!-- Default Upgrade Policy -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Default Upgrade Policy</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">Default Upgrade Policy</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">Applied when creating new container rules without explicit overrides.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Validation Mode</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Validation Mode</label>
                                 <select
                                     bind:value={settings.defaultValidateMode}
                                     disabled={isLocked('defaultValidateMode')}
@@ -1658,7 +1675,7 @@
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Timeout (sec)</label>
+                                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Timeout (sec)</label>
                                     <input
                                         bind:value={settings.defaultValidateTimeoutSec}
                                         type="number" min="5" max="300"
@@ -1667,7 +1684,7 @@
                                     />
                                 </div>
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Poll Interval (sec)</label>
+                                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Poll Interval (sec)</label>
                                     <input
                                         bind:value={settings.defaultValidateIntervalSec}
                                         type="number" min="1" max="30"
@@ -1699,14 +1716,14 @@
                     {/each}
 
                     <!-- Upgrade Runtime -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Upgrade Runtime</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">Upgrade Runtime</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">Retry, AI gating, and health check policy for the upgrade pipeline.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Min Retry Cooldown (minutes)</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Min Retry Cooldown (minutes)</label>
                                 <input
                                     bind:value={settings.autoUpgradeMinRetryMinutes}
                                     type="number" min="1" max="1440"
@@ -1725,9 +1742,9 @@
                 <!-- ── MAINTENANCE DOMAIN ── -->
                 {:else if activeAutomationTab === 'maintenance'}
                     <!-- Data Retention -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Data Retention Window</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">Data Retention Window</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">How long historical records are kept before automated pruning. Applies to logs, metrics, scans, update runs, and AI usage.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
@@ -1763,13 +1780,13 @@
 
                     <!-- Docker Prune task -->
                     {#each schedules.filter(s => s.id === 'docker_system_prune') as task}
-                        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                             <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0 flex-1">
                                         <div class="flex items-center gap-2">
                                             <span class="inline-block w-2 h-2 rounded-full flex-none {task.enabled ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-slate-600'}"></span>
-                                            <p class="text-sm font-bold text-slate-800 dark:text-slate-100">{taskLabel(task.id)}</p>
+                                            <p class="text-sm font-black text-slate-900 dark:text-white">{taskLabel(task.id)}</p>
                                         </div>
                                         <p class="text-[11px] text-slate-400 mt-1 ml-4">{taskDescription(task.id)}</p>
                                     </div>
@@ -1780,7 +1797,7 @@
                                 {@render settingRow('Include Unused Tagged Images', 'Also prune tagged images that are not referenced by any container.', settings.dockerPruneIncludeUnusedTaggedImages ?? false, () => settings.dockerPruneIncludeUnusedTaggedImages = !settings.dockerPruneIncludeUnusedTaggedImages, 'dockerPruneIncludeUnusedTaggedImages')}
                                 <!-- Schedule editor inline -->
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Cadence</label>
+                                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Cadence</label>
                                     <select
                                         value={draftForTask(task).cadence}
                                         onchange={(e) => patchScheduleDraft(task.id, { cadence: (e.target as HTMLSelectElement).value as any })}
@@ -1792,7 +1809,7 @@
                                     </select>
                                 </div>
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Time (24h)</label>
+                                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Time (24h)</label>
                                     <input
                                         type="time"
                                         value={draftForTask(task).time}
@@ -1839,14 +1856,14 @@
                 <!-- ── SECURITY DOMAIN ── -->
                 {:else if activeAutomationTab === 'security'}
                     <!-- Trivy -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Trivy Configuration</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">Trivy Configuration</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">Vulnerability scanning scope for Trivy sweeps.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Sweep Mode</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Sweep Mode</label>
                                 <select
                                     bind:value={settings.trivySweepMode}
                                     disabled={isLocked('trivySweepMode')}
@@ -1868,14 +1885,14 @@
                     {/each}
 
                     <!-- ClamAV -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">ClamAV Configuration</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">ClamAV Configuration</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">Malware scan scope and snapshot limits.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Max Snapshot Size (bytes)</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Max Snapshot Size (bytes)</label>
                                 <input
                                     bind:value={settings.clamavSnapshotMaxBytes}
                                     type="number" min="1"
@@ -1888,7 +1905,7 @@
                                 {/if}
                             </div>
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Ignored Mounts</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Ignored Mounts</label>
                                 <textarea
                                     bind:value={settings.malwareIgnoredMounts}
                                     rows="3"
@@ -1906,10 +1923,10 @@
 
                     <!-- ClamAV Signature Status -->
                     {#if clamavStatus}
-                        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                             <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
                                 <div>
-                                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">ClamAV Signature Status</h3>
+                                    <h3 class="text-sm font-black text-slate-900 dark:text-white">ClamAV Signature Status</h3>
                                     <p class="text-[11px] text-slate-500 mt-0.5">Current signature database information.</p>
                                 </div>
                                 <button
@@ -1945,15 +1962,15 @@
 
                 <!-- ── REMEDIATION DOMAIN ── -->
                 {:else if activeAutomationTab === 'remediation'}
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Self-Healing Policy</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">Self-Healing Policy</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">Controls for automatic container restart on health failure events.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="grid grid-cols-2 gap-4">
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Restart Cooldown (sec)</label>
+                                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Restart Cooldown (sec)</label>
                                     <input
                                         bind:value={settings.unhealthyRestartCooldownSecDefault}
                                         type="number" min="0"
@@ -1965,7 +1982,7 @@
                                     {/if}
                                 </div>
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Max Restarts per Window</label>
+                                    <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Max Restarts per Window</label>
                                     <input
                                         bind:value={settings.maxRestartsPerWindow}
                                         type="number" min="1" max="20"
@@ -1999,16 +2016,16 @@
 
                 {#if activeAITab === 'settings'}
                     <!-- AI Runtime -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">AI Runtime</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">AI Runtime</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">Master switch and routing policy for all AI-assisted features.</p>
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             {@render settingRow('AI Enabled', 'Enable AI-assisted risk analysis, log interpretation, and audit features.', settings.aiEnabled ?? true, () => settings.aiEnabled = !settings.aiEnabled, 'aiEnabled')}
 
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Active Provider</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Active Provider</label>
                                 <select
                                     bind:value={settings.aiProvider}
                                     disabled={isLocked('aiProvider')}
@@ -2025,7 +2042,7 @@
                             </div>
 
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Block Risk Threshold (%)</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Block Risk Threshold (%)</label>
                                 <input
                                     bind:value={settings.aiBlockRiskThreshold}
                                     type="number" min="0" max="100"
@@ -2051,10 +2068,10 @@
                     </div>
 
                     <!-- OpenAI -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
                             <div>
-                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">OpenAI</h3>
+                                <h3 class="text-sm font-black text-slate-900 dark:text-white">OpenAI</h3>
                                 <p class="text-[11px] text-slate-500 mt-0.5">Configure GPT model access.</p>
                             </div>
                             <button
@@ -2067,7 +2084,7 @@
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">API Key</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">API Key</label>
                                 <input
                                     bind:value={settings.openaiKey}
                                     type="password" autocomplete="off"
@@ -2080,7 +2097,7 @@
                                 {/if}
                             </div>
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Model</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Model</label>
                                 <select
                                     bind:value={settings.openaiModel}
                                     disabled={isLocked('openaiModel')}
@@ -2098,10 +2115,10 @@
                     </div>
 
                     <!-- Anthropic -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
                             <div>
-                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Anthropic</h3>
+                                <h3 class="text-sm font-black text-slate-900 dark:text-white">Anthropic</h3>
                                 <p class="text-[11px] text-slate-500 mt-0.5">Configure Claude model access.</p>
                             </div>
                             <button
@@ -2114,7 +2131,7 @@
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">API Key</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">API Key</label>
                                 <input
                                     bind:value={settings.anthropicKey}
                                     type="password" autocomplete="off"
@@ -2127,7 +2144,7 @@
                                 {/if}
                             </div>
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Model</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Model</label>
                                 <select
                                     bind:value={settings.anthropicModel}
                                     disabled={isLocked('anthropicModel')}
@@ -2145,10 +2162,10 @@
                     </div>
 
                     <!-- Gemini -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
                             <div>
-                                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Google Gemini</h3>
+                                <h3 class="text-sm font-black text-slate-900 dark:text-white">Google Gemini</h3>
                                 <p class="text-[11px] text-slate-500 mt-0.5">Configure Gemini model access.</p>
                             </div>
                             <button
@@ -2161,7 +2178,7 @@
                         </div>
                         <div class="px-5 py-4 space-y-4">
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">API Key</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">API Key</label>
                                 <input
                                     bind:value={settings.geminiKey}
                                     type="password" autocomplete="off"
@@ -2174,7 +2191,7 @@
                                 {/if}
                             </div>
                             <div class="space-y-1.5">
-                                <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Model</label>
+                                <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Model</label>
                                 <select
                                     bind:value={settings.geminiModel}
                                     disabled={isLocked('geminiModel')}
@@ -2192,9 +2209,9 @@
                     </div>
 
                     <!-- Pricing JSON -->
-                    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                         <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Pricing Configuration</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">Pricing Configuration</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">JSON map of model pricing used to estimate AI usage costs.</p>
                         </div>
                         <div class="px-5 py-4">
@@ -2241,7 +2258,7 @@
                                 { label: 'Est. Cost', value: aiUsage.pricingConfigured ? formatUSDCompact(aiUsage.estimatedCostUsd) : 'N/A' }
                             ] as stat}
                                 <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 shadow-sm">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">{stat.label}</p>
+                                    <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{stat.label}</p>
                                     <p class="text-lg font-black text-slate-800 dark:text-slate-100 mt-1">{stat.value}</p>
                                 </div>
                             {/each}
@@ -2256,9 +2273,9 @@
 
                         <!-- Daily spend bar chart -->
                         {#if aiSpendRows.length > 0 && aiUsage.pricingConfigured}
-                            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                                 <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Daily Spend</h3>
+                                    <h3 class="text-sm font-black text-slate-900 dark:text-white">Daily Spend</h3>
                                 </div>
                                 <div class="px-5 py-4">
                                     <svg viewBox="0 0 100 48" class="w-full h-28" preserveAspectRatio="none">
@@ -2279,9 +2296,9 @@
                             </div>
 
                             <!-- Cumulative line chart -->
-                            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                                 <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Cumulative Spend</h3>
+                                    <h3 class="text-sm font-black text-slate-900 dark:text-white">Cumulative Spend</h3>
                                 </div>
                                 <div class="px-5 py-4">
                                     <svg viewBox="0 0 100 48" class="w-full h-24" preserveAspectRatio="none">
@@ -2304,20 +2321,20 @@
 
                         <!-- Breakdown table -->
                         {#if aiUsage.breakdown?.length > 0}
-                            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                            <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                                 <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Usage Breakdown</h3>
+                                    <h3 class="text-sm font-black text-slate-900 dark:text-white">Usage Breakdown</h3>
                                 </div>
                                 <div class="overflow-x-auto">
                                     <table class="w-full text-[11px]">
                                         <thead>
                                             <tr class="border-b border-slate-100 dark:border-slate-800">
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Feature</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Provider / Model</th>
-                                                <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Calls</th>
-                                                <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Tokens</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Feature</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Provider / Model</th>
+                                                <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Calls</th>
+                                                <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Tokens</th>
                                                 {#if aiUsage.pricingConfigured}
-                                                    <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Est. Cost</th>
+                                                    <th class="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Est. Cost</th>
                                                 {/if}
                                             </tr>
                                         </thead>
@@ -2351,15 +2368,15 @@
                  ================================================ -->
             {:else if activeTab === 'integrations'}
                 <!-- Discord -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Discord</h3>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white">Discord</h3>
                         <p class="text-[11px] text-slate-500 mt-0.5">Send upgrade and alert notifications to a Discord channel via webhook.</p>
                     </div>
                     <div class="px-5 py-4 space-y-4">
                         {@render settingRow('Discord Notifications', 'Enable Discord webhook notifications for automation events.', settings.discordEnabled ?? true, () => settings.discordEnabled = !settings.discordEnabled, 'discordEnabled')}
                         <div class="space-y-1.5">
-                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Webhook URL</label>
+                            <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Webhook URL</label>
                             <input
                                 bind:value={settings.discordWebhookUrl}
                                 type="url"
@@ -2375,15 +2392,15 @@
                 </div>
 
                 <!-- Portainer -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Portainer</h3>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white">Portainer</h3>
                         <p class="text-[11px] text-slate-500 mt-0.5">Provide Portainer context for stack-aware operations and environment discovery.</p>
                     </div>
                     <div class="px-5 py-4 space-y-4">
                         {@render settingRow('Portainer Integration', 'Enable Portainer API integration.', settings.portainerEnabled ?? true, () => settings.portainerEnabled = !settings.portainerEnabled, 'portainerEnabled')}
                         <div class="space-y-1.5">
-                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Portainer URL</label>
+                            <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Portainer URL</label>
                             <input
                                 bind:value={settings.portainerUrl}
                                 type="url"
@@ -2396,7 +2413,7 @@
                             {/if}
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">API Key</label>
+                            <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">API Key</label>
                             <input
                                 bind:value={settings.portainerApiKey}
                                 type="password" autocomplete="off"
@@ -2416,15 +2433,15 @@
                  ================================================ -->
             {:else if activeTab === 'system'}
                 <!-- Metrics Collection -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Metrics Collection</h3>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white">Metrics Collection</h3>
                         <p class="text-[11px] text-slate-500 mt-0.5">Background task that samples container and host metrics on a fixed schedule.</p>
                     </div>
                     <div class="px-5 py-4">
                         <div class="flex items-center justify-between gap-4">
                             <div>
-                                <p class="text-sm font-medium text-slate-800 dark:text-slate-200">Metrics Collector</p>
+                                <p class="text-sm font-semibold text-slate-900 dark:text-white">Metrics Collector</p>
                                 <p class="text-[11px] text-slate-400 mt-0.5">
                                     {scheduleById('metrics_collector') ? `Schedule: ${taskCronLabel(scheduleById('metrics_collector')!)} · Last run: ${formatTime(scheduleById('metrics_collector')!.lastRun)}` : 'Schedule not available'}
                                 </p>
@@ -2439,10 +2456,10 @@
                 </div>
 
                 <!-- ClamAV Signatures -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3">
                         <div>
-                            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">ClamAV Signatures</h3>
+                            <h3 class="text-sm font-black text-slate-900 dark:text-white">ClamAV Signatures</h3>
                             <p class="text-[11px] text-slate-500 mt-0.5">Malware signature database status and update controls.</p>
                         </div>
                         <div class="flex items-center gap-2">
@@ -2488,7 +2505,7 @@
                         {#each schedules.filter(s => s.id === 'clamav_signature_update') as task}
                             <div class="flex items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-slate-800/50 mt-3">
                                 <div>
-                                    <p class="text-sm font-medium text-slate-800 dark:text-slate-200">Auto-Update Signatures</p>
+                                    <p class="text-sm font-semibold text-slate-900 dark:text-white">Auto-Update Signatures</p>
                                     <p class="text-[11px] text-slate-400 mt-0.5">Schedule: {taskCronLabel(task)} · Last: {formatTime(task.lastRun)}</p>
                                 </div>
                                 {@render toggleSwitch(task.enabled, () => toggleTask(task.id, task.enabled), false)}
@@ -2498,14 +2515,14 @@
                 </div>
 
                 <!-- Instance -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Instance Identity</h3>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white">Instance Identity</h3>
                         <p class="text-[11px] text-slate-500 mt-0.5">Public URL and validation probe pattern for this HarborWatch instance.</p>
                     </div>
                     <div class="px-5 py-4 space-y-4">
                         <div class="space-y-1.5">
-                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Instance URL</label>
+                            <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Instance URL</label>
                             <input
                                 bind:value={settings.instanceUrl}
                                 type="url"
@@ -2518,7 +2535,7 @@
                             {/if}
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Validate URL Pattern</label>
+                            <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Validate URL Pattern</label>
                             <input
                                 bind:value={settings.validateUrlPattern}
                                 type="text"
@@ -2538,14 +2555,14 @@
                  ================================================ -->
             {:else if activeTab === 'backups'}
                 <!-- Storage Paths -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Storage Paths</h3>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white">Storage Paths</h3>
                         <p class="text-[11px] text-slate-500 mt-0.5">Host filesystem locations for compose snapshots and GitOps working directory.</p>
                     </div>
                     <div class="px-5 py-4 space-y-4">
                         <div class="space-y-1.5">
-                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">Compose Snapshot Root</label>
+                            <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Compose Snapshot Root</label>
                             <input
                                 bind:value={settings.composeSnapshotRootPath}
                                 type="text"
@@ -2558,7 +2575,7 @@
                             {/if}
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-500">GitOps Master Directory</label>
+                            <label class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">GitOps Master Directory</label>
                             <input
                                 bind:value={settings.gitOpsMasterDirectory}
                                 type="text"
@@ -2583,9 +2600,9 @@
                  ================================================ -->
             {:else if activeTab === 'appearance'}
                 <!-- Motion & Animations -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Motion & Animations</h3>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white">Motion & Animations</h3>
                         <p class="text-[11px] text-slate-500 mt-0.5">Control transition and animation behaviour across all views.</p>
                     </div>
                     <div class="px-5 py-4">
@@ -2594,9 +2611,9 @@
                 </div>
 
                 <!-- Metrics Display -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Metrics Display</h3>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white">Metrics Display</h3>
                         <p class="text-[11px] text-slate-500 mt-0.5">How metrics values are presented in charts and tables.</p>
                     </div>
                     <div class="px-5 py-4">
@@ -2605,9 +2622,9 @@
                 </div>
 
                 <!-- Theme -->
-                <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
                     <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80">
-                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Theme</h3>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white">Theme</h3>
                         <p class="text-[11px] text-slate-500 mt-0.5">Interface colour mode and brand palette selection.</p>
                     </div>
                     <div class="px-5 py-4">
