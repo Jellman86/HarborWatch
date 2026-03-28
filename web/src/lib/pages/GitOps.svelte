@@ -185,7 +185,6 @@
             const res = await fetch("/api/gitops/sources");
             if (res.ok) {
                 sources = asArray<GitSource>(await res.json());
-                // Load deployments for all sources
                 for (const src of sources) {
                     loadDeployments(src.id);
                 }
@@ -221,7 +220,6 @@
                 toasts.success("Git source added successfully");
                 showAddSourceModal = false;
                 loadSources();
-                // Reset form
                 newSource = {
                     name: "",
                     url: "",
@@ -428,7 +426,7 @@
         if (dep.envInlineEnabled) return "HarborWatch Override";
         if (dep.envFilePath) return "Custom Env File";
         if (dep.envVarsJson) return "Legacy Overlay";
-        return "Repo / Default Env";
+        return "Repo Default";
     }
 
     function activeEnvSourceClass(dep: GitDeployment): string {
@@ -455,12 +453,6 @@
             : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
     }
 
-    function deployImagePolicySummary(dep: GitDeployment): string {
-        return dep.pullOnDeploy
-            ? "HarborWatch pulls newer images before applying this stack."
-            : "HarborWatch applies this stack using currently available local images.";
-    }
-
     function deploymentStateLabel(dep: GitDeployment): string {
         if (dep.deployStatus === "queued") return "Queued";
         if (dep.deployStatus === "running") return "Deploying";
@@ -479,13 +471,13 @@
         return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
     }
 
-    function deploymentStatusSummary(dep: GitDeployment): string {
+    function deploymentActivityText(dep: GitDeployment): string {
         if (dep.deployStatusMessage) return dep.deployStatusMessage;
         if (dep.lastError) return dep.lastError;
         if (dep.lastDeployedAt) {
-            return `Last successful deploy ${formatRelativeTime(dep.lastDeployedAt)}${dep.lastDeployedHash ? ` (${dep.lastDeployedHash.slice(0, 7)})` : ''}`;
+            return `Last deployed ${formatRelativeTime(dep.lastDeployedAt)}${dep.lastDeployedHash ? ` · ${dep.lastDeployedHash.slice(0, 7)}` : ''}`;
         }
-        return "Deployment has not run yet.";
+        return "Not yet deployed";
     }
 
     function hasActiveDeployments(): boolean {
@@ -506,440 +498,424 @@
         return syncing[source.id] === true;
     }
 
-    function sourceCardTone(source: GitSource): string {
-        if (sourceBusy(source)) return "ring-amber-400/40 bg-[linear-gradient(135deg,_rgba(161,98,7,0.14),_rgba(15,23,42,0.95))]";
-        if (source.lastSyncError) return "ring-rose-400/30 bg-white/92 dark:bg-slate-900/92";
-        return "ring-slate-200/80 bg-white/92 dark:bg-slate-900/90";
-    }
-
-    function sourceCardAccent(source: GitSource): string {
-        if (sourceBusy(source)) return "from-amber-400/30 via-transparent to-cyan-400/10";
-        if (source.lastSyncError) return "from-rose-400/30 via-transparent to-amber-400/10";
-        if (source.lastCommitHash) return "from-cyan-500/12 via-transparent to-slate-50/0";
-        return "from-slate-500/10 via-transparent to-slate-50/0";
-    }
-
     function sourceStateChipClass(source: GitSource): string {
         if (sourceBusy(source)) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
         if (source.lastSyncError) return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300";
-        return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+        if (source.lastCommitHash) return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+        return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
     }
 
     function sourceStateLabel(source: GitSource): string {
         if (sourceBusy(source)) return "Syncing";
-        if (source.lastSyncError) return "Sync Issue";
-        return "Ready";
+        if (source.lastSyncError) return "Sync Error";
+        if (source.lastCommitHash) return "Synced";
+        return "Not Synced";
     }
 
-    function sourceStateSummary(source: GitSource): string {
-        if (sourceBusy(source)) return "Refreshing repository contents and stack definitions.";
-        if (source.lastSyncError) return source.lastSyncError;
-        return `Branch ${source.branch} | ${source.syncIntervalMins} min sync`;
+    function sourceCardAccent(source: GitSource): string {
+        if (sourceBusy(source)) return "from-amber-400 via-amber-300/20 to-transparent";
+        if (source.lastSyncError) return "from-rose-400 via-rose-300/10 to-transparent";
+        if (source.lastCommitHash) return "from-emerald-400/60 via-brand-400/20 to-transparent";
+        return "from-slate-400/30 via-transparent to-transparent";
     }
 
     function deploymentBusy(dep: GitDeployment): boolean {
         return dep.deployStatus === "queued" || dep.deployStatus === "running" || deploying[dep.id] === true;
     }
 
-    function deploymentCardTone(dep: GitDeployment): string {
-        if (deploymentBusy(dep)) return "ring-amber-400/40 bg-[linear-gradient(135deg,_rgba(161,98,7,0.16),_rgba(15,23,42,0.95))]";
-        if (dep.deployStatus === "failed") return "ring-rose-400/30 bg-white/92 dark:bg-slate-900/92";
-        if (dep.enabled === false) return "ring-slate-200/80 bg-white/82 dark:bg-slate-900/82";
-        return "ring-slate-200/80 bg-white/92 dark:bg-slate-900/90";
-    }
-
     function deploymentCardAccent(dep: GitDeployment): string {
-        if (deploymentBusy(dep)) return "from-amber-400/35 via-transparent to-cyan-400/10";
-        if (dep.deployStatus === "failed") return "from-rose-400/30 via-transparent to-slate-50/0";
-        if (dep.deployStatus === "completed") return "from-emerald-400/25 via-transparent to-cyan-400/10";
-        return "from-slate-500/10 via-transparent to-slate-50/0";
+        if (deploymentBusy(dep)) return "from-amber-400/80 via-amber-300/20 to-transparent";
+        if (dep.deployStatus === "failed") return "from-rose-400/80 via-rose-300/10 to-transparent";
+        if (dep.deployStatus === "completed") return "from-emerald-400/60 via-brand-400/20 to-transparent";
+        if (dep.enabled === false) return "from-slate-300/30 via-transparent to-transparent";
+        return "from-brand-400/40 via-transparent to-transparent";
     }
 
-    function deploymentStateTone(dep: GitDeployment): string {
-        if (deploymentBusy(dep)) return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300";
-        if (dep.deployStatus === "failed") return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300";
-        if (dep.deployStatus === "completed") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
-        if (dep.enabled === false) return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
-        return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
-    }
-
-    function deploymentNoiseClass(dep: GitDeployment): string {
-        return deploymentBusy(dep) ? "deployment-noise animate-deployment-pulse" : "";
+    function deployBtnLabel(dep: GitDeployment): string {
+        if (deploying[dep.id]) return "Queueing...";
+        if (dep.deployStatus === "running") return "Deploying...";
+        if (dep.deployStatus === "queued") return "Queued";
+        return "Deploy Now";
     }
 </script>
 
-<div class={embedded ? "space-y-6" : "relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.09),_transparent_28%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.72))] dark:bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.14),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_28%),linear-gradient(180deg,_rgba(2,6,23,1),_rgba(15,23,42,0.82))]"}>
+<!-- ── Wrapper ─────────────────────────────────────────────────── -->
+<div class={embedded ? "space-y-4" : "relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.09),_transparent_28%),linear-gradient(180deg,_rgba(248,250,252,1),_rgba(241,245,249,0.72))] dark:bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.14),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_28%),linear-gradient(180deg,_rgba(2,6,23,1),_rgba(15,23,42,0.82))]"}>
     {#if !embedded}
         <div class="absolute inset-0 pointer-events-none opacity-40 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:42px_42px]"></div>
-        <div class="absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_36%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.08),_transparent_28%)] pointer-events-none"></div>
-        <div class="absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,_transparent,_rgba(15,23,42,0.03))] dark:bg-[linear-gradient(180deg,_transparent,_rgba(2,6,23,0.30))] pointer-events-none"></div>
     {/if}
 
-    <div class={embedded ? "space-y-6" : "relative mx-auto max-w-[96rem] px-4 py-5 md:px-8 md:py-8 space-y-6"}>
-        <section class="rounded-[2rem] border border-slate-200/70 dark:border-slate-800/80 bg-white/92 dark:bg-slate-950/88 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.55)] backdrop-blur-xl overflow-hidden opacity-0 animate-reveal">
-            <div class="px-5 py-5 md:px-7 md:py-7 border-b border-slate-200/60 dark:border-slate-800/80 bg-[linear-gradient(180deg,_rgba(248,250,252,0.98),_rgba(255,255,255,0.72))] dark:bg-[linear-gradient(180deg,_rgba(15,23,42,0.98),_rgba(15,23,42,0.84))]">
-                <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                    <div class="space-y-3">
-                        <div class="inline-flex items-center gap-2 rounded-full border border-slate-200/70 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-slate-300">
-                            Repository Orchestration
-                        </div>
-                        <div class="border-l-4 border-brand-600 pl-4">
-                            <h2 class="flex items-center gap-3 text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-                                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-brand-500/20 bg-brand-500/10 text-brand-600 dark:text-brand-300">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 7.5A2.5 2.5 0 019.5 5h5A2.5 2.5 0 0117 7.5v1A2.5 2.5 0 0114.5 11h-5A2.5 2.5 0 017 8.5v-1Z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 17.5A2.5 2.5 0 018.5 15h7A2.5 2.5 0 0118 17.5v1A2.5 2.5 0 0115.5 21h-7A2.5 2.5 0 016 18.5v-1Z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.5 11v4M14.5 11v4M12 11v4" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.5 12.5H6.5A2.5 2.5 0 004 15v.5M14.5 12.5h3A2.5 2.5 0 0120 15v.5" />
-                                    </svg>
-                                </span>
-                                GitOps Repositories
-                            </h2>
-                            <p class="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-                                Manage repository-backed stacks with identity-first cards, explicit sync state, and nested deployment controls.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-3">
-                        <button
-                            onclick={() => showAddSourceModal = true}
-                            class="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 shadow-sm transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
-                            </svg>
-                            Add Repository
-                        </button>
-                        <button
-                            onclick={loadSources}
-                            class="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 shadow-sm transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            Refresh Sources
-                        </button>
-                    </div>
-                </div>
+    <div class={embedded ? "space-y-4" : "relative mx-auto max-w-[96rem] px-4 py-5 md:px-8 md:py-8 space-y-6"}>
 
-                <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 px-4 py-3">
-                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Repositories</p>
-                        <p class="mt-1 text-lg font-black text-slate-900 dark:text-white">{sources.length}</p>
-                    </div>
-                    <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 px-4 py-3">
-                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Deployment Rules</p>
-                        <p class="mt-1 text-lg font-black text-slate-900 dark:text-white">{countDeployments()}</p>
-                    </div>
-                    <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/80 dark:bg-slate-900/60 px-4 py-3">
-                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Active Jobs</p>
-                        <p class="mt-1 text-lg font-black text-slate-900 dark:text-white">{countBusyDeployments()}</p>
-                    </div>
+        <!-- ── Standalone page header (non-embedded only) ──────── -->
+        {#if !embedded}
+            <div class="flex flex-wrap items-center justify-between gap-4 opacity-0 animate-reveal">
+                <div class="border-l-4 border-brand-600 pl-4">
+                    <h2 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">GitOps</h2>
+                    <p class="text-xs text-slate-500 font-medium">Repository-backed stacks with automated sync and deploy.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
+                        {sources.length} Repos
+                    </span>
+                    <span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
+                        {countDeployments()} Rules
+                    </span>
+                    {#if countBusyDeployments() > 0}
+                        <span class="px-3 py-1 bg-amber-100 dark:bg-amber-900/30 rounded-full text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-widest border border-amber-200 dark:border-amber-900/50">
+                            {countBusyDeployments()} Active
+                        </span>
+                    {/if}
+                    <button
+                        onclick={loadSources}
+                        class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 transition-colors hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                    </button>
+                    <button
+                        onclick={() => showAddSourceModal = true}
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm shadow-brand-500/20 transition-colors hover:bg-brand-700"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Repository
+                    </button>
                 </div>
             </div>
-        </section>
+        {/if}
 
+        <!-- ── Embedded action bar (embedded only) ─────────────── -->
+        {#if embedded}
+            <div class="flex flex-wrap items-center justify-between gap-3 opacity-0 animate-reveal">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">GitOps Repositories</p>
+                    <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        {sources.length} {sources.length === 1 ? 'repository' : 'repositories'}
+                        {#if countDeployments() > 0}, {countDeployments()} deployment {countDeployments() === 1 ? 'rule' : 'rules'}{/if}
+                        {#if countBusyDeployments() > 0} · <span class="text-amber-600 dark:text-amber-400 font-semibold">{countBusyDeployments()} active</span>{/if}
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button
+                        onclick={loadSources}
+                        class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 transition-colors hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                    </button>
+                    <button
+                        onclick={() => showAddSourceModal = true}
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm shadow-brand-500/20 transition-colors hover:bg-brand-700"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Repository
+                    </button>
+                </div>
+            </div>
+        {/if}
+
+        <!-- ── Loading ─────────────────────────────────────────── -->
         {#if loading && sources.length === 0}
-            <div class="rounded-[1.75rem] border border-slate-200/70 dark:border-slate-800 bg-white/85 dark:bg-slate-950/80 px-6 py-16 text-center shadow-sm">
-                <div class="mx-auto w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/80 px-6 py-14 text-center">
+                <div class="mx-auto h-10 w-10 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"></div>
                 <p class="mt-4 text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Discovering repositories</p>
             </div>
+
+        <!-- ── Empty state ─────────────────────────────────────── -->
         {:else if sources.length === 0}
-            <div class="rounded-[1.75rem] border border-dashed border-slate-200/80 dark:border-slate-800 bg-white/75 dark:bg-slate-950/60 px-8 py-14 text-center">
-                <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 7.5A2.5 2.5 0 019.5 5h5A2.5 2.5 0 0117 7.5v1A2.5 2.5 0 0114.5 11h-5A2.5 2.5 0 017 8.5v-1Z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 17.5A2.5 2.5 0 018.5 15h7A2.5 2.5 0 0118 17.5v1A2.5 2.5 0 0115.5 21h-7A2.5 2.5 0 016 18.5v-1Z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.5 11v4M14.5 11v4M12 11v4" />
+            <div class="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/75 dark:bg-slate-950/50 px-8 py-14 text-center opacity-0 animate-reveal">
+                <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-300 dark:text-slate-700">
+                    <!-- git branch icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                     </svg>
                 </div>
-                <h3 class="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">No Repositories Connected</h3>
-                <p class="mt-2 max-w-lg mx-auto text-sm text-slate-500 dark:text-slate-400">Add a Git repository to start managing compose stacks with native GitOps workflows.</p>
+                <h3 class="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">No Repositories Connected</h3>
+                <p class="mt-2 max-w-md mx-auto text-sm text-slate-500 dark:text-slate-400">Add a Git repository to start managing compose stacks with automated sync and deploy.</p>
                 <button
                     onclick={() => showAddSourceModal = true}
-                    class="mt-8 inline-flex items-center justify-center rounded-2xl bg-brand-600 px-8 py-3 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-700 shadow-lg shadow-brand-500/20"
+                    class="mt-6 inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-6 py-2.5 text-[11px] font-black uppercase tracking-widest text-white shadow-lg shadow-brand-500/20 transition-all hover:bg-brand-700"
                 >
-                    Connect Your First Repository
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Connect First Repository
                 </button>
             </div>
+
+        <!-- ── Repository list ─────────────────────────────────── -->
         {:else}
-            <div class="space-y-5 opacity-0 animate-reveal stagger-1">
+            <div class="space-y-5">
                 {#each sources as source, index}
                     <article
-                        style="animation-delay: {0.08 + (index * 0.05)}s"
-                        class="opacity-0 animate-reveal group relative overflow-hidden rounded-[1.75rem] border ring-1 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.55)] transition-all hover:-translate-y-0.5 hover:shadow-[0_28px_70px_-38px_rgba(15,23,42,0.72)] {sourceCardTone(source)}"
+                        style="animation-delay: {0.06 + index * 0.04}s"
+                        class="opacity-0 animate-reveal group relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md
+                            {syncing[source.id] ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/30' :
+                             source.lastSyncError ? 'border-rose-300 dark:border-rose-800/60' :
+                             'hover:border-brand-400 dark:hover:border-brand-500'}"
                     >
-                        <div class="absolute inset-0 pointer-events-none {sourceBusy(source) ? 'repo-noise animate-repo-pulse' : ''}"></div>
-                        <div class="relative h-1 bg-gradient-to-r {sourceCardAccent(source)}"></div>
-                        <div class="relative space-y-5 p-5 md:p-6">
-                            <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                                <div class="min-w-0 flex-1">
-                                    <div class="flex items-start gap-4">
-                                        <button
-                                            onclick={() => toggleExpand(source.id)}
-                                            aria-label={expandedSourceId === source.id ? `Collapse repository ${source.name}` : `Expand repository ${source.name}`}
-                                            class="mt-0.5 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200/70 dark:border-slate-700 bg-white/80 dark:bg-slate-900/70 transition-all hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300 active:scale-95"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-400 transition-transform duration-300 {expandedSourceId === source.id ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                            </svg>
-                                        </button>
-                                        <div class="min-w-0 space-y-2">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] {sourceStateChipClass(source)}">
-                                                    {sourceStateLabel(source)}
-                                                </span>
-                                                <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300">
-                                                    Branch {source.branch}
-                                                </span>
-                                            </div>
-                                            <h3 class="truncate text-2xl font-black tracking-tight text-slate-900 dark:text-white" title={source.name}>{source.name}</h3>
-                                            <p class="truncate text-[10px] font-mono text-slate-500 dark:text-slate-400" title={source.url}>{source.url}</p>
-                                            <div class="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                                                <span class="rounded-full bg-slate-100/90 dark:bg-slate-800 px-2.5 py-1">{source.authMethod === 'none' ? 'Public' : source.authMethod === 'http_token' ? 'Token Auth' : 'SSH Auth'}</span>
-                                                <span class="rounded-full bg-slate-100/90 dark:bg-slate-800 px-2.5 py-1">{source.syncIntervalMins} min sync</span>
-                                                <span class="rounded-full bg-slate-100/90 dark:bg-slate-800 px-2.5 py-1">Target {source.targetDir || '.'}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                        <!-- Syncing noise overlay -->
+                        {#if syncing[source.id]}
+                            <div class="absolute inset-0 repo-noise animate-repo-pulse pointer-events-none"></div>
+                        {/if}
 
-                                <div class="flex flex-wrap items-center gap-2 xl:justify-end">
-                                    <button
-                                        onclick={() => openAddDeploymentModal(source.id)}
-                                        class="inline-flex items-center justify-center rounded-2xl bg-brand-600 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-brand-500/20 transition-all hover:bg-brand-700"
-                                    >
-                                        Add Stack
-                                    </button>
+                        <!-- Top accent bar -->
+                        <div class="relative h-0.5 bg-gradient-to-r {sourceCardAccent(source)}"></div>
+
+                        <!-- Card body -->
+                        <div class="relative space-y-4 p-5">
+
+                            <!-- ── Identity + State zone ──────── -->
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Git Repository</p>
+                                    <h3 class="mt-1 truncate text-lg font-black tracking-tight text-slate-900 dark:text-white" title={source.name}>
+                                        {source.name}
+                                    </h3>
+                                    <p class="mt-0.5 truncate text-[10px] font-mono text-slate-500 dark:text-slate-400" title={source.url}>
+                                        {source.url}
+                                    </p>
+                                </div>
+                                <div class="flex shrink-0 flex-col items-end gap-1.5">
+                                    <span class="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest {sourceStateChipClass(source)}">
+                                        {#if syncing[source.id]}
+                                            <span class="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse align-middle"></span>
+                                        {/if}
+                                        {sourceStateLabel(source)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- ── Metadata chips ─────────────── -->
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">
+                                    {source.branch}
+                                </span>
+                                <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">
+                                    {source.authMethod === 'none' ? 'Public' : source.authMethod === 'http_token' ? 'Token Auth' : 'SSH Key'}
+                                </span>
+                                <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">
+                                    Sync {source.syncIntervalMins}m
+                                </span>
+                                {#if source.lastCommitHash}
+                                    <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                        {source.lastCommitHash.slice(0, 7)}
+                                    </span>
+                                {/if}
+                                {#if source.targetDir}
+                                    <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                        /{source.targetDir}
+                                    </span>
+                                {/if}
+                            </div>
+
+                            <!-- Sync error banner -->
+                            {#if source.lastSyncError}
+                                <div class="flex items-start gap-2.5 rounded-xl border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 px-3.5 py-3 text-xs text-rose-700 dark:text-rose-300">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    <span>{source.lastSyncError}</span>
+                                </div>
+                            {/if}
+
+                            <!-- ── Controls zone ──────────────── -->
+                            <div class="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-4 gap-3">
+                                <span class="text-[10px] text-slate-400 font-medium">
+                                    Synced {formatRelativeTime(source.lastSyncAt)}
+                                    {#if (deployments[source.id] || []).length > 0}
+                                        · {(deployments[source.id] || []).length} stack{(deployments[source.id] || []).length !== 1 ? 's' : ''}
+                                    {/if}
+                                </span>
+                                <div class="flex flex-wrap items-center gap-2">
                                     <button
                                         onclick={() => syncSource(source.id)}
                                         disabled={syncing[source.id]}
-                                        class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300 disabled:opacity-50"
-                                        title="Sync Repository"
+                                        class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300 disabled:opacity-50"
                                     >
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 {syncing[source.id] ? 'animate-spin' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
                                         {syncing[source.id] ? 'Syncing...' : 'Sync'}
                                     </button>
                                     <button
-                                        onclick={() => toggleExpand(source.id)}
-                                        class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
+                                        onclick={() => openAddDeploymentModal(source.id)}
+                                        class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm shadow-brand-500/20 transition-all hover:bg-brand-700"
                                     >
-                                        {expandedSourceId === source.id ? 'Collapse' : 'Expand'}
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        Add Stack
                                     </button>
                                     <button
                                         onclick={() => deleteSource(source.id)}
-                                        class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-rose-400 hover:text-rose-600 dark:hover:text-rose-300"
-                                        title="Remove Repository"
+                                        class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200 transition-all hover:border-rose-400 hover:text-rose-600 dark:hover:text-rose-300"
                                     >
                                         Remove
                                     </button>
                                 </div>
                             </div>
-
-                            <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
-                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Last Sync</p>
-                                    <p class="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">{formatRelativeTime(source.lastSyncAt)}</p>
-                                </div>
-                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
-                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Commit</p>
-                                    <p class="mt-1 text-sm font-mono font-bold text-slate-700 dark:text-slate-200">{source.lastCommitHash ? source.lastCommitHash.slice(0, 7) : "N/A"}</p>
-                                </div>
-                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
-                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Auth</p>
-                                    <p class="mt-1 text-sm font-black uppercase tracking-tight text-slate-700 dark:text-slate-200">
-                                        {source.authMethod === 'none' ? 'Public' : source.authMethod === 'http_token' ? 'Token' : 'SSH Key'}
-                                    </p>
-                                </div>
-                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
-                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Deployment Rules</p>
-                                    <p class="mt-1 text-sm font-black text-slate-900 dark:text-white">{(deployments[source.id] || []).length}</p>
-                                </div>
-                            </div>
-
-                            <div class="grid gap-3 xl:grid-cols-[1.3fr_0.7fr]">
-                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/35 px-4 py-4">
-                                    <div class="flex items-start justify-between gap-4">
-                                        <div class="min-w-0">
-                                            <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Repository State</p>
-                                            <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-300">{sourceStateSummary(source)}</p>
-                                            <p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400">
-                                                Sync target: <span class="font-mono">{source.targetDir || '.'}</span>
-                                            </p>
-                                        </div>
-                                        <div class="text-right">
-                                            <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Sync Interval</p>
-                                            <p class="mt-1 text-xl font-black text-slate-900 dark:text-white">{source.syncIntervalMins}m</p>
-                                        </div>
-                                    </div>
-                                    {#if source.lastSyncError}
-                                        <div class="mt-4 rounded-2xl border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 px-3 py-3 text-sm text-rose-700 dark:text-rose-300">
-                                            {source.lastSyncError}
-                                        </div>
-                                    {/if}
-                                </div>
-
-                                <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/35 px-4 py-4">
-                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Top-Level Actions</p>
-                                    <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Repository sync, stack creation, and lifecycle controls stay at the card edge.</p>
-                                </div>
-                            </div>
-
-                            {#if expandedSourceId === source.id}
-                                <div class="space-y-4 rounded-[1.5rem] border border-slate-200/70 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/45 p-4 md:p-5">
-                                    <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                                        <div>
-                                            <p class="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Deployment Rules</p>
-                                            <p class="mt-1 text-sm text-slate-600 dark:text-slate-400">Nested cards preserve identity and job state for each stack rule.</p>
-                                        </div>
-                                        <span class="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300">
-                                            {(deployments[source.id] || []).length} Stacks
-                                        </span>
-                                    </div>
-
-                                    {#if (deployments[source.id] || []).length === 0}
-                                        <div class="rounded-[1.5rem] border border-dashed border-slate-200/80 dark:border-slate-800 bg-white/75 dark:bg-slate-950/50 px-8 py-12 text-center">
-                                            <p class="text-sm text-slate-500 font-medium italic">No compose files selected for deployment from this repository.</p>
-                                            <button
-                                                onclick={() => openAddDeploymentModal(source.id)}
-                                                class="mt-4 text-[10px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400 hover:underline"
-                                            >
-                                                Configure first stack
-                                            </button>
-                                        </div>
-                                    {:else}
-                                        <div class="grid grid-cols-1 gap-3">
-                                            {#each deployments[source.id] as dep}
-                                                <article class="group/dep relative overflow-hidden rounded-[1.5rem] border ring-1 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_60px_-32px_rgba(15,23,42,0.58)] {deploymentCardTone(dep)}">
-                                                    <div class="absolute inset-0 pointer-events-none {deploymentNoiseClass(dep)}"></div>
-                                                    <div class="relative h-1 bg-gradient-to-r {deploymentCardAccent(dep)}"></div>
-                                                    {#if deploymentBusy(dep)}
-                                                        <div class="absolute inset-x-0 top-0 h-full bg-[linear-gradient(90deg,rgba(245,158,11,0.10),transparent_24%,transparent_76%,rgba(34,211,238,0.08))] pointer-events-none"></div>
-                                                    {/if}
-                                                    <div class="relative space-y-4 p-4 md:p-5">
-                                                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                                            <div class="min-w-0 flex-1">
-                                                                <div class="flex flex-wrap items-center gap-2">
-                                                                    <p class="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Nested Stack</p>
-                                                                    <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] {deploymentStateTone(dep)}">
-                                                                        {deploymentStateLabel(dep)}
-                                                                    </span>
-                                                                    {#if dep.autoCreated && dep.enabled === false}
-                                                                        <span class="rounded-full bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em]">
-                                                                            Newly Discovered
-                                                                        </span>
-                                                                    {/if}
-                                                                    {#if dep.enabled === false}
-                                                                        <span class="rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em]">
-                                                                            Disabled
-                                                                        </span>
-                                                                    {/if}
-                                                                </div>
-                                                                <h4 class="mt-2 truncate text-lg font-black tracking-tight text-slate-900 dark:text-white font-mono" title={dep.composePath}>{dep.composePath}</h4>
-                                                                <p class="mt-1 text-[10px] font-mono text-slate-500 dark:text-slate-400 break-all">Mapped: {resolvedComposeMapping(source.targetDir, dep.composePath)}</p>
-                                                                <p class="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
-                                                                    Last deployed: {formatRelativeTime(dep.lastDeployedAt)} {dep.lastDeployedHash ? `(${dep.lastDeployedHash.slice(0, 7)})` : ''}
-                                                                </p>
-                                                            </div>
-                                                            <div class="flex flex-wrap items-center gap-2 lg:justify-end">
-                                                                <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] {deploymentStateTone(dep)}">
-                                                                    {deploymentStateLabel(dep)}
-                                                                </span>
-                                                                <span class="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300">
-                                                                    {deploymentBusy(dep) ? 'Job Active' : 'Idle'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                                            <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
-                                                                <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Status</p>
-                                                                <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-300">{deploymentStatusSummary(dep)}</p>
-                                                            </div>
-                                                            <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
-                                                                <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Env Source</p>
-                                                                <p class="mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] {activeEnvSourceClass(dep)}">{activeEnvSourceLabel(dep)}</p>
-                                                                <p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{activeEnvSourceSummary(dep)}</p>
-                                                            </div>
-                                                            <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
-                                                                <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Image Policy</p>
-                                                                <p class="mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] {deployImagePolicyClass(dep)}">{deployImagePolicyLabel(dep)}</p>
-                                                                <p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{deployImagePolicySummary(dep)}</p>
-                                                            </div>
-                                                            <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/75 dark:bg-slate-950/40 px-3 py-3">
-                                                                <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Activity</p>
-                                                                <p class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-300">{dep.deployStatusMessage || dep.lastError || (dep.lastDeployedAt ? `Last successful deploy ${formatRelativeTime(dep.lastDeployedAt)}` : 'Deployment has not run yet.')}</p>
-                                                            </div>
-                                                        </div>
-
-                                                        <div class="rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-white/70 dark:bg-slate-950/35 px-4 py-4">
-                                                            <div class="flex items-center justify-between gap-3">
-                                                                <div class="min-w-0">
-                                                                    <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Deployment State</p>
-                                                                    <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                                                        {deploymentBusy(dep) ? 'This card stays active while the deployment remains queued or running.' : 'No active job is attached to this rule.'}
-                                                                    </p>
-                                                                </div>
-                                                                <div class="flex items-center gap-2">
-                                                                    <span class="h-2.5 w-2.5 rounded-full {deploymentBusy(dep) ? 'bg-amber-500 animate-pulse' : dep.deployStatus === 'completed' ? 'bg-emerald-500' : dep.deployStatus === 'failed' ? 'bg-rose-500' : 'bg-slate-400'}"></span>
-                                                                    <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] {deploymentBusy(dep) ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}">
-                                                                        {deploymentBusy(dep) ? 'In Progress' : dep.deployStatus === 'failed' ? 'Failed' : dep.deployStatus === 'completed' ? 'Completed' : 'Idle'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {#if dep.envFilePath}
-                                                            <p class="text-[10px] text-slate-500 mt-0.5 font-mono">Env file: {dep.envFilePath}</p>
-                                                        {/if}
-
-                                                        {#if dep.lastError}
-                                                            <div class="rounded-2xl border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 px-3 py-3 text-[11px] text-rose-700 dark:text-rose-300">
-                                                                {dep.lastError}
-                                                            </div>
-                                                        {/if}
-
-                                                        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                                            <button
-                                                                onclick={() => deployNow(dep.id)}
-                                                                disabled={deploying[dep.id] || dep.enabled === false}
-                                                                class="inline-flex items-center justify-center rounded-2xl bg-brand-600 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-brand-500/20 transition-all hover:bg-brand-700 disabled:opacity-50"
-                                                            >
-                                                                {deploying[dep.id] ? 'Queueing...' : dep.deployStatus === 'running' ? 'Deploying...' : dep.deployStatus === 'queued' ? 'Queued' : 'Deploy Now'}
-                                                            </button>
-                                                            <button
-                                                                onclick={() => toggleDeployment(dep.id, source.id, dep.enabled === false)}
-                                                                class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
-                                                            >
-                                                                {dep.enabled === false ? 'Enable' : 'Disable'}
-                                                            </button>
-                                                            <button
-                                                                onclick={() => openEditDeploymentModal(source.id, dep)}
-                                                                class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-brand-400 hover:text-brand-700 dark:hover:text-brand-300"
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                            <button
-                                                                onclick={() => deleteDeployment(dep.id, source.id)}
-                                                                aria-label={`Delete deployment ${dep.composePath}`}
-                                                                class="inline-flex items-center justify-center rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/85 dark:bg-slate-950/50 px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-700 dark:text-slate-200 transition-all hover:border-rose-400 hover:text-rose-600 dark:hover:text-rose-300"
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </article>
-                                            {/each}
-                                        </div>
-                                    {/if}
-                                </div>
-                            {/if}
                         </div>
+
+                        <!-- ── Deployment rules section ──────────────── -->
+                        {#if (deployments[source.id] || []).length === 0}
+                            <div class="border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/20 px-5 py-5 text-center">
+                                <p class="text-xs text-slate-400 dark:text-slate-500 italic">No deployment rules yet.</p>
+                                <button
+                                    onclick={() => openAddDeploymentModal(source.id)}
+                                    class="mt-2 text-[10px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400 hover:underline"
+                                >
+                                    Configure first stack
+                                </button>
+                            </div>
+                        {:else}
+                            <div class="border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/20 px-5 py-4 space-y-3">
+                                <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                    Deployment Rules
+                                    <span class="ml-1.5 rounded-full bg-slate-200 dark:bg-slate-800 px-2 py-0.5 text-[9px] text-slate-500 dark:text-slate-400">
+                                        {(deployments[source.id] || []).length}
+                                    </span>
+                                </p>
+
+                                {#each deployments[source.id] as dep}
+                                    <article
+                                        class="relative overflow-hidden rounded-2xl border transition-all
+                                            {deploymentBusy(dep) ? 'border-amber-400/70 dark:border-amber-500/50 ring-1 ring-amber-400/20' :
+                                             dep.deployStatus === 'failed' ? 'border-rose-300 dark:border-rose-800/60' :
+                                             dep.enabled === false ? 'border-slate-200 dark:border-slate-800 opacity-75' :
+                                             'border-slate-200 dark:border-slate-700 hover:border-brand-400/60 dark:hover:border-brand-500/40'}
+                                            bg-white dark:bg-slate-900 shadow-sm"
+                                    >
+                                        <!-- Busy overlay -->
+                                        {#if deploymentBusy(dep)}
+                                            <div class="absolute inset-0 deployment-noise animate-deployment-pulse pointer-events-none"></div>
+                                        {/if}
+
+                                        <!-- Accent bar -->
+                                        <div class="relative h-0.5 bg-gradient-to-r {deploymentCardAccent(dep)}"></div>
+
+                                        <div class="relative space-y-3 p-4">
+                                            <!-- ── Identity + state row ──── -->
+                                            <div class="flex items-start justify-between gap-3">
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+                                                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Stack</p>
+                                                        <span class="rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest {deploymentStateClass(dep)}">
+                                                            {#if deploymentBusy(dep)}
+                                                                <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current animate-pulse align-middle"></span>
+                                                            {/if}
+                                                            {deploymentStateLabel(dep)}
+                                                        </span>
+                                                        {#if dep.autoCreated && dep.enabled === false}
+                                                            <span class="rounded-full bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest">
+                                                                Discovered
+                                                            </span>
+                                                        {/if}
+                                                    </div>
+                                                    <h4 class="truncate text-sm font-black tracking-tight text-slate-900 dark:text-white font-mono" title={dep.composePath}>
+                                                        {dep.composePath}
+                                                    </h4>
+                                                    <p class="mt-0.5 truncate text-[10px] font-mono text-slate-400 dark:text-slate-500" title={resolvedComposeMapping(source.targetDir, dep.composePath)}>
+                                                        {resolvedComposeMapping(source.targetDir, dep.composePath)}
+                                                    </p>
+                                                </div>
+
+                                                <!-- Policy badges (right-aligned on desktop) -->
+                                                <div class="hidden sm:flex shrink-0 flex-col items-end gap-1">
+                                                    <span class="rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest {activeEnvSourceClass(dep)}">
+                                                        {activeEnvSourceLabel(dep)}
+                                                    </span>
+                                                    <span class="rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest {deployImagePolicyClass(dep)}">
+                                                        {deployImagePolicyLabel(dep)}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Mobile policy badges -->
+                                            <div class="flex flex-wrap gap-1.5 sm:hidden">
+                                                <span class="rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest {activeEnvSourceClass(dep)}">{activeEnvSourceLabel(dep)}</span>
+                                                <span class="rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest {deployImagePolicyClass(dep)}">{deployImagePolicyLabel(dep)}</span>
+                                            </div>
+
+                                            <!-- Error banner -->
+                                            {#if dep.lastError && dep.deployStatus === 'failed'}
+                                                <div class="flex items-start gap-2 rounded-xl border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 px-3 py-2.5 text-xs text-rose-700 dark:text-rose-300">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                    </svg>
+                                                    <span class="break-all">{dep.lastError}</span>
+                                                </div>
+                                            {/if}
+
+                                            <!-- ── Footer: activity + actions ─ -->
+                                            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                                                <p class="text-[10px] text-slate-500 dark:text-slate-400 min-w-0 truncate">
+                                                    {deploymentActivityText(dep)}
+                                                </p>
+                                                <div class="flex shrink-0 items-center gap-1.5">
+                                                    <button
+                                                        onclick={() => deleteDeployment(dep.id, source.id)}
+                                                        aria-label="Delete deployment rule"
+                                                        class="inline-flex items-center justify-center h-7 w-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-400 transition-all hover:border-rose-400 hover:text-rose-600 dark:hover:text-rose-400"
+                                                        title="Delete rule"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        onclick={() => openEditDeploymentModal(source.id, dep)}
+                                                        class="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 transition-all hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onclick={() => toggleDeployment(dep.id, source.id, dep.enabled === false)}
+                                                        class="inline-flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 transition-all hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-300"
+                                                    >
+                                                        {dep.enabled === false ? 'Enable' : 'Disable'}
+                                                    </button>
+                                                    <button
+                                                        onclick={() => deployNow(dep.id)}
+                                                        disabled={deploying[dep.id] || deploymentBusy(dep) || dep.enabled === false}
+                                                        class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm shadow-brand-500/20 transition-all hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    >
+                                                        {#if deploymentBusy(dep)}
+                                                            <span class="h-2.5 w-2.5 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+                                                        {:else}
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        {/if}
+                                                        {deployBtnLabel(dep)}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </article>
+                                {/each}
+                            </div>
+                        {/if}
                     </article>
                 {/each}
             </div>
         {/if}
+
     </div>
 </div>
+
 <style>
     :global(.repo-noise), :global(.deployment-noise) {
         background-image:
@@ -955,344 +931,469 @@
     }
 
     @keyframes cardPulse {
-        0% {
-            filter: saturate(1) brightness(1);
-        }
-        100% {
-            filter: saturate(1.08) brightness(1.03);
-        }
+        0% { filter: saturate(1) brightness(1); }
+        100% { filter: saturate(1.08) brightness(1.03); }
     }
 </style>
 
+<!-- ── Add Repository Modal ──────────────────────────────────────── -->
 {#if showAddSourceModal}
-    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/40 animate-in fade-in duration-300">
-        <div class="bg-white dark:bg-[#0f172a] w-full max-w-xl rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-300">
-            <div class="p-8 space-y-6">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Connect Repository</h3>
-                    <button onclick={() => showAddSourceModal = false} aria-label="Close connect repository dialog" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/50">
+        <div class="bg-white dark:bg-slate-950 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+
+            <!-- Modal header -->
+            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+                <div>
+                    <h3 class="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Connect Repository</h3>
+                    <p class="text-[10px] text-slate-500 mt-0.5">Add a Git repository as a GitOps deployment source.</p>
+                </div>
+                <button
+                    onclick={() => showAddSourceModal = false}
+                    aria-label="Close"
+                    class="rounded-xl p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+                <!-- Name + Branch -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1.5">
+                        <label for="src-name" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Friendly Name</label>
+                        <input
+                            id="src-name"
+                            bind:value={newSource.name}
+                            placeholder="Production Stacks"
+                            class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="src-branch" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch</label>
+                        <input
+                            id="src-branch"
+                            bind:value={newSource.branch}
+                            placeholder="main"
+                            class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                        />
+                    </div>
                 </div>
 
-                <div class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="space-y-1.5">
-                            <label for="src-name" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Friendly Name</label>
-                            <input id="src-name" bind:value={newSource.name} placeholder="Production Stacks" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white" />
-                        </div>
-                        <div class="space-y-1.5">
-                            <label for="src-branch" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Branch</label>
-                            <input id="src-branch" bind:value={newSource.branch} placeholder="main" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white" />
-                        </div>
-                    </div>
+                <!-- URL -->
+                <div class="space-y-1.5">
+                    <label for="src-url" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Repository URL</label>
+                    <input
+                        id="src-url"
+                        bind:value={newSource.url}
+                        placeholder="https://github.com/user/repo.git"
+                        class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                    />
+                </div>
 
+                <!-- Target dir + Sync interval -->
+                <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1.5">
-                        <label for="src-url" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Repository URL (HTTPS or SSH)</label>
-                        <input id="src-url" bind:value={newSource.url} placeholder="https://github.com/user/repo.git" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white" />
+                        <label for="src-dir" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Target Sub-directory</label>
+                        <input
+                            id="src-dir"
+                            bind:value={newSource.targetDir}
+                            placeholder="my-stack"
+                            class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                        />
+                        <p class="text-[10px] text-slate-400">Synced to: <span class="font-mono">{configStore.gitOpsMasterDirectory}/{newSource.targetDir || '...'}</span></p>
                     </div>
-
                     <div class="space-y-1.5">
-                        <label for="src-dir" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Target Sub-directory</label>
-                        <input id="src-dir" bind:value={newSource.targetDir} placeholder="my-stack" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white" />
-                        <p class="text-[10px] text-slate-500 ml-1 italic">The repo will be synced to {configStore.gitOpsMasterDirectory}/{newSource.targetDir || '...'}</p>
+                        <label for="src-interval" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Sync Interval (minutes)</label>
+                        <input
+                            id="src-interval"
+                            type="number"
+                            bind:value={newSource.syncIntervalMins}
+                            min="1"
+                            step="1"
+                            class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                        />
                     </div>
+                </div>
 
-                    <div class="space-y-1.5 pt-2">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Authentication Method</p>
-                        <div class="flex flex-wrap gap-2">
-                            {#each ['none', 'http_token', 'ssh_key'] as method}
-                                <button 
-                                    onclick={() => newSource.authMethod = method as any}
-                                    class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all {newSource.authMethod === method ? 'bg-brand-600 text-white border-brand-600' : 'bg-slate-50 dark:bg-slate-900/50 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}"
-                                >
-                                    {method === 'none' ? 'Public / None' : method === 'http_token' ? 'HTTP Token' : 'SSH Key'}
-                                </button>
-                            {/each}
-                        </div>
+                <!-- Auth method -->
+                <div class="space-y-2">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Authentication</p>
+                    <div class="flex flex-wrap gap-2">
+                        {#each ['none', 'http_token', 'ssh_key'] as method}
+                            <button
+                                onclick={() => newSource.authMethod = method as any}
+                                class="px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all {newSource.authMethod === method ? 'bg-brand-600 text-white border-brand-600' : 'bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}"
+                            >
+                                {method === 'none' ? 'Public / None' : method === 'http_token' ? 'HTTP Token' : 'SSH Key'}
+                            </button>
+                        {/each}
                     </div>
+                </div>
 
-                    {#if newSource.authMethod !== 'none'}
-                        <div class="space-y-1.5 animate-in slide-in-from-top-2 duration-300">
-                            <label for="src-secret" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                                {newSource.authMethod === 'http_token' ? 'Personal Access Token' : 'Private SSH Key'}
-                            </label>
-                            {#if newSource.authMethod === 'ssh_key'}
-                                <textarea id="src-secret" bind:value={newSource.authSecret} rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"></textarea>
-                            {:else}
-                                <input id="src-secret" type="password" bind:value={newSource.authSecret} placeholder="ghp_xxxxxxxxxxxx" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white" />
-                            {/if}
-                        </div>
+                {#if newSource.authMethod !== 'none'}
+                    <div class="space-y-1.5">
+                        <label for="src-secret" class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            {newSource.authMethod === 'http_token' ? 'Personal Access Token' : 'Private SSH Key'}
+                        </label>
+                        {#if newSource.authMethod === 'ssh_key'}
+                            <textarea
+                                id="src-secret"
+                                bind:value={newSource.authSecret}
+                                rows="4"
+                                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                                class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                            ></textarea>
+                        {:else}
+                            <input
+                                id="src-secret"
+                                type="password"
+                                bind:value={newSource.authSecret}
+                                placeholder="ghp_xxxxxxxxxxxx"
+                                class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                            />
+                        {/if}
+                    </div>
+                {/if}
+            </div>
+
+            <!-- Modal footer -->
+            <div class="flex gap-3 border-t border-slate-100 dark:border-slate-800 px-6 py-4">
+                <button
+                    onclick={() => showAddSourceModal = false}
+                    class="flex-1 px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick={addSource}
+                    class="flex-[2] px-5 py-2.5 bg-brand-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-brand-700 shadow-lg shadow-brand-500/20"
+                >
+                    Connect Repository
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- ── Edit Deployment Modal ─────────────────────────────────────── -->
+{#if showEditDeploymentModal}
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/50">
+        <div class="bg-white dark:bg-slate-950 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+
+            <!-- Modal header -->
+            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+                <div>
+                    <h3 class="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Edit Deployment Rule</h3>
+                    <p class="text-[10px] text-slate-500 mt-0.5">Source: <span class="font-semibold text-slate-700 dark:text-slate-300">{sources.find(s => s.id === editingSourceId)?.name}</span></p>
+                </div>
+                <button
+                    onclick={() => { showEditDeploymentModal = false; editingDeploymentId = null; editingSourceId = null; }}
+                    aria-label="Close"
+                    class="rounded-xl p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+                <!-- Compose file path -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label for="edit-dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Compose File Path</label>
+                        <button
+                            onclick={() => editingSourceId && loadSourceFilesForPicker(editingSourceId, true)}
+                            disabled={!editingSourceId || loadingSourceFiles[editingSourceId || ""]}
+                            class="text-[9px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-40"
+                        >
+                            {editingSourceId && loadingSourceFiles[editingSourceId || ""] ? 'Refreshing...' : 'Refresh File List'}
+                        </button>
+                    </div>
+                    <input
+                        id="edit-dep-path"
+                        bind:value={editDeployment.composePath}
+                        list={`compose-picker-edit-${editingSourceId || 'none'}`}
+                        placeholder="docker-compose.yml"
+                        class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                    />
+                    <datalist id={`compose-picker-edit-${editingSourceId || 'none'}`}>
+                        {#each sourceFiles[editingSourceId || ""]?.composeFiles || [] as file}
+                            <option value={file}></option>
+                        {/each}
+                    </datalist>
+                </div>
+
+                <!-- Env file path -->
+                <div class="space-y-1.5">
+                    <label for="edit-dep-env-file" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Env File Path <span class="normal-case font-normal text-slate-400">(optional)</span></label>
+                    <input
+                        id="edit-dep-env-file"
+                        bind:value={editDeployment.envFilePath}
+                        list={`env-picker-edit-${editingSourceId || 'none'}`}
+                        placeholder=".env"
+                        class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                    />
+                    <datalist id={`env-picker-edit-${editingSourceId || 'none'}`}>
+                        {#each sourceFiles[editingSourceId || ""]?.envFiles || [] as file}
+                            <option value={file}></option>
+                        {/each}
+                    </datalist>
+                    {#if editDeployment.envInlineEnabled}
+                        <p class="text-[10px] text-sky-600 dark:text-sky-400 italic">Ignored while HarborWatch env override is enabled.</p>
                     {/if}
                 </div>
 
-                <div class="flex gap-3 pt-4">
-                    <button 
-                        onclick={() => showAddSourceModal = false}
-                        class="flex-1 px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onclick={addSource}
-                        class="flex-[2] px-6 py-3 bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-brand-700 shadow-xl shadow-brand-500/20"
-                    >
-                        Connect Repository
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-{/if}
-
-{#if showEditDeploymentModal}
-    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/40 animate-in fade-in duration-300">
-        <div class="bg-white dark:bg-[#0f172a] w-full max-w-xl rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-300">
-            <div class="p-8 space-y-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h3 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Edit Deployment Rule</h3>
-                        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Source: {sources.find(s => s.id === editingSourceId)?.name}</p>
-                    </div>
-                    <button onclick={() => { showEditDeploymentModal = false; editingDeploymentId = null; editingSourceId = null; }} aria-label="Close edit deployment dialog" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="space-y-4">
-                    <div class="space-y-1.5">
-                        <div class="flex items-center justify-between ml-1">
-                            <label for="edit-dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Compose File Path</label>
-                            <button
-                                onclick={() => editingSourceId && loadSourceFilesForPicker(editingSourceId, true)}
-                                disabled={!editingSourceId || loadingSourceFiles[editingSourceId || ""]}
-                                class="text-[9px] font-black uppercase tracking-widest text-brand-600 hover:underline disabled:opacity-40"
-                            >
-                                {editingSourceId && loadingSourceFiles[editingSourceId || ""] ? 'Refreshing...' : 'Refresh File List'}
-                            </button>
-                        </div>
-                        <input id="edit-dep-path" bind:value={editDeployment.composePath} list={`compose-picker-edit-${editingSourceId || 'none'}`} placeholder="docker-compose.yml" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
-                        <datalist id={`compose-picker-edit-${editingSourceId || 'none'}`}>
-                            {#each sourceFiles[editingSourceId || ""]?.composeFiles || [] as file}
-                                <option value={file}></option>
-                            {/each}
-                        </datalist>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label for="edit-dep-env-file" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Env File Path (optional)</label>
-                        <input id="edit-dep-env-file" bind:value={editDeployment.envFilePath} list={`env-picker-edit-${editingSourceId || 'none'}`} placeholder=".env or /mnt/Storage-SSD/dockercompose/app/.env" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
-                        <datalist id={`env-picker-edit-${editingSourceId || 'none'}`}>
-                            {#each sourceFiles[editingSourceId || ""]?.envFiles || [] as file}
-                                <option value={file}></option>
-                            {/each}
-                        </datalist>
-                        {#if editDeployment.envInlineEnabled}
-                            <p class="text-[10px] text-sky-600 dark:text-sky-300 ml-1 italic">Ignored while HarborWatch env override is enabled.</p>
-                        {/if}
-                    </div>
-
-                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 flex items-center justify-between">
-                        <div>
+                <!-- Toggles -->
+                <div class="space-y-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4">
+                    <!-- Deployment active -->
+                    <div class="flex items-center justify-between gap-4 py-1">
+                        <div class="min-w-0">
                             <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Deployment Active</p>
-                            <p class="text-[10px] text-slate-500 mt-1">Keep disabled until this rule is fully configured.</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Disabled rules are skipped during auto-sync deploys.</p>
                         </div>
                         <button
                             onclick={() => editDeployment.enabled = !editDeployment.enabled}
-                            class="w-10 h-5 rounded-full relative transition-colors {editDeployment.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                            aria-label="Toggle deployment active state"
+                            class="relative shrink-0 w-10 h-5 rounded-full transition-colors {editDeployment.enabled ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-600'}"
+                            aria-label="Toggle deployment active"
                         >
-                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {editDeployment.enabled ? 'right-1' : 'left-1'}"></div>
+                            <span class="absolute top-1 w-3 h-3 rounded-full bg-white shadow transition-all {editDeployment.enabled ? 'right-1' : 'left-1'}"></span>
                         </button>
                     </div>
 
-                    <div class="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4">
-                        <div class="flex items-center justify-between gap-4">
-                            <div>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">HarborWatch Env Override</p>
-                                <p class="text-[10px] text-slate-500 mt-1">Uses a HarborWatch-managed <span class="font-mono">.env</span> outside the repo checkout and ignores any repo/default env file at deploy time.</p>
-                            </div>
-                            <button
-                                onclick={() => editDeployment.envInlineEnabled = !editDeployment.envInlineEnabled}
-                                class="w-10 h-5 rounded-full relative transition-colors {editDeployment.envInlineEnabled ? 'bg-sky-600' : 'bg-slate-300'}"
-                                aria-label="Toggle HarborWatch env override"
-                            >
-                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {editDeployment.envInlineEnabled ? 'right-1' : 'left-1'}"></div>
-                            </button>
+                    <div class="border-t border-slate-200 dark:border-slate-700/60 my-1"></div>
+
+                    <!-- HarborWatch env override -->
+                    <div class="flex items-center justify-between gap-4 py-1">
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">HarborWatch Env Override</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Use a HarborWatch-managed <span class="font-mono">.env</span>, ignoring repo files at deploy time.</p>
                         </div>
-                        <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-950/40 px-3 py-2">
-                            <div>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Image Refresh Policy</p>
-                                <p class="text-[10px] text-slate-500 mt-1">Pull newer images before applying this stack.</p>
-                            </div>
-                            <button
-                                onclick={() => editDeployment.pullOnDeploy = !editDeployment.pullOnDeploy}
-                                class="w-10 h-5 rounded-full relative transition-colors {editDeployment.pullOnDeploy ? 'bg-emerald-600' : 'bg-slate-300'}"
-                                aria-label="Toggle pull before deploy"
-                            >
-                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {editDeployment.pullOnDeploy ? 'right-1' : 'left-1'}"></div>
-                            </button>
+                        <button
+                            onclick={() => editDeployment.envInlineEnabled = !editDeployment.envInlineEnabled}
+                            class="relative shrink-0 w-10 h-5 rounded-full transition-colors {editDeployment.envInlineEnabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}"
+                            aria-label="Toggle HarborWatch env override"
+                        >
+                            <span class="absolute top-1 w-3 h-3 rounded-full bg-white shadow transition-all {editDeployment.envInlineEnabled ? 'right-1' : 'left-1'}"></span>
+                        </button>
+                    </div>
+
+                    <!-- Image refresh policy -->
+                    <div class="flex items-center justify-between gap-4 py-1">
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Pull Before Deploy</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Pull newer images before applying this stack.</p>
                         </div>
+                        <button
+                            onclick={() => editDeployment.pullOnDeploy = !editDeployment.pullOnDeploy}
+                            class="relative shrink-0 w-10 h-5 rounded-full transition-colors {editDeployment.pullOnDeploy ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-600'}"
+                            aria-label="Toggle pull before deploy"
+                        >
+                            <span class="absolute top-1 w-3 h-3 rounded-full bg-white shadow transition-all {editDeployment.pullOnDeploy ? 'right-1' : 'left-1'}"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Inline env content -->
+                {#if editDeployment.envInlineEnabled}
+                    <div class="space-y-1.5">
+                        <label for="edit-env-content" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Env Content</label>
                         <textarea
+                            id="edit-env-content"
                             bind:value={editDeployment.envInlineContent}
-                            rows="10"
+                            rows="8"
                             spellcheck="false"
                             autocapitalize="off"
                             autocomplete="off"
                             placeholder={"APP_ENV=prod\nAPI_BASE=https://example.com\nFEATURE_FLAG=true"}
-                            disabled={!editDeployment.envInlineEnabled}
-                            class="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-mono outline-none focus:ring-2 focus:ring-sky-500 transition-all text-slate-900 dark:text-white disabled:opacity-50"
+                            class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none focus:ring-2 focus:ring-sky-500 transition-all text-slate-900 dark:text-white"
                         ></textarea>
                     </div>
-                </div>
+                {/if}
+            </div>
 
-                <div class="flex gap-3 pt-4">
-                    <button
-                        onclick={() => { showEditDeploymentModal = false; editingDeploymentId = null; editingSourceId = null; }}
-                        class="flex-1 px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onclick={saveDeploymentEdits}
-                        class="flex-[2] px-6 py-3 bg-brand-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-brand-700 shadow-xl shadow-brand-500/20"
-                    >
-                        Save Changes
-                    </button>
-                </div>
+            <!-- Modal footer -->
+            <div class="flex gap-3 border-t border-slate-100 dark:border-slate-800 px-6 py-4">
+                <button
+                    onclick={() => { showEditDeploymentModal = false; editingDeploymentId = null; editingSourceId = null; }}
+                    class="flex-1 px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick={saveDeploymentEdits}
+                    class="flex-[2] px-5 py-2.5 bg-brand-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-brand-700 shadow-lg shadow-brand-500/20"
+                >
+                    Save Changes
+                </button>
             </div>
         </div>
     </div>
 {/if}
 
+<!-- ── Add Deployment Modal ──────────────────────────────────────── -->
 {#if showAddDeploymentModal}
-    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/40 animate-in fade-in duration-300">
-        <div class="bg-white dark:bg-[#0f172a] w-full max-w-xl rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-300">
-            <div class="p-8 space-y-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h3 class="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Deploy Stack</h3>
-                        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Source: {sources.find(s => s.id === selectedSourceId)?.name}</p>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 backdrop-blur-sm bg-slate-900/50">
+        <div class="bg-white dark:bg-slate-950 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+
+            <!-- Modal header -->
+            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+                <div>
+                    <h3 class="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Add Deployment Rule</h3>
+                    <p class="text-[10px] text-slate-500 mt-0.5">Repository: <span class="font-semibold text-slate-700 dark:text-slate-300">{sources.find(s => s.id === selectedSourceId)?.name}</span></p>
+                </div>
+                <button
+                    onclick={() => showAddDeploymentModal = false}
+                    aria-label="Close"
+                    class="rounded-xl p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+                <!-- Compose file path -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <label for="dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Compose File Path</label>
+                        <button
+                            onclick={() => selectedSourceId && loadSourceFilesForPicker(selectedSourceId, true)}
+                            disabled={!selectedSourceId || loadingSourceFiles[selectedSourceId || ""]}
+                            class="text-[9px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-40"
+                        >
+                            {selectedSourceId && loadingSourceFiles[selectedSourceId || ""] ? 'Refreshing...' : 'Refresh File List'}
+                        </button>
                     </div>
-                    <button onclick={() => showAddDeploymentModal = false} aria-label="Close deploy stack dialog" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+                    <input
+                        id="dep-path"
+                        bind:value={newDeployment.composePath}
+                        list={`compose-picker-${selectedSourceId || 'none'}`}
+                        placeholder="docker-compose.yml"
+                        class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                    />
+                    <datalist id={`compose-picker-${selectedSourceId || 'none'}`}>
+                        {#each sourceFiles[selectedSourceId || ""]?.composeFiles || [] as file}
+                            <option value={file}></option>
+                        {/each}
+                    </datalist>
+                    {#if selectedSourceId && (sourceFiles[selectedSourceId || ""]?.composeFiles || []).length === 0}
+                        <p class="text-[10px] text-slate-400 italic">No compose files discovered. Sync the repository first.</p>
+                    {/if}
+                    <p class="text-[10px] text-slate-400 font-mono">
+                        → {resolvedComposeMapping(sources.find(s => s.id === selectedSourceId)?.targetDir || "", newDeployment.composePath)}
+                    </p>
                 </div>
 
-                <div class="space-y-4">
-                    <div class="space-y-1.5">
-                        <div class="flex items-center justify-between ml-1">
-                            <label for="dep-path" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Compose File Path (relative to repo root)</label>
-                            <button
-                                onclick={() => selectedSourceId && loadSourceFilesForPicker(selectedSourceId, true)}
-                                disabled={!selectedSourceId || loadingSourceFiles[selectedSourceId || ""]}
-                                class="text-[9px] font-black uppercase tracking-widest text-brand-600 hover:underline disabled:opacity-40"
-                            >
-                                {selectedSourceId && loadingSourceFiles[selectedSourceId || ""] ? 'Refreshing...' : 'Refresh File List'}
-                            </button>
-                        </div>
-                        <input id="dep-path" bind:value={newDeployment.composePath} list={`compose-picker-${selectedSourceId || 'none'}`} placeholder="docker-compose.yml" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
-                        <datalist id={`compose-picker-${selectedSourceId || 'none'}`}>
-                            {#each sourceFiles[selectedSourceId || ""]?.composeFiles || [] as file}
-                                <option value={file}></option>
-                            {/each}
-                        </datalist>
-                        {#if selectedSourceId && (sourceFiles[selectedSourceId || ""]?.composeFiles || []).length === 0}
-                            <p class="text-[10px] text-slate-500 ml-1 italic">No compose files discovered yet. Sync repository and refresh.</p>
-                        {/if}
-                        <p class="text-[10px] text-slate-500 ml-1 italic">
-                            Mapped path: {resolvedComposeMapping(sources.find(s => s.id === selectedSourceId)?.targetDir || "", newDeployment.composePath)}
-                        </p>
-                    </div>
+                <!-- Env file path -->
+                <div class="space-y-1.5">
+                    <label for="dep-env-file" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Env File Path <span class="normal-case font-normal text-slate-400">(optional)</span></label>
+                    <input
+                        id="dep-env-file"
+                        bind:value={newDeployment.envFilePath}
+                        list={`env-picker-${selectedSourceId || 'none'}`}
+                        placeholder=".env"
+                        class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white"
+                    />
+                    <datalist id={`env-picker-${selectedSourceId || 'none'}`}>
+                        {#each sourceFiles[selectedSourceId || ""]?.envFiles || [] as file}
+                            <option value={file}></option>
+                        {/each}
+                    </datalist>
+                    <p class="text-[10px] text-slate-400">Supports repo-relative paths and absolute host paths.</p>
+                    {#if newDeployment.envInlineEnabled}
+                        <p class="text-[10px] text-sky-600 dark:text-sky-400 italic">Ignored while HarborWatch env override is enabled.</p>
+                    {/if}
+                </div>
 
-                    <div class="space-y-1.5">
-                        <label for="dep-env-file" class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Env File Path (optional)</label>
-                        <input id="dep-env-file" bind:value={newDeployment.envFilePath} list={`env-picker-${selectedSourceId || 'none'}`} placeholder=".env or /mnt/Storage-SSD/dockercompose/app/.env" class="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand-500 transition-all text-slate-900 dark:text-white font-mono" />
-                        <datalist id={`env-picker-${selectedSourceId || 'none'}`}>
-                            {#each sourceFiles[selectedSourceId || ""]?.envFiles || [] as file}
-                                <option value={file}></option>
-                            {/each}
-                        </datalist>
-                        <p class="text-[10px] text-slate-500 ml-1 italic">Supports repo-relative paths and absolute host paths.</p>
-                        {#if newDeployment.envInlineEnabled}
-                            <p class="text-[10px] text-sky-600 dark:text-sky-300 ml-1 italic">Ignored while HarborWatch env override is enabled.</p>
-                        {/if}
-                    </div>
-
-                    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-3 flex items-center justify-between">
-                        <div>
+                <!-- Toggles -->
+                <div class="space-y-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4">
+                    <!-- Deployment active -->
+                    <div class="flex items-center justify-between gap-4 py-1">
+                        <div class="min-w-0">
                             <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Deployment Active</p>
-                            <p class="text-[10px] text-slate-500 mt-1">Disabled rules are kept but skipped during auto-sync deploys.</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Disabled rules are kept but skipped during auto-sync deploys.</p>
                         </div>
                         <button
                             onclick={() => newDeployment.enabled = !newDeployment.enabled}
-                            class="w-10 h-5 rounded-full relative transition-colors {newDeployment.enabled ? 'bg-brand-600' : 'bg-slate-300'}"
-                            aria-label="Toggle deployment active state"
+                            class="relative shrink-0 w-10 h-5 rounded-full transition-colors {newDeployment.enabled ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-600'}"
+                            aria-label="Toggle deployment active"
                         >
-                            <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {newDeployment.enabled ? 'right-1' : 'left-1'}"></div>
+                            <span class="absolute top-1 w-3 h-3 rounded-full bg-white shadow transition-all {newDeployment.enabled ? 'right-1' : 'left-1'}"></span>
                         </button>
                     </div>
 
-                    <div class="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 p-4">
-                        <div class="flex items-center justify-between gap-4">
-                            <div>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">HarborWatch Env Override</p>
-                                <p class="text-[10px] text-slate-500 mt-1">Use a HarborWatch-managed <span class="font-mono">.env</span> outside the repo checkout. This ignores any repo/default env file during deploy.</p>
-                            </div>
-                            <button
-                                onclick={() => newDeployment.envInlineEnabled = !newDeployment.envInlineEnabled}
-                                class="w-10 h-5 rounded-full relative transition-colors {newDeployment.envInlineEnabled ? 'bg-sky-600' : 'bg-slate-300'}"
-                                aria-label="Toggle HarborWatch env override"
-                            >
-                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {newDeployment.envInlineEnabled ? 'right-1' : 'left-1'}"></div>
-                            </button>
+                    <div class="border-t border-slate-200 dark:border-slate-700/60 my-1"></div>
+
+                    <!-- HarborWatch env override -->
+                    <div class="flex items-center justify-between gap-4 py-1">
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">HarborWatch Env Override</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Use a HarborWatch-managed <span class="font-mono">.env</span>, ignoring repo files at deploy time.</p>
                         </div>
-                        <div class="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-950/40 px-3 py-2">
-                            <div>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Image Refresh Policy</p>
-                                <p class="text-[10px] text-slate-500 mt-1">Pull newer images before applying this stack.</p>
-                            </div>
-                            <button
-                                onclick={() => newDeployment.pullOnDeploy = !newDeployment.pullOnDeploy}
-                                class="w-10 h-5 rounded-full relative transition-colors {newDeployment.pullOnDeploy ? 'bg-emerald-600' : 'bg-slate-300'}"
-                                aria-label="Toggle pull before deploy"
-                            >
-                                <div class="absolute top-1 w-3 h-3 rounded-full bg-white transition-all {newDeployment.pullOnDeploy ? 'right-1' : 'left-1'}"></div>
-                            </button>
+                        <button
+                            onclick={() => newDeployment.envInlineEnabled = !newDeployment.envInlineEnabled}
+                            class="relative shrink-0 w-10 h-5 rounded-full transition-colors {newDeployment.envInlineEnabled ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'}"
+                            aria-label="Toggle HarborWatch env override"
+                        >
+                            <span class="absolute top-1 w-3 h-3 rounded-full bg-white shadow transition-all {newDeployment.envInlineEnabled ? 'right-1' : 'left-1'}"></span>
+                        </button>
+                    </div>
+
+                    <!-- Pull policy -->
+                    <div class="flex items-center justify-between gap-4 py-1">
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Pull Before Deploy</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Pull newer images before applying this stack.</p>
                         </div>
+                        <button
+                            onclick={() => newDeployment.pullOnDeploy = !newDeployment.pullOnDeploy}
+                            class="relative shrink-0 w-10 h-5 rounded-full transition-colors {newDeployment.pullOnDeploy ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-600'}"
+                            aria-label="Toggle pull before deploy"
+                        >
+                            <span class="absolute top-1 w-3 h-3 rounded-full bg-white shadow transition-all {newDeployment.pullOnDeploy ? 'right-1' : 'left-1'}"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Inline env content (conditional) -->
+                {#if newDeployment.envInlineEnabled}
+                    <div class="space-y-1.5">
+                        <label for="new-env-content" class="text-[10px] font-black uppercase tracking-widest text-slate-400">Env Content</label>
                         <textarea
+                            id="new-env-content"
                             bind:value={newDeployment.envInlineContent}
-                            rows="10"
+                            rows="8"
                             spellcheck="false"
                             autocapitalize="off"
                             autocomplete="off"
                             placeholder={"APP_ENV=prod\nAPI_BASE=https://example.com\nFEATURE_FLAG=true"}
-                            disabled={!newDeployment.envInlineEnabled}
-                            class="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-mono outline-none focus:ring-2 focus:ring-sky-500 transition-all text-slate-900 dark:text-white disabled:opacity-50"
+                            class="w-full bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none focus:ring-2 focus:ring-sky-500 transition-all text-slate-900 dark:text-white"
                         ></textarea>
                     </div>
-                </div>
+                {/if}
+            </div>
 
-                <div class="flex gap-3 pt-4">
-                    <button 
-                        onclick={() => showAddDeploymentModal = false}
-                        class="flex-1 px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onclick={addDeployment}
-                        class="flex-[2] px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-emerald-700 shadow-xl shadow-emerald-500/20"
-                    >
-                        Save Deployment Rule
-                    </button>
-                </div>
+            <!-- Modal footer -->
+            <div class="flex gap-3 border-t border-slate-100 dark:border-slate-800 px-6 py-4">
+                <button
+                    onclick={() => showAddDeploymentModal = false}
+                    class="flex-1 px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick={addDeployment}
+                    class="flex-[2] px-5 py-2.5 bg-brand-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:bg-brand-700 shadow-lg shadow-brand-500/20"
+                >
+                    Save Deployment Rule
+                </button>
             </div>
         </div>
     </div>
