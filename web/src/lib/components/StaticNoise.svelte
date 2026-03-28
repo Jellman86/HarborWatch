@@ -15,7 +15,9 @@
         const img = ctx.createImageData(w, h);
         const d = img.data;
         for (let i = 0; i < d.length; i += 4) {
-            const v = (Math.random() * 255) | 0;
+            // High-contrast dots: random choice between near-white and near-black
+            // gives visible static on both light and dark card backgrounds
+            const v = Math.random() > 0.5 ? 220 : 20;
             d[i] = d[i + 1] = d[i + 2] = v;
             d[i + 3] = 255;
         }
@@ -65,5 +67,5 @@
 <canvas
     bind:this={canvas}
     class="absolute inset-0 h-full w-full pointer-events-none"
-    style="opacity: 0.10; mix-blend-mode: overlay;"
+    style="opacity: 0.20;"
 ></canvas>
