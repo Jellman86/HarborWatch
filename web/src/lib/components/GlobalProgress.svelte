@@ -107,7 +107,7 @@
 
 {#if jobs.length > 0}
     <div 
-        class="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 overflow-hidden relative group"
+        class="sticky top-[var(--global-progress-sticky-top)] z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 overflow-hidden relative group"
         transition:slide={{ duration: 300 }}
         role="status"
         aria-live="polite"

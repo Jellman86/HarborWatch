@@ -288,6 +288,7 @@
   .app-main {
     padding-left: 0;
     width: 100%;
+    --global-progress-sticky-top: 4.0625rem;
     @apply overflow-x-hidden;
   }
 
@@ -295,6 +296,7 @@
     .app-main {
       padding-left: var(--sidebar-offset, 16rem);
       width: auto;
+      --global-progress-sticky-top: 0rem;
     }
   }
 
