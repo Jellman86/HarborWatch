@@ -215,6 +215,69 @@ func TestGitOpsListDeploymentsDerivesInlineEnvFromLegacyEnvVars(t *testing.T) {
 	}
 }
 
+func TestGitOpsListDeploymentsReconcilesOrphanedRunningDeployStatus(t *testing.T) {
+	db := openGitOpsTestDB(t)
+	store := gitops.NewStore(db)
+	jobManager := jobs.NewManager(1)
+	mux := newGitOpsTestMuxWithJobManager(db, t.TempDir(), jobManager)
+
+	src := gitops.GitSource{
+		ID:               "src-stale-runtime",
+		Name:             "Stale Runtime",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "source-stale-runtime",
+		AuthMethod:       gitops.AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(context.Background(), src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+
+	dep := gitops.GitDeployment{
+		ID:          "dep-stale-runtime",
+		GitSourceID: src.ID,
+		ComposePath: "security_inference_stack/docker-compose.yml",
+		Enabled:     true,
+	}
+	if err := store.CreateDeployment(context.Background(), dep); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	if err := store.UpdateDeploymentRuntimeStatus(context.Background(), gitops.GitDeployment{
+		ID:                  dep.ID,
+		LastJobID:           "gitops-deploy-missing",
+		DeployStatus:        "running",
+		DeployStatusMessage: "Validating deployment",
+		DeployStartedAt:     1776874727,
+		DeployFinishedAt:    0,
+		DeployOutputSummary: "stale output",
+	}); err != nil {
+		t.Fatalf("seed deployment runtime status: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/gitops/deployments?sourceId="+src.ID, nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload []gitops.GitDeployment
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("expected 1 deployment, got %d", len(payload))
+	}
+	if payload[0].DeployStatus != "failed" {
+		t.Fatalf("expected orphaned running deployment to be reconciled to failed, got %#v", payload[0])
+	}
+	if payload[0].DeployStatusMessage == "" || payload[0].DeployFinishedAt == 0 {
+		t.Fatalf("expected reconcile message and finished timestamp, got %#v", payload[0])
+	}
+}
+
 func TestGitOpsSourceFilesRouteListsComposeAndEnvFiles(t *testing.T) {
 	db := openGitOpsTestDB(t)
 	store := gitops.NewStore(db)

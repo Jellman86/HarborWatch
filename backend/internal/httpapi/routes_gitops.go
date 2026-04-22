@@ -34,6 +34,20 @@ type updateDeploymentRequest struct {
 	Enabled          *bool   `json:"enabled"`
 }
 
+func reconcileOrphanedGitOpsDeployments(ctx context.Context, store *gitops.Store, jobManager *jobs.Manager, reason string) error {
+	if store == nil {
+		return nil
+	}
+	activeJobIDs := map[string]struct{}{}
+	if jobManager != nil {
+		for _, job := range jobManager.ActiveJobs() {
+			activeJobIDs[strings.TrimSpace(job.ID)] = struct{}{}
+		}
+	}
+	_, err := store.MarkOrphanedInFlightDeploymentsFailed(ctx, activeJobIDs, reason)
+	return err
+}
+
 func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 	if deps.db == nil || deps.settingsService == nil {
 		// Mocked out in tests, or database not available
@@ -165,6 +179,10 @@ func registerGitOpsRoutes(r chi.Router, deps adminRouteDeps) {
 				sourceID := req.URL.Query().Get("sourceId")
 				if sourceID == "" {
 					writeError(w, http.StatusBadRequest, "invalid_request", "sourceId query parameter is required")
+					return
+				}
+				if err := reconcileOrphanedGitOpsDeployments(req.Context(), gitStore, deps.jobManager, "deploy interrupted or lost by HarborWatch"); err != nil {
+					writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 					return
 				}
 				deps, err := gitStore.ListDeploymentsForSource(req.Context(), sourceID)

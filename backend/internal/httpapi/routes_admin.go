@@ -201,6 +201,7 @@ func registerDiagnosticsRoutes(r chi.Router, deps adminRouteDeps) {
 					auditService:  deps.auditService,
 					schedSvc:      deps.schedSvc,
 					diagService:   deps.diagService,
+					jobManager:    deps.jobManager,
 				},
 				diagnosticsSnapshotOptions{
 					LogLimit:         parseIntQuery(r.URL.Query().Get("logLimit"), 300, 10, 2000),

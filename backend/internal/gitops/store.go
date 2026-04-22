@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -377,4 +378,70 @@ WHERE deploy_status IN ('queued', 'running')
 		return 0, err
 	}
 	return rows, nil
+}
+
+func (s *Store) MarkOrphanedInFlightDeploymentsFailed(ctx context.Context, activeJobIDs map[string]struct{}, reason string) (int64, error) {
+	if len(activeJobIDs) == 0 {
+		return s.MarkInFlightDeploymentsFailed(ctx, reason)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, last_job_id
+FROM git_deployments
+WHERE deploy_status IN ('queued', 'running')
+`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var orphaned []string
+	for rows.Next() {
+		var id, lastJobID string
+		if err := rows.Scan(&id, &lastJobID); err != nil {
+			return 0, err
+		}
+		if _, ok := activeJobIDs[strings.TrimSpace(lastJobID)]; ok {
+			continue
+		}
+		orphaned = append(orphaned, id)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(orphaned) == 0 {
+		return 0, nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC().Unix()
+	var updated int64
+	for _, id := range orphaned {
+		res, err := tx.ExecContext(ctx, `
+UPDATE git_deployments
+SET deploy_status = 'failed',
+    deploy_status_message = ?,
+    deploy_finished_at = ?,
+    last_error = CASE WHEN last_error = '' THEN ? ELSE last_error END
+WHERE id = ? AND deploy_status IN ('queued', 'running')
+`, reason, now, reason, id)
+		if err != nil {
+			return 0, err
+		}
+		rowsAffected, err := res.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		updated += rowsAffected
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return updated, nil
 }

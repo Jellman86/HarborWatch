@@ -18,6 +18,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/metrics"
 	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	"github.com/Jellman86/HarborWatch/backend/internal/notifications"
@@ -1204,6 +1205,43 @@ func TestDiagnosticsSnapshotDedupesActiveJobsByID(t *testing.T) {
 	}
 	if snapshot.ActiveJobs[0].ID != "j1" || snapshot.ActiveJobs[1].ID != "j2" {
 		t.Fatalf("unexpected activeJobs order/content: %#v", snapshot.ActiveJobs)
+	}
+}
+
+func TestDiagnosticsSnapshotIncludesGitOpsJobsFromJobManager(t *testing.T) {
+	jobManager := jobs.NewManager(1)
+	jobManager.RegisterJob(&jobs.Job{
+		ID:         "gitops-1",
+		Type:       jobs.JobTypeGitOpsDeploy,
+		Target:     "deployment:dep-1",
+		TargetName: "security_inference_stack/docker-compose.yml",
+		Status:     "running",
+		Message:    "Pulling images",
+		Progress:   40,
+		StartedAt:  10,
+	})
+
+	snapshot, err := collectDiagnosticsSnapshot(context.Background(), diagnosticsDeps{
+		jobManager: jobManager,
+	}, diagnosticsSnapshotOptions{LogLimit: 10, AuditLimit: 10})
+	if err != nil {
+		t.Fatalf("collectDiagnosticsSnapshot failed: %v", err)
+	}
+	if len(snapshot.ActiveJobs) != 1 {
+		t.Fatalf("expected 1 gitops active job, got %d (%#v)", len(snapshot.ActiveJobs), snapshot.ActiveJobs)
+	}
+	job := snapshot.ActiveJobs[0]
+	if job.ID != "gitops-1" {
+		t.Fatalf("expected gitops job id gitops-1, got %#v", job)
+	}
+	if job.Type != "gitops_deploy" {
+		t.Fatalf("expected gitops_deploy type, got %#v", job)
+	}
+	if job.Target != "security_inference_stack/docker-compose.yml" {
+		t.Fatalf("expected compose target name in diagnostics, got %#v", job)
+	}
+	if job.Status != "running" || job.Message != "Pulling images" || job.Progress != 40 {
+		t.Fatalf("unexpected gitops job payload: %#v", job)
 	}
 }
 

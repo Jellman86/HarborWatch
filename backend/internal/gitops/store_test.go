@@ -155,6 +155,12 @@ func TestMarkInFlightDeploymentsFailedMarksQueuedAndRunningInterrupted(t *testin
 	if running.DeployStatus != "failed" {
 		t.Fatalf("expected running deployment to be failed, got %q", running.DeployStatus)
 	}
+	if running.DeployStatusMessage != "deploy interrupted by HarborWatch restart" {
+		t.Fatalf("unexpected running deployment status message: %q", running.DeployStatusMessage)
+	}
+	if running.DeployFinishedAt == 0 {
+		t.Fatalf("expected running deployment finished timestamp to be set")
+	}
 
 	completed, err := store.GetDeployment(ctx, "dep-completed")
 	if err != nil {
@@ -213,5 +219,74 @@ func TestDeploymentPullOnDeployPersistsThroughStore(t *testing.T) {
 	}
 	if updated.PullOnDeploy {
 		t.Fatalf("expected pull_on_deploy to persist on update")
+	}
+}
+
+func TestMarkInFlightDeploymentsFailedClearsOrphanedRunningMetadata(t *testing.T) {
+	ctx := context.Background()
+	db := openStoreTestDB(t)
+	store := NewStore(db)
+
+	src := GitSource{
+		ID:               "src-orphaned",
+		Name:             "Orphaned Source",
+		URL:              "https://example.com/repo.git",
+		Branch:           "main",
+		TargetDir:        "orphaned-source",
+		AuthMethod:       AuthMethodNone,
+		SyncIntervalMins: 5,
+	}
+	if err := store.CreateSource(ctx, src); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+
+	dep := GitDeployment{
+		ID:          "dep-orphaned",
+		GitSourceID: src.ID,
+		ComposePath: "docker-compose.yml",
+		Enabled:     true,
+	}
+	if err := store.CreateDeployment(ctx, dep); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	if err := store.UpdateDeploymentRuntimeStatus(ctx, GitDeployment{
+		ID:                  dep.ID,
+		LastJobID:           "job-orphaned",
+		DeployStatus:        "running",
+		DeployStatusMessage: "Validating deployment",
+		DeployStartedAt:     123,
+		DeployFinishedAt:    0,
+		DeployOutputSummary: "stale output",
+	}); err != nil {
+		t.Fatalf("seed runtime status: %v", err)
+	}
+
+	recovered, err := store.MarkInFlightDeploymentsFailed(ctx, "deploy interrupted by HarborWatch restart")
+	if err != nil {
+		t.Fatalf("MarkInFlightDeploymentsFailed returned error: %v", err)
+	}
+	if recovered != 1 {
+		t.Fatalf("expected 1 recovered deployment, got %d", recovered)
+	}
+
+	got, err := store.GetDeployment(ctx, dep.ID)
+	if err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if got.DeployStatus != "failed" {
+		t.Fatalf("expected failed deploy status, got %q", got.DeployStatus)
+	}
+	if got.DeployStatusMessage != "deploy interrupted by HarborWatch restart" {
+		t.Fatalf("expected restart interruption message, got %q", got.DeployStatusMessage)
+	}
+	if got.LastJobID != "job-orphaned" {
+		t.Fatalf("expected last job id preserved for auditability, got %q", got.LastJobID)
+	}
+	if got.DeployStartedAt != 123 {
+		t.Fatalf("expected deploy_started_at preserved, got %d", got.DeployStartedAt)
+	}
+	if got.DeployFinishedAt == 0 {
+		t.Fatalf("expected deploy_finished_at to be set")
 	}
 }

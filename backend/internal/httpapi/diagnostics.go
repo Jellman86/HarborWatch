@@ -12,6 +12,7 @@ import (
 	"github.com/Jellman86/HarborWatch/backend/internal/diag"
 	"github.com/Jellman86/HarborWatch/backend/internal/dockerengine"
 	"github.com/Jellman86/HarborWatch/backend/internal/gen"
+	"github.com/Jellman86/HarborWatch/backend/internal/jobs"
 	"github.com/Jellman86/HarborWatch/backend/internal/migrations"
 	"github.com/Jellman86/HarborWatch/backend/internal/scheduler"
 	"github.com/go-chi/chi/v5/middleware"
@@ -25,6 +26,7 @@ type diagnosticsDeps struct {
 	auditService  AuditService
 	schedSvc      SchedulerService
 	diagService   DiagService
+	jobManager    *jobs.Manager
 }
 
 type diagnosticsSnapshotOptions struct {
@@ -138,6 +140,9 @@ func collectDiagnosticsSnapshot(ctx context.Context, deps diagnosticsDeps, opts 
 	}
 	if deps.updateService != nil {
 		activeJobs = append(activeJobs, deps.updateService.ActiveJobs()...)
+	}
+	if deps.jobManager != nil {
+		activeJobs = append(activeJobs, deps.jobManager.ActiveJobs()...)
 	}
 	snapshot.ActiveJobs = dedupeActiveJobs(activeJobs)
 
