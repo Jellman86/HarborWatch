@@ -1,5 +1,9 @@
 # <p align="center">HarborWatch</p>
 
+> [!CAUTION]
+> **This repository is now ARCHIVED.**
+> I've discovered [dockhand](https://github.com/dockhand/dockhand), which achieves the same goals as HarborWatch but in a much more robust and feature-complete way than I could manage alone. I will be continuing to explore and use dockhand. If I ever feel it's missing something critical that HarborWatch had, I might implement it here or contribute there, but for now, this project is retired.
+
 <p align="center">
   <img src="docs/assets/app-icon.png" alt="HarborWatch Logo" width="200" />
 </p>
